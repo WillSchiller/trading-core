@@ -1,0 +1,417 @@
+import { createPublicClient, http, type Address } from 'viem';
+import { base, mainnet } from 'viem/chains';
+import { logger } from './utils/logger.js';
+import { getConfig } from './config/index.js';
+import { createPool, closePool, getPool } from './persistence/client.js';
+import { CollectorOrchestrator } from './collectors/orchestrator.js';
+import { OpportunityDetector } from './detection/index.js';
+import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
+import type { Chain } from './types/index.js';
+import { checkNtpSync } from './utils/clock.js';
+import { initAlerts } from './utils/alerts.js';
+
+const BASE_TOKENS: Record<string, TokenConfig> = {
+  WETH: {
+    address: '0x4200000000000000000000000000000000000006' as Address,
+    decimals: 18,
+    symbol: 'WETH',
+  },
+  USDC: {
+    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address,
+    decimals: 6,
+    symbol: 'USDC',
+  },
+  USDbC: {
+    address: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA' as Address,
+    decimals: 6,
+    symbol: 'USDbC',
+  },
+  cbETH: {
+    address: '0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22' as Address,
+    decimals: 18,
+    symbol: 'cbETH',
+  },
+  weETH: {
+    address: '0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A' as Address,
+    decimals: 18,
+    symbol: 'weETH',
+  },
+  wstETH: {
+    address: '0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452' as Address,
+    decimals: 18,
+    symbol: 'wstETH',
+  },
+  rETH: {
+    address: '0xB6fe221Fe9EeF5aBa221c348bA20A1Bf5e73624c' as Address,
+    decimals: 18,
+    symbol: 'rETH',
+  },
+};
+
+const MAINNET_TOKENS: Record<string, TokenConfig> = {
+  WETH: {
+    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' as Address,
+    decimals: 18,
+    symbol: 'WETH',
+  },
+  USDC: {
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as Address,
+    decimals: 6,
+    symbol: 'USDC',
+  },
+  wstETH: {
+    address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0' as Address,
+    decimals: 18,
+    symbol: 'wstETH',
+  },
+  rETH: {
+    address: '0xae78736Cd615f374D3085123A210448E74Fc6393' as Address,
+    decimals: 18,
+    symbol: 'rETH',
+  },
+  cbETH: {
+    address: '0xBe9895146f7AF43049ca1c1AE358B0541Ea49704' as Address,
+    decimals: 18,
+    symbol: 'cbETH',
+  },
+};
+
+function buildTokenMap(chain: Chain): Map<string, TokenConfig> {
+  const tokenMap = new Map<string, TokenConfig>();
+  const tokens = chain === 'base' ? BASE_TOKENS : MAINNET_TOKENS;
+
+  for (const [symbol, config] of Object.entries(tokens)) {
+    tokenMap.set(symbol, config);
+  }
+
+  return tokenMap;
+}
+
+async function main() {
+  logger.info('Starting dislocation-trader');
+
+  const ntpStatus = await checkNtpSync();
+  logger.info(
+    {
+      isSynced: ntpStatus.isSynced,
+      service: ntpStatus.service,
+      offsetMs: ntpStatus.offsetMs,
+      details: ntpStatus.details,
+    },
+    'NTP clock sync status'
+  );
+
+  if (!ntpStatus.isSynced) {
+    logger.warn('NTP clock not synchronized - timestamp accuracy may be degraded');
+  }
+
+  const config = getConfig();
+
+  initAlerts({
+    enabled: !!config.env.telegram,
+    telegramBotToken: config.env.telegram?.botToken,
+    telegramChatId: config.env.telegram?.chatId,
+  });
+  logger.info({ paperMode: config.env.paperMode, enableBase: config.env.enableBase }, 'Config loaded');
+
+  createPool(config.env.postgres);
+  logger.info('Database pool initialized');
+
+  const pool = getPool();
+
+  const chainConfigs: Record<string, { httpUrl: string; wsUrl?: string; enabled: boolean }> = {};
+  for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
+    let httpUrl: string | undefined;
+    let wsUrl: string | undefined;
+
+    if (chainName === 'mainnet') {
+      httpUrl = config.env.rpc.mainnetHttp;
+      wsUrl = config.env.rpc.mainnetWs;
+    } else if (chainName === 'base') {
+      httpUrl = config.env.rpc.baseHttp;
+      wsUrl = config.env.rpc.baseWs;
+    }
+
+    if (chainConfig.enabled && httpUrl) {
+      chainConfigs[chainName] = {
+        httpUrl,
+        wsUrl,
+        enabled: true,
+      };
+    }
+  }
+
+  const cexConfigs: any = {};
+
+  if (config.app.venues.cex.binance.enabled) {
+    cexConfigs.binance = {
+      enabled: true,
+      pairs: config.pairs
+        .filter(p => p.venues.binance)
+        .map(p => ({
+          symbol: (p.venues.binance as any).symbol,
+          canonical: `${p.base}/${p.quote}`,
+        })),
+    };
+  }
+
+  if (config.app.venues.cex.coinbase.enabled) {
+    cexConfigs.coinbase = {
+      enabled: true,
+      pairs: config.pairs
+        .filter(p => p.venues.coinbase)
+        .map(p => ({
+          symbol: (p.venues.coinbase as any).symbol,
+          canonical: `${p.base}/${p.quote}`,
+        })),
+    };
+  }
+
+  if (config.app.venues.cex.bybit.enabled) {
+    cexConfigs.bybit = {
+      enabled: true,
+      pairs: config.pairs
+        .filter(p => p.venues.bybit)
+        .map(p => ({
+          symbol: (p.venues.bybit as any).symbol,
+          canonical: `${p.base}/${p.quote}`,
+        })),
+    };
+  }
+
+  const dexConfigs: any = {};
+
+  if (config.app.venues.dex.uniswap_v3.enabled) {
+    const uniswapChains: any = {};
+
+    for (const pairConfig of config.pairs) {
+      const chain = pairConfig.chain;
+      const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
+
+      if (!uniV3Venues || !uniV3Venues[chain]) continue;
+
+      if (!uniswapChains[chain]) {
+        uniswapChains[chain] = [];
+      }
+
+      const chainPools = uniV3Venues[chain];
+      for (const poolConfig of chainPools) {
+        uniswapChains[chain].push({
+          poolAddress: poolConfig.pool,
+          canonical: `${pairConfig.base}/${pairConfig.quote}`,
+          feeTier: poolConfig.feeTier,
+          isPrimary: poolConfig.primary === true,
+        });
+      }
+    }
+
+    dexConfigs.uniswap_v3 = {
+      enabled: true,
+      chains: uniswapChains,
+    };
+  }
+
+  const orchestrator = new CollectorOrchestrator(
+    {
+      chains: chainConfigs,
+      cex: cexConfigs,
+      dex: dexConfigs,
+      quoteCache: {
+        cexStaleThresholdMs: config.app.system.quoteStaleThresholdMs,
+        dexBlockLagThreshold: config.app.system.dexBlockLagThreshold ?? 2,
+        maxFutureTsMs: config.app.system.maxFutureTsMs,
+        maxPastTsMs: config.app.system.maxPastTsMs,
+        thinMarketPairs: config.pairs
+          .filter(p => p.thresholds.thinMarketMode)
+          .map(p => ({
+            pair: `${p.base}/${p.quote}`,
+            maxQuoteAgeMs: p.thresholds.maxQuoteAgeMs ?? 300000,
+          })),
+      },
+      quotePersistence: {
+        sampleRate: config.app.system.rawQuoteSampleRate,
+        rollupIntervals: config.app.system.rollupIntervals,
+      },
+    },
+    pool
+  );
+
+  await orchestrator.start();
+  logger.info('Collector orchestrator started');
+
+  const venueIdMapQuery = await pool.query('SELECT id, name FROM venues');
+  const venueIdMap = new Map<string, number>();
+  for (const row of venueIdMapQuery.rows) {
+    venueIdMap.set(row.name, row.id);
+  }
+
+  const pairIdMapQuery = await pool.query('SELECT id, canonical FROM pairs');
+  const pairIdMap = new Map<string, number>();
+  for (const row of pairIdMapQuery.rows) {
+    pairIdMap.set(row.canonical, row.id);
+  }
+
+  const detector = new OpportunityDetector({
+    quoteCache: orchestrator.getQuoteCache(),
+    appConfig: config.app,
+    pairsConfig: config.pairs,
+    venueIdMap,
+    pairIdMap,
+  });
+
+  detector.start();
+  logger.info('Opportunity detector started');
+
+  const emitter = detector.getEmitter();
+
+  const executionManagers: Map<Chain, ExecutionManager> = new Map();
+  const slippageCalibrators: SlippageCalibrator[] = [];
+
+  if (config.env.enableExecution) {
+    for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
+      if (!chainConfig.enabled) continue;
+
+      const chain = chainName as Chain;
+      let httpUrl: string | undefined;
+
+      if (chain === 'mainnet') {
+        httpUrl = config.env.rpc.mainnetHttp;
+      } else if (chain === 'base') {
+        httpUrl = config.env.rpc.baseHttp;
+      }
+
+      if (!httpUrl) continue;
+
+      const viemChain = chain === 'base' ? base : mainnet;
+      const publicClient = createPublicClient({
+        chain: viemChain,
+        transport: http(httpUrl),
+      });
+
+      const tokenMap = buildTokenMap(chain);
+
+      const executionManager = new ExecutionManager({
+        chain,
+        publicClient: publicClient as any,
+        appConfig: config.app,
+        pairsConfig: config.pairs.filter((p) => p.chain === chain),
+        quoterAddress: chainConfig.contracts.uniswapV3QuoterV2 as Address,
+        routerAddress: chainConfig.contracts.uniswapV3Router as Address,
+        httpUrl,
+        privateKey: config.env.executorPrivateKey,
+        paperMode: config.env.paperMode,
+        tokenMap,
+        pairIdMap,
+      });
+
+      executionManager.subscribeToOpportunities(emitter);
+      executionManager.start();
+      executionManagers.set(chain, executionManager);
+
+      logger.info(
+        {
+          chain,
+          paperMode: config.env.paperMode,
+          quoterAddress: chainConfig.contracts.uniswapV3QuoterV2,
+          routerAddress: chainConfig.contracts.uniswapV3Router,
+        },
+        'Execution manager started'
+      );
+
+      const calibratorPools = config.pairs
+        .filter((p) => p.chain === chain)
+        .flatMap((pairConfig) => {
+          const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
+          if (!uniV3Venues || !uniV3Venues[chain]) return [];
+
+          const baseToken = tokenMap.get(pairConfig.base);
+          const quoteToken = tokenMap.get(pairConfig.quote);
+          if (!baseToken || !quoteToken) return [];
+
+          const baseAddr = baseToken.address.toLowerCase();
+          const quoteAddr = quoteToken.address.toLowerCase();
+          const baseIsToken0 = baseAddr < quoteAddr;
+
+          return uniV3Venues[chain].map((poolCfg: any) => ({
+            address: poolCfg.pool as `0x${string}`,
+            feeTierBps: poolCfg.feeTier / 100,
+            token0: (baseIsToken0 ? baseToken.address : quoteToken.address) as `0x${string}`,
+            token1: (baseIsToken0 ? quoteToken.address : baseToken.address) as `0x${string}`,
+            token0Decimals: baseIsToken0 ? baseToken.decimals : quoteToken.decimals,
+            token1Decimals: baseIsToken0 ? quoteToken.decimals : baseToken.decimals,
+            token0Symbol: baseIsToken0 ? pairConfig.base : pairConfig.quote,
+            token1Symbol: baseIsToken0 ? pairConfig.quote : pairConfig.base,
+          }));
+        });
+
+      if (calibratorPools.length > 0) {
+        const calibrator = new SlippageCalibrator(
+          {
+            chain,
+            quoterAddress: chainConfig.contracts.uniswapV3QuoterV2 as `0x${string}`,
+            pools: calibratorPools,
+            notionalSizes: [100, 500, 1000, 2000, 4000],
+            edgeBufferBps: 10,
+            gasUsd: 0.05,
+          },
+          publicClient as any
+        );
+        calibrator.startPeriodicCalibration(5 * 60 * 1000);
+        slippageCalibrators.push(calibrator);
+        logger.info({ chain, pools: calibratorPools.length }, 'Slippage calibrator started');
+      }
+    }
+  } else {
+    emitter.on('opportunity_detected', (opportunity) => {
+      const pairName = Array.from(pairIdMap.entries()).find(([, id]) => id === opportunity.pairId)?.[0];
+      logger.info(
+        {
+          pair: pairName,
+          spreadBps: opportunity.spreadBps,
+          direction: opportunity.direction,
+          chain: opportunity.chain,
+          anchorMid: opportunity.anchorMid,
+          dexMid: opportunity.dexMid,
+        },
+        'Opportunity detected (execution disabled)'
+      );
+    });
+  }
+
+  const shutdown = async (signal: string) => {
+    logger.info({ signal }, 'Shutdown signal received');
+
+    detector.stop();
+    logger.info('Opportunity detector stopped');
+
+    for (const calibrator of slippageCalibrators) {
+      calibrator.stop();
+    }
+    if (slippageCalibrators.length > 0) {
+      logger.info('Slippage calibrators stopped');
+    }
+
+    for (const [chain, manager] of executionManagers) {
+      manager.stop();
+      logger.info({ chain }, 'Execution manager stopped');
+    }
+
+    await orchestrator.stop();
+    logger.info('Collector orchestrator stopped');
+
+    await closePool();
+    logger.info('Database pool closed');
+
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  logger.info('Dislocation trader ready - all systems online');
+}
+
+main().catch((err) => {
+  logger.fatal({ err }, 'Fatal error during startup');
+  process.exit(1);
+});

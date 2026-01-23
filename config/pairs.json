@@ -1,0 +1,132 @@
+{
+  "pairs": [
+    {
+      "base": "WETH",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 1,
+      "aliases": ["ETH/USDC"],
+      "venues": {
+        "binance": { "symbol": "ETHUSDC" },
+        "coinbase": { "symbol": "ETH-USD" },
+        "bybit": { "symbol": "ETHUSDC" },
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0xd0b53D9277642d899DF5C87A3966A349A798F224", "feeTier": 500, "primary": true },
+            { "pool": "0x4C36388bE6F416A29C8d8Eee81C771cE6bE14B18", "feeTier": 3000 }
+          ]
+        },
+        "aerodrome": {
+          "base": [
+            { "pool": "0xcDAC0d6c6C59727a65F871236188350531885C43", "stable": false }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 20,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 100000,
+        "maxTradeSizeUsd": 4000
+      }
+    },
+    {
+      "base": "cbETH",
+      "quote": "WETH",
+      "chain": "base",
+      "tier": 1,
+      "venues": {
+        "coinbase": { "symbol": "CBETH-ETH" },
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0x10648BA41B8565907Cfa1496765fA4D95390aa0d", "feeTier": 500, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 25,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 50000,
+        "maxTradeSizeUsd": 500,
+        "thinMarketMode": true,
+        "maxQuoteAgeMs": 300000,
+        "thinMarketBufferBps": 30
+      }
+    },
+    {
+      "base": "weETH",
+      "quote": "WETH",
+      "chain": "base",
+      "tier": 2,
+      "venues": {
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0xb1419a7f9e8c6e434b1d05377e0dbc4154e3de78", "feeTier": 100, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 15,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 25000,
+        "maxTradeSizeUsd": 500
+      }
+    },
+    {
+      "base": "wstETH",
+      "quote": "WETH",
+      "chain": "base",
+      "tier": 2,
+      "venues": {
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0x20E068D76f9E90b90604500B84c7e19dCB923e7e", "feeTier": 100, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 15,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 25000,
+        "maxTradeSizeUsd": 500
+      }
+    },
+    {
+      "base": "rETH",
+      "quote": "WETH",
+      "chain": "base",
+      "tier": 2,
+      "venues": {
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0x9e13996a9f5a9870c105d7e3c311848273740e98", "feeTier": 500, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 20,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 25000,
+        "maxTradeSizeUsd": 500
+      }
+    },
+    {
+      "base": "USDC",
+      "quote": "USDbC",
+      "chain": "base",
+      "tier": 2,
+      "venues": {
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0x06959273E9A65433De71F5A452D529544E07dDD0", "feeTier": 100, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 5,
+        "minDurationMs": 1000,
+        "minLiquidityUsd": 10000,
+        "maxTradeSizeUsd": 1000
+      }
+    }
+  ]
+}

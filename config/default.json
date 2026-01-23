@@ -1,0 +1,76 @@
+{
+  "system": {
+    "tickIntervalMs": 100,
+    "quoteStaleThresholdMs": 3000,
+    "rollupIntervals": ["1s", "10s", "1m"],
+    "persistRawQuotes": false,
+    "rawQuoteSampleRate": 10,
+    "maxFutureTsMs": 500,
+    "maxPastTsMs": 30000,
+    "dexBlockLagThreshold": 2
+  },
+  "detection": {
+    "defaultMinSpreadBps": 5,
+    "defaultMinDurationMs": 2000,
+    "defaultMinLiquidityUsd": 50000,
+    "volatilityAdjustment": true,
+    "requireConfirmationVenue": true,
+    "maxTimeSkewMsBase": 1500,
+    "maxTimeSkewMsMainnet": 3000
+  },
+  "execution": {
+    "paperMode": true,
+    "maxSlippageBps": 35,
+    "edgeBufferBps": 5,
+    "deadlineSeconds": 60,
+    "gasBufferPercent": 20,
+    "simulateBeforeSend": true,
+    "minProfitUsd": 0.50
+  },
+  "risk": {
+    "maxTradeSizeUsd": 4000,
+    "maxOpenExposureUsd": 8000,
+    "maxTradesPerHour": 20,
+    "cooldownSeconds": 30,
+    "maxGasGwei": 10,
+    "haltOnConsecutiveReverts": 3
+  },
+  "venues": {
+    "cex": {
+      "binance": { "enabled": true, "isAnchor": true, "wsUrl": "wss://stream.binance.com:9443/ws" },
+      "coinbase": { "enabled": true, "isAnchor": false, "wsUrl": "wss://ws-feed.exchange.coinbase.com" },
+      "bybit": { "enabled": true, "isAnchor": false, "wsUrl": "wss://stream.bybit.com/v5/public/spot" }
+    },
+    "dex": {
+      "uniswap_v3": { "enabled": true, "chains": ["base"] },
+      "aerodrome": { "enabled": true, "chains": ["base"] }
+    }
+  },
+  "chains": {
+    "mainnet": {
+      "enabled": false,
+      "chainId": 1,
+      "blockTimeMs": 12000,
+      "contracts": {
+        "uniswapV3Factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "uniswapV3Quoter": "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
+        "uniswapV3QuoterV2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "uniswapV3Router": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+        "uniswapUniversalRouter": "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
+      }
+    },
+    "base": {
+      "enabled": true,
+      "chainId": 8453,
+      "blockTimeMs": 2000,
+      "contracts": {
+        "uniswapV3Factory": "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
+        "uniswapV3Quoter": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+        "uniswapV3QuoterV2": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+        "uniswapV3Router": "0x2626664c2603336E57B271c5C0b26F421741e481",
+        "uniswapUniversalRouter": "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD",
+        "aerodromeRouter": "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"
+      }
+    }
+  }
+}

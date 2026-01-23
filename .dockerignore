@@ -1,0 +1,12 @@
+node_modules
+src
+tests
+.git
+.gitignore
+.env
+.env.*
+*.md
+*.log
+.DS_Store
+coverage
+.nyc_output

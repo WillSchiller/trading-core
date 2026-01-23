@@ -1,0 +1,213 @@
+import type { Address } from 'viem';
+import { createChildLogger, type Logger } from '../utils/logger.js';
+import type { Chain, Opportunity } from '../types/index.js';
+import type { QuoteResult } from './quoter.js';
+import type { GasEstimate } from './gas.js';
+import type { RiskCheckResult } from './risk.js';
+import { insertExecution, updateExecutionStatus, type Execution } from '../persistence/executions.js';
+import { updateOpportunityStatus } from '../persistence/opportunities.js';
+
+export interface PaperTradeParams {
+  opportunity: Opportunity;
+  quote: QuoteResult;
+  gasEstimate: GasEstimate;
+  riskCheck: RiskCheckResult;
+  tokenIn: Address;
+  tokenOut: Address;
+  tokenInDecimals: number;
+  tokenOutDecimals: number;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  fee: number;
+  maxSlippageBps: number;
+  estimatedProfitUsd: number;
+}
+
+export interface PaperTradeResult {
+  executionId: bigint;
+  status: 'simulated' | 'skipped';
+  skipReason?: string;
+  simulatedOutput: bigint;
+  simulatedOutputHuman: number;
+  simulatedPrice: number;
+  simulatedSlippageBps: number;
+  simulatedGasUsd: number;
+  simulatedPnlUsd: number;
+}
+
+export class PaperTrader {
+  private logger: Logger;
+  private chain: Chain;
+
+  constructor(chain: Chain) {
+    this.logger = createChildLogger({ component: 'paper-trader', chain });
+    this.chain = chain;
+  }
+
+  async executePaperTrade(params: PaperTradeParams): Promise<PaperTradeResult> {
+    const { opportunity, quote, gasEstimate, riskCheck } = params;
+
+    this.logger.info(
+      {
+        opportunityId: opportunity.id?.toString(),
+        pairId: opportunity.pairId,
+        direction: opportunity.direction,
+        spreadBps: opportunity.spreadBps,
+        quotedPrice: quote.quotedPrice,
+        slippageBps: quote.slippageBps,
+        estimatedGasUsd: gasEstimate.estimatedGasUsd,
+        estimatedProfitUsd: params.estimatedProfitUsd,
+        riskAllowed: riskCheck.allowed,
+      },
+      'Processing paper trade'
+    );
+
+    if (!riskCheck.allowed) {
+      const skipReason = riskCheck.reason ?? 'Risk check failed';
+      await this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
+
+      return {
+        executionId: 0n,
+        status: 'skipped',
+        skipReason,
+        simulatedOutput: 0n,
+        simulatedOutputHuman: 0,
+        simulatedPrice: 0,
+        simulatedSlippageBps: 0,
+        simulatedGasUsd: gasEstimate.estimatedGasUsd,
+        simulatedPnlUsd: 0,
+      };
+    }
+
+    const deadline = new Date(Date.now() + 120 * 1000);
+
+    const inputAmountHuman = Number(params.amountIn) / 10 ** params.tokenInDecimals;
+    const expectedOutputHuman = Number(quote.amountOut) / 10 ** params.tokenOutDecimals;
+
+    const simulatedSlippageBps = this.simulateSlippage(quote.slippageBps);
+    const slippageFactor = 1 - simulatedSlippageBps / 10000;
+    const simulatedOutput = BigInt(Math.floor(Number(quote.amountOut) * slippageFactor));
+    const simulatedOutputHuman = Number(simulatedOutput) / 10 ** params.tokenOutDecimals;
+    const simulatedPrice = simulatedOutputHuman / inputAmountHuman;
+
+    const simulatedGasUsd = this.simulateGasCost(gasEstimate.estimatedGasUsd);
+    const simulatedPnlUsd = this.calculatePnl(
+      opportunity,
+      inputAmountHuman,
+      simulatedOutputHuman,
+      simulatedGasUsd
+    );
+
+    const execution: Execution = {
+      opportunityId: opportunity.id!,
+      createdAt: new Date(),
+      pairId: opportunity.pairId,
+      chain: this.chain,
+      direction: opportunity.direction,
+      poolAddress: opportunity.dexPoolAddress,
+      inputToken: params.tokenIn,
+      inputAmount: params.amountIn,
+      inputAmountHuman,
+      expectedOutput: quote.amountOut,
+      expectedOutputHuman,
+      quotedPrice: quote.quotedPrice,
+      maxSlippageBps: params.maxSlippageBps,
+      amountOutMinimum: params.amountOutMinimum,
+      deadline,
+      gasPriceGwei: gasEstimate.estimatedGasGwei,
+      maxFeePerGas: gasEstimate.maxFeePerGas,
+      maxPriorityFee: gasEstimate.maxPriorityFeePerGas,
+      gasLimit: Number(gasEstimate.gasLimit),
+      isPaperTrade: true,
+      status: 'pending',
+    };
+
+    const executionId = await insertExecution(execution);
+
+    await updateExecutionStatus(executionId, {
+      status: 'confirmed',
+      confirmedAt: new Date(),
+      gasUsed: Number(quote.gasEstimate),
+      gasCostUsd: simulatedGasUsd,
+      actualOutput: simulatedOutput,
+      actualOutputHuman: simulatedOutputHuman,
+      realizedPrice: simulatedPrice,
+      realizedSlippageBps: simulatedSlippageBps,
+      realizedPnlUsd: simulatedPnlUsd,
+    });
+
+    await updateOpportunityStatus(opportunity.id!, 'filled', undefined, params.estimatedProfitUsd);
+
+    this.logger.info(
+      {
+        executionId: executionId.toString(),
+        opportunityId: opportunity.id?.toString(),
+        simulatedOutputHuman,
+        simulatedPrice,
+        simulatedSlippageBps,
+        simulatedGasUsd,
+        simulatedPnlUsd,
+      },
+      'Paper trade completed'
+    );
+
+    return {
+      executionId,
+      status: 'simulated',
+      simulatedOutput,
+      simulatedOutputHuman,
+      simulatedPrice,
+      simulatedSlippageBps,
+      simulatedGasUsd,
+      simulatedPnlUsd,
+    };
+  }
+
+  private async recordSkippedTrade(opportunity: Opportunity, reason: string, estimatedProfitUsd?: number): Promise<void> {
+    await updateOpportunityStatus(opportunity.id!, 'skipped', reason, estimatedProfitUsd);
+
+    this.logger.info(
+      {
+        opportunityId: opportunity.id?.toString(),
+        reason,
+        estimatedProfitUsd,
+      },
+      'Trade skipped'
+    );
+  }
+
+  private simulateSlippage(expectedSlippageBps: number): number {
+    const variance = 0.2;
+    const randomFactor = 1 + (Math.random() - 0.5) * variance;
+    return Math.max(0, expectedSlippageBps * randomFactor);
+  }
+
+  private simulateGasCost(estimatedGasUsd: number): number {
+    const variance = 0.15;
+    const randomFactor = 1 + (Math.random() - 0.5) * variance;
+    return estimatedGasUsd * randomFactor;
+  }
+
+  private calculatePnl(
+    opportunity: Opportunity,
+    inputAmountHuman: number,
+    outputAmountHuman: number,
+    gasCostUsd: number
+  ): number {
+    let tradeSizeUsd: number;
+    let outputValueUsd: number;
+
+    if (opportunity.direction === 'buy_dex') {
+      tradeSizeUsd = inputAmountHuman;
+      outputValueUsd = outputAmountHuman * opportunity.anchorMid;
+    } else {
+      tradeSizeUsd = inputAmountHuman * opportunity.anchorMid;
+      outputValueUsd = outputAmountHuman;
+    }
+
+    const grossPnl = outputValueUsd - tradeSizeUsd;
+    const netPnl = grossPnl - gasCostUsd;
+
+    return netPnl;
+  }
+}
