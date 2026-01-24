@@ -17,8 +17,9 @@ bash scripts/fetch-secrets.sh export
 echo "=== Logging into ECR ==="
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-echo "=== Setting environment ==="
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "=== Getting Public IP ==="
+PUBLIC_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo "3.1.140.199")
+echo "PUBLIC_IP: $PUBLIC_IP"
 
 # Create .env file for docker-compose
 cat > .env << EOF
@@ -37,10 +38,17 @@ fi
 echo "=== Environment file ==="
 cat .env | sed 's/=.*/=***REDACTED***/'
 
-echo "=== Current directory and .env check ==="
+echo "=== Current directory ==="
 pwd
-ls -la .env || echo "No .env file found!"
-cat .env | head -5
+
+echo "=== Check .env.secrets ==="
+ls -la .env.secrets || echo "No .env.secrets file!"
+cat .env.secrets 2>/dev/null | sed 's/=.*/=***/' || echo "Cannot read .env.secrets"
+
+echo "=== Check .env ==="
+ls -la .env || echo "No .env file!"
+wc -l .env
+cat .env | sed 's/=.*/=***/'
 
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
