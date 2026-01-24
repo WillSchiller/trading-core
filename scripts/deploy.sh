@@ -4,10 +4,13 @@ set -e
 cd /home/ubuntu/app
 
 echo "=== Fetching deployment files ==="
-mkdir -p docker scripts grafana
+mkdir -p docker scripts grafana/provisioning grafana/dashboards
 aws s3 cp s3://blockhelixasia/deploy/docker-compose.prod.yml docker/docker-compose.prod.yml
 aws s3 cp s3://blockhelixasia/deploy/fetch-secrets.sh scripts/fetch-secrets.sh
+aws s3 sync s3://blockhelixasia/deploy/grafana/ grafana/ --delete
 chmod +x scripts/*.sh
+echo "=== Grafana files ==="
+find grafana -type f | head -20
 
 echo "=== Fetching secrets ==="
 export AWS_REGION="${AWS_REGION:-ap-southeast-1}"

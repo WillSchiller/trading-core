@@ -102,6 +102,7 @@ jobs:
           aws s3 cp docker/docker-compose.prod.yml s3://blockhelixasia/deploy/docker-compose.prod.yml
           aws s3 cp scripts/fetch-secrets.sh s3://blockhelixasia/deploy/fetch-secrets.sh
           aws s3 cp scripts/deploy.sh s3://blockhelixasia/deploy/deploy.sh
+          aws s3 sync grafana/ s3://blockhelixasia/deploy/grafana/ --delete
 
       - name: Deploy via SSM
         env:
