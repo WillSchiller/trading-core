@@ -101,6 +101,7 @@ jobs:
         run: |
           aws s3 cp docker/docker-compose.prod.yml s3://blockhelixasia/deploy/docker-compose.prod.yml
           aws s3 cp scripts/fetch-secrets.sh s3://blockhelixasia/deploy/fetch-secrets.sh
+          aws s3 cp scripts/deploy.sh s3://blockhelixasia/deploy/deploy.sh
 
       - name: Deploy via SSM
         env:
@@ -110,26 +111,14 @@ jobs:
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
             --parameters "commands=[
-              \"set -e\",
-              \"cd /home/ubuntu/app\",
-              \"mkdir -p docker scripts grafana\",
-              \"aws s3 cp s3://blockhelixasia/deploy/docker-compose.prod.yml docker/docker-compose.prod.yml\",
-              \"aws s3 cp s3://blockhelixasia/deploy/fetch-secrets.sh scripts/fetch-secrets.sh\",
-              \"chmod +x scripts/*.sh\",
+              \"aws s3 cp s3://blockhelixasia/deploy/deploy.sh /tmp/deploy.sh\",
+              \"chmod +x /tmp/deploy.sh\",
               \"export AWS_REGION=${{ env.AWS_REGION }}\",
               \"export PROJECT_NAME=dislocation-trader\",
-              \"source scripts/fetch-secrets.sh export\",
-              \"aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}\",
+              \"export ECR_REGISTRY=${{ secrets.ECR_REGISTRY }}\",
               \"export ECR_REPOSITORY_URL=${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}\",
               \"export IMAGE_TAG=${{ github.sha }}\",
-              \"export PUBLIC_IP=\$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)\",
-              \"source .env.secrets 2>/dev/null || true\",
-              \"docker-compose -f docker/docker-compose.prod.yml pull\",
-              \"docker-compose -f docker/docker-compose.prod.yml up -d\",
-              \"sleep 10\",
-              \"docker exec dislocation-trader-app npm run db:migrate 2>/dev/null || echo 'Migration skipped'\",
-              \"docker-compose -f docker/docker-compose.prod.yml ps\",
-              \"echo 'Deployment completed'\"
+              \"bash /tmp/deploy.sh\"
             ]" \
             --query 'Command.CommandId' \
             --output text)
