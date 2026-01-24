@@ -18,14 +18,24 @@ echo "=== Logging into ECR ==="
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
 echo "=== Setting environment ==="
-export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 
-# Load secrets into environment
+# Create .env file for docker-compose
+cat > .env << EOF
+ECR_REPOSITORY_URL=${ECR_REPOSITORY_URL}
+IMAGE_TAG=${IMAGE_TAG:-latest}
+PUBLIC_IP=${PUBLIC_IP}
+GRAFANA_ADMIN_PASSWORD=admin123
+TELEGRAM_CHAT_ID=
+EOF
+
+# Append secrets
 if [ -f .env.secrets ]; then
-  set -a
-  source .env.secrets
-  set +a
+  cat .env.secrets >> .env
 fi
+
+echo "=== Environment file ==="
+cat .env | sed 's/=.*/=***REDACTED***/'
 
 echo "=== Pulling images ==="
 docker-compose -f docker/docker-compose.prod.yml pull
