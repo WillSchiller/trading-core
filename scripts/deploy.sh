@@ -50,6 +50,9 @@ ls -la .env || echo "No .env file!"
 wc -l .env
 cat .env | sed 's/=.*/=***/'
 
+echo "=== Stopping existing services ==="
+docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/null || true
+
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
 
