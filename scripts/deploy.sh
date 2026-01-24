@@ -37,11 +37,16 @@ fi
 echo "=== Environment file ==="
 cat .env | sed 's/=.*/=***REDACTED***/'
 
+echo "=== Current directory and .env check ==="
+pwd
+ls -la .env || echo "No .env file found!"
+cat .env | head -5
+
 echo "=== Pulling images ==="
-docker-compose -f docker/docker-compose.prod.yml pull
+docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
 
 echo "=== Starting services ==="
-docker-compose -f docker/docker-compose.prod.yml up -d
+docker-compose --env-file .env -f docker/docker-compose.prod.yml up -d
 
 echo "=== Waiting for services ==="
 sleep 10
@@ -50,6 +55,6 @@ echo "=== Running migrations ==="
 docker exec dislocation-trader-app npm run db:migrate 2>/dev/null || echo "Migration skipped"
 
 echo "=== Service status ==="
-docker-compose -f docker/docker-compose.prod.yml ps
+docker-compose --env-file .env -f docker/docker-compose.prod.yml ps
 
 echo "=== Deployment completed ==="
