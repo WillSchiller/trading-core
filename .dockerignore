@@ -1,7 +1,8 @@
 node_modules
-src
+dist
 tests
 .git
+.github
 .gitignore
 .env
 .env.*
@@ -10,3 +11,9 @@ tests
 .DS_Store
 coverage
 .nyc_output
+.vscode
+.idea
+infra
+grafana
+docs
+examples
