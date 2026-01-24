@@ -12,10 +12,10 @@ terraform {
   #   terraform init -backend-config="region=$AWS_REGION"
   # Or set AWS_DEFAULT_REGION environment variable
   backend "s3" {
-    bucket  = "dislocation-trader-terraform-state"
-    key     = "infrastructure/terraform.tfstate"
+    bucket  = "blockhelixasia"
+    key     = "dislocation-trader/terraform.tfstate"
+    region  = "ap-southeast-1"
     encrypt = true
-    # region is set via -backend-config or AWS_DEFAULT_REGION env var
   }
 }
 

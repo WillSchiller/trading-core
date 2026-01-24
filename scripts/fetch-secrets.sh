@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-ap-southeast-1}"
 PROJECT_NAME="${PROJECT_NAME:-dislocation-trader}"
 
 echo "Fetching secrets from AWS Secrets Manager..."

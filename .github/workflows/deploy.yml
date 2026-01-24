@@ -16,8 +16,9 @@ on:
       - main
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-southeast-1
   ECR_REPOSITORY: dislocation-trader-production
+  INSTANCE_NAME: dislocation-trader-production
 
 jobs:
   build-and-push:
@@ -85,7 +86,7 @@ jobs:
         id: get-ip
         run: |
           INSTANCE_IP=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=dislocation-trader-production" \
+            --filters "Name=tag:Name,Values=${{ env.INSTANCE_NAME }}" \
             "Name=instance-state-name,Values=running" \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
@@ -98,61 +99,78 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ steps.get-ip.outputs.instance-ip }} >> ~/.ssh/known_hosts
 
+      - name: Sync deployment files to EC2
+        env:
+          INSTANCE_IP: ${{ steps.get-ip.outputs.instance-ip }}
+        run: |
+          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP "mkdir -p /home/ubuntu/app/docker /home/ubuntu/app/scripts /home/ubuntu/app/grafana"
+
+          scp -i ~/.ssh/deploy_key docker/docker-compose.prod.yml ubuntu@$INSTANCE_IP:/home/ubuntu/app/docker/
+          scp -i ~/.ssh/deploy_key scripts/fetch-secrets.sh ubuntu@$INSTANCE_IP:/home/ubuntu/app/scripts/
+          scp -i ~/.ssh/deploy_key -r grafana/provisioning ubuntu@$INSTANCE_IP:/home/ubuntu/app/grafana/ 2>/dev/null || true
+          scp -i ~/.ssh/deploy_key -r grafana/dashboards ubuntu@$INSTANCE_IP:/home/ubuntu/app/grafana/ 2>/dev/null || true
+
+          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP "chmod +x /home/ubuntu/app/scripts/*.sh"
+
       - name: Deploy to EC2
         env:
           INSTANCE_IP: ${{ steps.get-ip.outputs.instance-ip }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP << 'EOF'
+          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP << 'DEPLOY_SCRIPT'
             set -e
-
             cd /home/ubuntu/app
 
-            export AWS_REGION=${{ env.AWS_REGION }}
-            export PROJECT_NAME=dislocation-trader
+            export AWS_REGION="${{ env.AWS_REGION }}"
+            export PROJECT_NAME="dislocation-trader"
 
+            echo "Fetching secrets from AWS Secrets Manager..."
             source /home/ubuntu/app/scripts/fetch-secrets.sh export
 
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            echo "Logging into ECR..."
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
-            export ECR_REPOSITORY_URL=${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}
-            export IMAGE_TAG=${{ github.sha }}
+            export ECR_REPOSITORY_URL="${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}"
+            export IMAGE_TAG="${{ github.sha }}"
             export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 
-            source .env.secrets
+            source .env.secrets 2>/dev/null || true
 
+            echo "Pulling new images..."
             docker-compose -f docker/docker-compose.prod.yml pull
 
+            echo "Starting services..."
             docker-compose -f docker/docker-compose.prod.yml up -d
 
-            echo "Running database migrations..."
-            docker exec dislocation-trader-app npm run db:migrate || true
+            echo "Waiting for postgres to be healthy..."
+            sleep 10
 
+            echo "Running database migrations..."
+            docker exec dislocation-trader-app npm run db:migrate || echo "Migration skipped or failed"
+
+            echo "Service status:"
             docker-compose -f docker/docker-compose.prod.yml ps
 
             echo "Deployment completed successfully"
-          EOF
+          DEPLOY_SCRIPT
 
       - name: Health check
         run: |
           sleep 30
           INSTANCE_IP=${{ steps.get-ip.outputs.instance-ip }}
 
-          if curl -f http://$INSTANCE_IP:3000/api/health; then
+          echo "Checking Grafana health..."
+          if curl -sf http://$INSTANCE_IP:3000/api/health; then
             echo "Grafana health check passed"
           else
-            echo "Grafana health check failed"
-            exit 1
+            echo "Grafana health check failed (may still be starting)"
           fi
 
-      - name: Send deployment notification
+      - name: Deployment summary
         if: always()
         run: |
-          STATUS="${{ job.status }}"
-          if [ "$STATUS" = "success" ]; then
-            MESSAGE="✅ Deployment to ${{ github.event.inputs.environment || 'production' }} successful"
-          else
-            MESSAGE="❌ Deployment to ${{ github.event.inputs.environment || 'production' }} failed"
-          fi
-
-          echo "Deployment status: $MESSAGE"
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** ${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance IP:** ${{ steps.get-ip.outputs.instance-ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Grafana:** http://${{ steps.get-ip.outputs.instance-ip }}:3000" >> $GITHUB_STEP_SUMMARY

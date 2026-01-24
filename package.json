@@ -17,7 +17,12 @@
     "lint:fix": "eslint src tests --ext .ts --fix",
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "ec2:start": "./scripts/ec2-control.sh start",
+    "ec2:stop": "./scripts/ec2-control.sh stop",
+    "ec2:status": "./scripts/ec2-control.sh status",
+    "ec2:ssh": "./scripts/ec2-control.sh ssh",
+    "ec2:logs": "./scripts/ec2-control.sh logs"
   },
   "keywords": [
     "trading",

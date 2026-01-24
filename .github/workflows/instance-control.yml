@@ -1,0 +1,80 @@
+name: Instance Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+          - status
+
+env:
+  AWS_REGION: ap-southeast-1
+  INSTANCE_NAME: dislocation-trader-production
+
+jobs:
+  control:
+    name: ${{ github.event.inputs.action }} instance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get instance ID
+        id: get-instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${{ env.INSTANCE_NAME }}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+
+      - name: Start instance
+        if: github.event.inputs.action == 'start'
+        run: |
+          aws ec2 start-instances --instance-ids ${{ steps.get-instance.outputs.instance-id }}
+          echo "Starting instance..."
+          aws ec2 wait instance-running --instance-ids ${{ steps.get-instance.outputs.instance-id }}
+
+          IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ steps.get-instance.outputs.instance-id }} \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "Instance is running at: $IP"
+          echo "Grafana will be available at: http://$IP:3000"
+
+      - name: Stop instance
+        if: github.event.inputs.action == 'stop'
+        run: |
+          aws ec2 stop-instances --instance-ids ${{ steps.get-instance.outputs.instance-id }}
+          echo "Stopping instance..."
+          aws ec2 wait instance-stopped --instance-ids ${{ steps.get-instance.outputs.instance-id }}
+          echo "Instance stopped"
+
+      - name: Get status
+        if: github.event.inputs.action == 'status'
+        run: |
+          STATUS=$(aws ec2 describe-instances \
+            --instance-ids ${{ steps.get-instance.outputs.instance-id }} \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)
+
+          IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ steps.get-instance.outputs.instance-id }} \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+
+          echo "Instance status: $STATUS"
+          if [ "$STATUS" = "running" ]; then
+            echo "IP: $IP"
+            echo "Grafana: http://$IP:3000"
+          fi
