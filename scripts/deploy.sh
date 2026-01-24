@@ -53,6 +53,12 @@ cat .env | sed 's/=.*/=***/'
 echo "=== Stopping existing services ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/null || true
 
+# If postgres data exists with wrong config, clean it (only on fresh deploy)
+if [ -d /data/postgres ] && [ -f /data/postgres/PG_VERSION ]; then
+  echo "Clearing old postgres data..."
+  rm -rf /data/postgres/*
+fi
+
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
 
