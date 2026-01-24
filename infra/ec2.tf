@@ -97,6 +97,28 @@ resource "aws_iam_role_policy" "ecr_access" {
   })
 }
 
+resource "aws_iam_role_policy" "s3_deploy_access" {
+  name = "${var.project_name}-s3-deploy-access-${var.environment}"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::blockhelixasia",
+          "arn:aws:s3:::blockhelixasia/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "ssm_access" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"

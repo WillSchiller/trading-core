@@ -66,7 +66,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 via SSM
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: ${{ github.event.inputs.environment || 'production' }}
@@ -82,86 +82,102 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get EC2 instance IP
-        id: get-ip
+      - name: Get EC2 instance ID
+        id: get-instance
         run: |
-          INSTANCE_IP=$(aws ec2 describe-instances \
+          INSTANCE_ID=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=${{ env.INSTANCE_NAME }}" \
             "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          INSTANCE_IP=$(aws ec2 describe-instances \
+            --instance-ids $INSTANCE_ID \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
+          echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "instance-ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
 
-      - name: Setup SSH key
+      - name: Upload deployment files via S3
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ steps.get-ip.outputs.instance-ip }} >> ~/.ssh/known_hosts
+          aws s3 cp docker/docker-compose.prod.yml s3://blockhelixasia/deploy/docker-compose.prod.yml
+          aws s3 cp scripts/fetch-secrets.sh s3://blockhelixasia/deploy/fetch-secrets.sh
 
-      - name: Sync deployment files to EC2
+      - name: Deploy via SSM
         env:
-          INSTANCE_IP: ${{ steps.get-ip.outputs.instance-ip }}
+          INSTANCE_ID: ${{ steps.get-instance.outputs.instance-id }}
         run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP "mkdir -p /home/ubuntu/app/docker /home/ubuntu/app/scripts /home/ubuntu/app/grafana"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              \"set -e\",
+              \"cd /home/ubuntu/app\",
+              \"mkdir -p docker scripts grafana\",
+              \"aws s3 cp s3://blockhelixasia/deploy/docker-compose.prod.yml docker/docker-compose.prod.yml\",
+              \"aws s3 cp s3://blockhelixasia/deploy/fetch-secrets.sh scripts/fetch-secrets.sh\",
+              \"chmod +x scripts/*.sh\",
+              \"export AWS_REGION=${{ env.AWS_REGION }}\",
+              \"export PROJECT_NAME=dislocation-trader\",
+              \"source scripts/fetch-secrets.sh export\",
+              \"aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}\",
+              \"export ECR_REPOSITORY_URL=${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}\",
+              \"export IMAGE_TAG=${{ github.sha }}\",
+              \"export PUBLIC_IP=\$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)\",
+              \"source .env.secrets 2>/dev/null || true\",
+              \"docker-compose -f docker/docker-compose.prod.yml pull\",
+              \"docker-compose -f docker/docker-compose.prod.yml up -d\",
+              \"sleep 10\",
+              \"docker exec dislocation-trader-app npm run db:migrate 2>/dev/null || echo 'Migration skipped'\",
+              \"docker-compose -f docker/docker-compose.prod.yml ps\",
+              \"echo 'Deployment completed'\"
+            ]" \
+            --query 'Command.CommandId' \
+            --output text)
 
-          scp -i ~/.ssh/deploy_key docker/docker-compose.prod.yml ubuntu@$INSTANCE_IP:/home/ubuntu/app/docker/
-          scp -i ~/.ssh/deploy_key scripts/fetch-secrets.sh ubuntu@$INSTANCE_IP:/home/ubuntu/app/scripts/
-          scp -i ~/.ssh/deploy_key -r grafana/provisioning ubuntu@$INSTANCE_IP:/home/ubuntu/app/grafana/ 2>/dev/null || true
-          scp -i ~/.ssh/deploy_key -r grafana/dashboards ubuntu@$INSTANCE_IP:/home/ubuntu/app/grafana/ 2>/dev/null || true
+          echo "Command ID: $COMMAND_ID"
 
-          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP "chmod +x /home/ubuntu/app/scripts/*.sh"
+          # Wait for command to complete
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id $COMMAND_ID \
+              --instance-id $INSTANCE_ID \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
 
-      - name: Deploy to EC2
-        env:
-          INSTANCE_IP: ${{ steps.get-ip.outputs.instance-ip }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP << 'DEPLOY_SCRIPT'
-            set -e
-            cd /home/ubuntu/app
+            echo "Status: $STATUS"
 
-            export AWS_REGION="${{ env.AWS_REGION }}"
-            export PROJECT_NAME="dislocation-trader"
+            if [ "$STATUS" = "Success" ]; then
+              echo "Deployment successful!"
+              aws ssm get-command-invocation \
+                --command-id $COMMAND_ID \
+                --instance-id $INSTANCE_ID \
+                --query 'StandardOutputContent' \
+                --output text
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              echo "Deployment failed!"
+              aws ssm get-command-invocation \
+                --command-id $COMMAND_ID \
+                --instance-id $INSTANCE_ID \
+                --query '[StandardOutputContent, StandardErrorContent]' \
+                --output text
+              exit 1
+            fi
 
-            echo "Fetching secrets from AWS Secrets Manager..."
-            source /home/ubuntu/app/scripts/fetch-secrets.sh export
+            sleep 5
+          done
 
-            echo "Logging into ECR..."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-            export ECR_REPOSITORY_URL="${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}"
-            export IMAGE_TAG="${{ github.sha }}"
-            export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-
-            source .env.secrets 2>/dev/null || true
-
-            echo "Pulling new images..."
-            docker-compose -f docker/docker-compose.prod.yml pull
-
-            echo "Starting services..."
-            docker-compose -f docker/docker-compose.prod.yml up -d
-
-            echo "Waiting for postgres to be healthy..."
-            sleep 10
-
-            echo "Running database migrations..."
-            docker exec dislocation-trader-app npm run db:migrate || echo "Migration skipped or failed"
-
-            echo "Service status:"
-            docker-compose -f docker/docker-compose.prod.yml ps
-
-            echo "Deployment completed successfully"
-          DEPLOY_SCRIPT
+          echo "Deployment timed out"
+          exit 1
 
       - name: Health check
         run: |
           sleep 30
-          INSTANCE_IP=${{ steps.get-ip.outputs.instance-ip }}
+          INSTANCE_IP=${{ steps.get-instance.outputs.instance-ip }}
 
-          echo "Checking Grafana health..."
-          if curl -sf http://$INSTANCE_IP:3000/api/health; then
-            echo "Grafana health check passed"
+          echo "Checking Grafana at http://$INSTANCE_IP:3000..."
+          if curl -sf --max-time 10 http://$INSTANCE_IP:3000/api/health; then
+            echo "Grafana is healthy"
           else
             echo "Grafana health check failed (may still be starting)"
           fi
@@ -172,5 +188,6 @@ jobs:
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Image:** ${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Instance IP:** ${{ steps.get-ip.outputs.instance-ip }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Grafana:** http://${{ steps.get-ip.outputs.instance-ip }}:3000" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance:** ${{ steps.get-instance.outputs.instance-id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **IP:** ${{ steps.get-instance.outputs.instance-ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Grafana:** http://${{ steps.get-instance.outputs.instance-ip }}:3000" >> $GITHUB_STEP_SUMMARY
