@@ -4,17 +4,21 @@ FROM node:20-slim AS builder
 WORKDIR /build
 
 COPY package*.json ./
-RUN npm ci --only=production && \
-    npm cache clean --force
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
 COPY config ./config
 COPY sql ./sql
 
-RUN npm install -g typescript && \
-    npm run build && \
-    npm uninstall -g typescript
+RUN npm run build
+
+# Production dependencies stage
+FROM node:20-slim AS deps
+
+WORKDIR /deps
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Production stage
 FROM node:20-slim
@@ -31,7 +35,7 @@ RUN groupadd -r trader && \
 
 WORKDIR /app
 
-COPY --from=builder --chown=trader:trader /build/node_modules ./node_modules
+COPY --from=deps --chown=trader:trader /deps/node_modules ./node_modules
 COPY --from=builder --chown=trader:trader /build/dist ./dist
 COPY --from=builder --chown=trader:trader /build/package*.json ./
 COPY --chown=trader:trader config ./config
