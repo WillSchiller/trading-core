@@ -53,16 +53,36 @@ cat .env | sed 's/=.*/=***/'
 echo "=== Stopping existing services ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/null || true
 
-# If postgres data exists with wrong config, clean it (only on fresh deploy)
-if [ -d /data/postgres ] && [ -f /data/postgres/PG_VERSION ]; then
-  echo "Clearing old postgres data..."
-  rm -rf /data/postgres/*
-fi
+echo "=== Preparing postgres data directory ==="
+# EBS volume is mounted at /data - ensure postgres directory exists with correct permissions
+sudo mkdir -p /data/postgres
+# Clear any existing data for fresh init (prevents corruption issues)
+sudo rm -rf /data/postgres/*
+# Postgres alpine runs as uid 70
+sudo chown -R 70:70 /data/postgres
+sudo chmod 700 /data/postgres
+ls -la /data/
 
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
 
-echo "=== Starting services ==="
+echo "=== Starting postgres first ==="
+docker-compose --env-file .env -f docker/docker-compose.prod.yml up -d postgres
+
+echo "=== Waiting for postgres to initialize ==="
+for i in {1..30}; do
+  if docker exec dislocation-postgres pg_isready -U trader -d dislocation_trader 2>/dev/null; then
+    echo "Postgres is ready!"
+    break
+  fi
+  echo "Waiting for postgres... ($i/30)"
+  sleep 2
+done
+
+echo "=== Postgres logs ==="
+docker logs dislocation-postgres 2>&1 | tail -50
+
+echo "=== Starting remaining services ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml up -d
 
 echo "=== Waiting for services ==="
@@ -73,5 +93,9 @@ docker exec dislocation-trader-app npm run db:migrate 2>/dev/null || echo "Migra
 
 echo "=== Service status ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml ps
+
+echo "=== Final container logs (if any errors) ==="
+docker logs dislocation-postgres 2>&1 | tail -20 || true
+docker logs dislocation-trader-app 2>&1 | tail -20 || true
 
 echo "=== Deployment completed ==="
