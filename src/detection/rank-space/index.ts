@@ -246,6 +246,8 @@ export class RankSpaceDetector {
       return;
     }
 
+    const dexPct = (dexRank.rank - 1) / (totalVenues - 1);
+
     const opportunity: Opportunity = {
       detectedAt: new Date(),
       pairId,
@@ -267,14 +269,16 @@ export class RankSpaceDetector {
         `duration_${durationMs}ms`,
       ],
       metadata: {
-        dexRank: dexRank.rank,
-        totalVenues,
-        durationMs,
-        venueRanks: venueRanks.map((v) => ({
+        dex_rank: dexRank.rank,
+        dex_pct: dexPct,
+        venue_count: totalVenues,
+        ranked_venues: venueRanks.map((v) => ({
           venue: v.venue,
           mid: v.mid,
           rank: v.rank,
         })),
+        anchors_used: ['binance'],
+        triggered_at: Date.now(),
       },
     };
 

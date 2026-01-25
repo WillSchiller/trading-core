@@ -515,16 +515,17 @@ export class OpportunityDetector {
     const { oppKey, spreadBps, minSpreadBps } = params;
     const now = new Date();
     const nowMs = Date.now();
+    const absSpreadBps = Math.abs(spreadBps);
 
     const existingOpp = this.openOpportunities.get(oppKey);
     const closeThreshold = minSpreadBps - HYSTERESIS_BPS;
 
-    if (spreadBps >= minSpreadBps) {
+    if (absSpreadBps >= minSpreadBps) {
       if (existingOpp) {
         existingOpp.consecutiveAbove += 1;
         existingOpp.consecutiveBelow = 0;
         existingOpp.lastSeenAt = now;
-        existingOpp.maxSpreadBps = Math.max(existingOpp.maxSpreadBps, spreadBps);
+        existingOpp.maxSpreadBps = Math.max(existingOpp.maxSpreadBps, absSpreadBps);
 
         if (existingOpp.id && existingOpp.id > BigInt(0)) {
           if (nowMs - existingOpp.lastUpdateAt >= UPDATE_THROTTLE_MS) {
@@ -545,6 +546,7 @@ export class OpportunityDetector {
             const id = await insertOpportunity(newOpportunity);
             existingOpp.id = id;
             existingOpp.openedAt = now;
+            newOpportunity.id = id;
 
             this.logger.info(
               {
@@ -571,7 +573,7 @@ export class OpportunityDetector {
           lastUpdateAt: nowMs,
           consecutiveAbove: 1,
           consecutiveBelow: 0,
-          maxSpreadBps: spreadBps,
+          maxSpreadBps: absSpreadBps,
           pairId: params.pairId,
           chain: params.chain,
           anchorVenueId: params.anchorVenueId,
@@ -582,7 +584,7 @@ export class OpportunityDetector {
 
         this.openOpportunities.set(oppKey, pendingOpp);
       }
-    } else if (spreadBps < closeThreshold) {
+    } else if (absSpreadBps < closeThreshold) {
       if (existingOpp && existingOpp.id) {
         existingOpp.consecutiveBelow += 1;
         existingOpp.consecutiveAbove = 0;

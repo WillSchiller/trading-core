@@ -150,11 +150,14 @@ export class UniswapV3Connector extends EventEmitter {
   }
 
   private startPollingMode(): void {
-    this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) =>
-      this.handleNewBlockPolling(blockInfo.blockNumber)
-    );
+    this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Registering block listener');
 
-    this.logger.info('Polling mode activated (legacy)');
+    this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) => {
+      this.logger.info({ blockNumber: blockInfo.blockNumber.toString(), timestamp: blockInfo.timestamp }, 'Block event received in Uniswap connector');
+      this.handleNewBlockPolling(blockInfo.blockNumber);
+    });
+
+    this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Polling mode activated (legacy)');
   }
 
   private async handleNewBlockEventDriven(blockNumber: bigint): Promise<void> {
