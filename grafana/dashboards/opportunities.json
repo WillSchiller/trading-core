@@ -33,6 +33,7 @@
         "name": "chain",
         "type": "custom",
         "label": "Chain",
+        "query": "all : All,base : base,mainnet : mainnet",
         "options": [
           {"text": "All", "value": "all", "selected": true},
           {"text": "base", "value": "base", "selected": false},
@@ -46,6 +47,7 @@
         "name": "strategy",
         "type": "custom",
         "label": "Strategy",
+        "query": "all : All,dislocation : Dislocation,rank_space : Rank Space",
         "options": [
           {"text": "All", "value": "all", "selected": true},
           {"text": "Dislocation", "value": "dislocation", "selected": false},
@@ -59,6 +61,7 @@
         "name": "pnl_filter",
         "type": "custom",
         "label": "Est. Profit",
+        "query": "all : All,profitable : Profitable (> $0),unprofitable : Unprofitable (< $0),gt1 : > $1,gt5 : > $5,gt10 : > $10,gt50 : > $50",
         "options": [
           {"text": "All", "value": "all", "selected": true},
           {"text": "Profitable (> $0)", "value": "profitable", "selected": false},
@@ -84,7 +87,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY time ORDER BY time",
+          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50)) GROUP BY time ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -145,7 +148,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY status ORDER BY value DESC",
+          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50)) GROUP BY status ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -185,7 +188,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(skip_reason, 'no_reason') as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND status = 'skipped' GROUP BY skip_reason ORDER BY value DESC",
+          "rawSql": "SELECT COALESCE(skip_reason, 'no_reason') as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50)) AND status = 'skipped' GROUP BY skip_reason ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -225,7 +228,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND o.estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND o.estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND o.estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND o.estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND o.estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND o.estimated_profit_usd > 50)) GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -285,7 +288,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT chain::text, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY chain ORDER BY count DESC",
+          "rawSql": "SELECT chain::text, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50)) GROUP BY chain ORDER BY count DESC",
           "format": "table"
         }
       ],
@@ -449,7 +452,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd, o.estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') ORDER BY o.detected_at DESC LIMIT 500",
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd, o.estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND o.estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND o.estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND o.estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND o.estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND o.estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND o.estimated_profit_usd > 50)) ORDER BY o.detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -566,7 +569,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50))",
           "format": "table"
         }
       ],
@@ -601,7 +604,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50))",
           "format": "table"
         }
       ],
@@ -637,7 +640,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND estimated_profit_usd IS NOT NULL",
+          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND estimated_profit_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50))",
           "format": "table"
         }
       ],
@@ -673,7 +676,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND estimated_profit_usd > 50))",
           "format": "table"
         }
       ],

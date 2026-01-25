@@ -213,3 +213,38 @@
   - Run database migration: npm run db:migrate
   - Test both detectors running in parallel
   - Monitor separate P&L by strategy column in executions table
+
+[2026-01-25 23:55] [devops-infra-engineer] ✅ DONE AWS EC2 deployment successful via SSM
+  - Deployed fixed deploy.sh script from S3 (s3://blockhelixasia/deploy/deploy.sh)
+  - Executed deployment via AWS SSM on instance i-0f1f1f0a2b74cef5d (region: ap-southeast-1)
+  - All services started successfully and are healthy:
+    - dislocation-postgres: Up, healthy (port 127.0.0.1:5432)
+    - dislocation-trader-app: Up, healthy (ECR image: 386166838496.dkr.ecr.ap-southeast-1.amazonaws.com/dislocation-trader-production:latest)
+    - dislocation-grafana: Up, healthy (port 0.0.0.0:3000)
+  - Verified Grafana dashboards mounted correctly at /var/lib/grafana/dashboards/ (14 files)
+  - Database migrations ran successfully on startup
+  - Application logs show:
+    - All systems online
+    - Coinbase CEX connector connected (ETH-USD subscribed)
+    - Uniswap V3 connector started (2 pools, base chain)
+    - Block watcher tracking Base chain (block 41285402+)
+    - RankSpace detector operational (607+ opportunities detected)
+    - Quote persistence and rollup timers running (1s, 10s, 1m intervals)
+  - Secrets fetched from AWS Secrets Manager successfully (RPC, Postgres)
+  - Public IP: 3.1.140.199
+  - Grafana accessible at: http://3.1.140.199:3000 (default credentials: admin/admin)
+
+  Deployment timeline:
+  - Total deployment time: ~31 seconds
+  - Postgres initialization: ~6 seconds
+  - Application startup: ~11 seconds
+  - All health checks passing
+
+  Deployment verification commands used:
+  - aws ssm send-command (deploy script execution)
+  - docker compose ps (service status check)
+  - docker compose logs (application logs verification)
+  - docker exec (Grafana dashboard verification)
+
+  System status: OPERATIONAL
+  All services healthy and processing live data from Base chain and Coinbase

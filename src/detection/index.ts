@@ -11,6 +11,8 @@ import {
   volatilityFilter,
   anchorConfidenceFilter,
   thinMarketBufferFilter,
+  timeAlignmentFilter,
+  getMaxTimeSkewMs,
   type FilterResult,
 } from './filters.js';
 import { OpportunityEmitter } from './emitter.js';
@@ -188,6 +190,19 @@ export class OpportunityDetector {
     const stalenessResult = stalenessFilter({ quotes });
     if (!stalenessResult.passed) {
       await this.closeStaleOpportunities(pair, chain, pairId);
+      return;
+    }
+
+    const timeAlignmentResult = timeAlignmentFilter({
+      anchorQuote: anchorQuote.quote,
+      dexQuote: dexQuote.quote,
+      maxTimeSkewMs: getMaxTimeSkewMs(chain),
+    });
+    if (!timeAlignmentResult.passed) {
+      this.logger.debug(
+        { pair, chain, reason: timeAlignmentResult.reason },
+        'Quote time alignment check failed'
+      );
       return;
     }
 
