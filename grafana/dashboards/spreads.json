@@ -53,7 +53,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT q.ts as time, q.mid as value, v.name as metric FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.(COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') ORDER BY q.ts",
+          "rawSql": "SELECT q.ts as time, q.mid as value, v.name as metric FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR q.pair_id::text = '${pair}') ORDER BY q.ts",
           "format": "time_series"
         }
       ],

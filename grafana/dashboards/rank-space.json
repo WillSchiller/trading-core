@@ -54,7 +54,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -83,7 +83,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'buy_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'buy_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -112,7 +112,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'sell_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'sell_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -141,7 +141,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -172,7 +172,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG((metadata->>'dex_rank')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT AVG((metadata->>'dex_rank')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -203,7 +203,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG((metadata->>'dex_pct')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT AVG((metadata->>'dex_pct')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -237,7 +237,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY time ORDER BY time",
+          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY time ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -278,7 +278,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY status ORDER BY value DESC",
+          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY status ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -306,7 +306,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT direction as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY direction ORDER BY value DESC",
+          "rawSql": "SELECT direction as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY direction ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -418,7 +418,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -449,7 +449,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT (metadata->>'venue_count')::text as venue_count, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY venue_count ORDER BY venue_count",
+          "rawSql": "SELECT (metadata->>'venue_count')::text as venue_count, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY venue_count ORDER BY venue_count",
           "format": "table"
         }
       ],
@@ -479,7 +479,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.direction, ROUND(o.spread_bps::numeric, 2) as spread_bps, (o.metadata->>'dex_rank')::int as dex_rank, ROUND((o.metadata->>'dex_pct')::numeric * 100, 1) as dex_pct_pct, (o.metadata->>'venue_count')::int as venue_count, o.status, o.skip_reason, ROUND(o.estimated_profit_usd::numeric, 4) as estimated_profit_usd, ROUND(o.estimated_gas_usd::numeric, 4) as estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') ORDER BY o.detected_at DESC LIMIT 500",
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.direction, ROUND(o.spread_bps::numeric, 2) as spread_bps, (o.metadata->>'dex_rank')::int as dex_rank, ROUND((o.metadata->>'dex_pct')::numeric * 100, 1) as dex_pct_pct, (o.metadata->>'venue_count')::int as venue_count, o.status, o.skip_reason, ROUND(o.estimated_profit_usd::numeric, 4) as estimated_profit_usd, ROUND(o.estimated_gas_usd::numeric, 4) as estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') ORDER BY o.detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -615,7 +615,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, spread_bps FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, spread_bps FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -646,7 +646,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, (metadata->>'dex_rank')::numeric as dex_rank FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, (metadata->>'dex_rank')::numeric as dex_rank FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -676,7 +676,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND estimated_profit_usd IS NOT NULL AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND estimated_profit_usd IS NOT NULL AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -709,7 +709,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
