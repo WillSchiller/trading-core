@@ -399,6 +399,7 @@ export class OpportunityDetector {
       spreadBps: spreadResult.spreadBps,
       direction: spreadResult.direction,
       status: 'detected',
+      strategy: 'dislocation',
       reasonCodes: reasons,
     };
 
@@ -533,6 +534,7 @@ export class OpportunityDetector {
         } else if (existingOpp.consecutiveAbove >= CONSECUTIVE_TICKS_REQUIRED) {
           const newOpportunity: Opportunity = {
             ...params.opportunity,
+            strategy: 'dislocation',
             openedAt: now,
             lastSeenAt: now,
             maxSpreadBps: existingOpp.maxSpreadBps,

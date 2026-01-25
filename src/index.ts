@@ -8,6 +8,7 @@ import { createPool, closePool, getPool } from './persistence/client.js';
 import { runMigrations } from './persistence/migrate.js';
 import { CollectorOrchestrator } from './collectors/orchestrator.js';
 import { OpportunityDetector } from './detection/index.js';
+import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import type { Chain } from './types/index.js';
 import { checkNtpSync } from './utils/clock.js';
@@ -277,6 +278,18 @@ async function main() {
 
   const emitter = detector.getEmitter();
 
+  const rankSpaceDetector = new RankSpaceDetector({
+    quoteCache: orchestrator.getQuoteCache(),
+    appConfig: config.app,
+    pairsConfig: config.pairs,
+    venueIdMap,
+    pairIdMap,
+    emitter,
+  });
+
+  rankSpaceDetector.start();
+  logger.info('RankSpace detector started');
+
   const executionManagers: Map<Chain, ExecutionManager> = new Map();
   const slippageCalibrators: SlippageCalibrator[] = [];
 
@@ -390,6 +403,9 @@ async function main() {
 
     detector.stop();
     logger.info('Opportunity detector stopped');
+
+    rankSpaceDetector.stop();
+    logger.info('RankSpace detector stopped');
 
     for (const calibrator of slippageCalibrators) {
       calibrator.stop();

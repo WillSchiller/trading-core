@@ -39,6 +39,8 @@ export interface QuoteWithStaleness {
   isThinMarket?: boolean;
 }
 
+export type Strategy = 'dislocation' | 'rank_space';
+
 export interface Opportunity {
   id?: bigint;
   detectedAt: Date;
@@ -69,6 +71,7 @@ export interface Opportunity {
   closeReason?: string;
   oppKey?: string;
   maxSpreadBps?: number;
+  strategy?: Strategy;
 }
 
 export interface ConnectorHealth {

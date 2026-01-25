@@ -1,5 +1,5 @@
 import { getPool } from './client.js';
-import type { Opportunity, Chain, TradeDirection, OpportunityStatus } from '../types/index.js';
+import type { Opportunity, Chain, TradeDirection, OpportunityStatus, Strategy } from '../types/index.js';
 import { createChildLogger } from '../utils/logger.js';
 
 const logger = createChildLogger({ component: 'opportunities-repo' });
@@ -36,9 +36,10 @@ export async function insertOpportunity(opportunity: Opportunity): Promise<bigin
       last_seen_at,
       close_reason,
       opp_key,
-      max_spread_bps
+      max_spread_bps,
+      strategy
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
     )
     RETURNING id
   `;
@@ -72,6 +73,7 @@ export async function insertOpportunity(opportunity: Opportunity): Promise<bigin
     opportunity.closeReason ?? null,
     opportunity.oppKey ?? null,
     opportunity.maxSpreadBps ?? null,
+    opportunity.strategy ?? 'dislocation',
   ];
 
   const result = await pool.query<{ id: string }>(query, params);
@@ -125,7 +127,8 @@ export async function getOpportunityById(id: bigint): Promise<Opportunity | null
       last_seen_at,
       close_reason,
       opp_key,
-      max_spread_bps
+      max_spread_bps,
+      strategy
     FROM opportunities
     WHERE id = $1
   `;
@@ -201,7 +204,8 @@ export async function getRecentOpportunities(
       last_seen_at,
       close_reason,
       opp_key,
-      max_spread_bps
+      max_spread_bps,
+      strategy
     FROM opportunities
     ORDER BY detected_at DESC
     LIMIT $1
@@ -249,7 +253,8 @@ export async function getOpportunitiesByPair(
       last_seen_at,
       close_reason,
       opp_key,
-      max_spread_bps
+      max_spread_bps,
+      strategy
     FROM opportunities
     WHERE pair_id = $1 AND chain = $2
     ORDER BY detected_at DESC
@@ -335,7 +340,8 @@ export async function getOpenOpportunityByKey(oppKey: string): Promise<Opportuni
       last_seen_at,
       close_reason,
       opp_key,
-      max_spread_bps
+      max_spread_bps,
+      strategy
     FROM opportunities
     WHERE opp_key = $1 AND status = 'detected' AND closed_at IS NULL
     ORDER BY opened_at DESC
@@ -388,5 +394,6 @@ function mapRowToOpportunity(row: any): Opportunity {
     closeReason: row.close_reason || undefined,
     oppKey: row.opp_key || undefined,
     maxSpreadBps: row.max_spread_bps ? parseFloat(row.max_spread_bps) : undefined,
+    strategy: (row.strategy as Strategy) || 'dislocation',
   };
 }

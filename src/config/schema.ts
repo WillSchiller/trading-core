@@ -19,6 +19,13 @@ export const detectionConfigSchema = z.object({
   requireConfirmationVenue: z.boolean(),
 });
 
+export const rankSpaceConfigSchema = z.object({
+  minVenues: z.number().int().min(3),
+  triggerPercentile: z.number().min(0).max(1),
+  minSpreadBps: z.number().positive(),
+  minDurationMs: z.number().int().positive(),
+});
+
 export const executionConfigSchema = z.object({
   paperMode: z.boolean(),
   maxSlippageBps: z.number().positive(),
@@ -100,6 +107,7 @@ export const pairConfigSchema = z.object({
 export const appConfigSchema = z.object({
   system: systemConfigSchema,
   detection: detectionConfigSchema,
+  rankSpace: rankSpaceConfigSchema,
   execution: executionConfigSchema,
   risk: riskConfigSchema,
   venues: venuesConfigSchema,

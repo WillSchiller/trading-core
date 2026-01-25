@@ -18,6 +18,12 @@
     "maxTimeSkewMsBase": 1500,
     "maxTimeSkewMsMainnet": 3000
   },
+  "rankSpace": {
+    "minVenues": 3,
+    "triggerPercentile": 0.2,
+    "minSpreadBps": 3,
+    "minDurationMs": 1000
+  },
   "execution": {
     "paperMode": true,
     "maxSlippageBps": 35,

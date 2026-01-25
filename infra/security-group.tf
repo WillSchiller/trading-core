@@ -74,3 +74,12 @@ resource "aws_vpc_security_group_egress_rule" "http" {
   ip_protocol       = "tcp"
   cidr_ipv4         = "0.0.0.0/0"
 }
+
+resource "aws_vpc_security_group_egress_rule" "binance_ws" {
+  security_group_id = aws_security_group.main.id
+  description       = "Binance WebSocket port"
+  from_port         = 9443
+  to_port           = 9443
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+}

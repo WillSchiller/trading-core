@@ -214,18 +214,25 @@ export class UniswapV3Connector extends EventEmitter {
   }
 
   private async handleNewBlockPolling(blockNumber: bigint): Promise<void> {
-    if (!this.isRunning) return;
+    if (!this.isRunning) {
+      this.logger.warn({ blockNumber: blockNumber.toString() }, 'Received block but connector not running');
+      return;
+    }
 
     // Adaptive polling: skip blocks based on spread proximity
     if (this.config.adaptivePolling && this.lastPollBlock > 0n) {
       const blocksSinceLastPoll = blockNumber - this.lastPollBlock;
       if (blocksSinceLastPoll < BigInt(this.currentPollInterval)) {
+        this.logger.debug(
+          { blockNumber: blockNumber.toString(), blocksSinceLastPoll: blocksSinceLastPoll.toString(), currentPollInterval: this.currentPollInterval },
+          'Skipping block due to adaptive polling'
+        );
         return; // Skip this block
       }
     }
 
     this.lastPollBlock = blockNumber;
-    this.logger.debug(
+    this.logger.info(
       { blockNumber: blockNumber.toString(), pollInterval: this.currentPollInterval },
       'Processing block (polling)'
     );

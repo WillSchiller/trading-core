@@ -155,3 +155,61 @@
   4. Dashboard: Add "CEX coverage" indicator per pair
 
   Created analysis document: docs/CEX_DATA_ANALYSIS.md
+
+[2026-01-25 22:40] [opportunity-detector] ✅ DONE Implemented rank_space parallel strategy
+  - Added strategy column to opportunities and executions tables (sql/006_add_strategy.sql)
+  - Added Strategy type and strategy field to Opportunity interface (src/types/index.ts)
+  - Updated opportunities.ts persistence to handle strategy field (src/persistence/opportunities.ts)
+  - Updated executions.ts persistence to handle strategy field (src/persistence/executions.ts)
+  - Added RankSpaceConfig to config types with minVenues, triggerPercentile, minSpreadBps, minDurationMs
+  - Added rankSpace config section to schema validation (src/config/schema.ts)
+  - Added rankSpace config defaults to config/default.json (minVenues: 3, triggerPercentile: 0.2)
+  - Created RankSpaceDetector class with rank-based opportunity detection (src/detection/rank-space/index.ts)
+  - Wired RankSpaceDetector into main application to run in parallel with OpportunityDetector (src/index.ts)
+  - Updated OpportunityDetector to explicitly set strategy: 'dislocation' (src/detection/index.ts)
+
+  Files created:
+  - /Users/will/dev/blockhelix/sql/006_add_strategy.sql (migration)
+  - /Users/will/dev/blockhelix/src/detection/rank-space/index.ts (332 lines)
+
+  Files modified:
+  - /Users/will/dev/blockhelix/src/types/index.ts (added Strategy type, strategy field)
+  - /Users/will/dev/blockhelix/src/persistence/opportunities.ts (added strategy to queries/mapping)
+  - /Users/will/dev/blockhelix/src/persistence/executions.ts (added strategy to Execution interface, queries, mapping)
+  - /Users/will/dev/blockhelix/src/config/types.ts (added RankSpaceConfig)
+  - /Users/will/dev/blockhelix/src/config/schema.ts (added rankSpaceConfigSchema)
+  - /Users/will/dev/blockhelix/config/default.json (added rankSpace config section)
+  - /Users/will/dev/blockhelix/src/detection/index.ts (set strategy: 'dislocation')
+  - /Users/will/dev/blockhelix/src/index.ts (integrated RankSpaceDetector)
+
+  How it works:
+  - RankSpaceDetector runs at same tick interval as OpportunityDetector
+  - For each pair: collects all venue quotes (CEX: Binance, Coinbase, Bybit + DEX: Uniswap V3)
+  - Sorts venues by mid price, assigns rank 1..N (1=lowest price)
+  - Triggers opportunity when DEX is in top or bottom percentile (default: 20%)
+  - Top percentile (cheap DEX) = buy_dex signal
+  - Bottom percentile (expensive DEX) = sell_dex signal
+  - Applies minimum spread and duration filters
+  - Sets strategy='rank_space' on opportunities for separate P&L tracking
+  - Shares infrastructure: OpportunityEmitter, persistence layer, QuoteCache
+
+  Configuration (config/default.json):
+  - minVenues: 3 (minimum venues required to calculate ranks)
+  - triggerPercentile: 0.2 (trigger when DEX in top/bottom 20%)
+  - minSpreadBps: 3 (minimum spread threshold)
+  - minDurationMs: 1000 (gap must persist for 1s)
+
+  Example trigger scenario (5 venues):
+  - Venues sorted by price: [Coinbase $100, DEX $101, Binance $102, Bybit $103, Other $104]
+  - DEX rank: 2 of 5
+  - Top 20% threshold: rank <= 1 (triggers)
+  - Bottom 20% threshold: rank >= 5 (triggers)
+  - Rank 2 does NOT trigger (not in top/bottom 20%)
+
+  TypeScript compilation: PASS
+  All tasks completed successfully
+
+  Next steps:
+  - Run database migration: npm run db:migrate
+  - Test both detectors running in parallel
+  - Monitor separate P&L by strategy column in executions table

@@ -21,6 +21,13 @@ export interface DetectionConfig {
   maxTimeSkewMsMainnet?: number;
 }
 
+export interface RankSpaceConfig {
+  minVenues: number;
+  triggerPercentile: number;
+  minSpreadBps: number;
+  minDurationMs: number;
+}
+
 export interface ExecutionConfig {
   paperMode: boolean;
   maxSlippageBps: number;
@@ -102,6 +109,7 @@ export interface PairConfig {
 export interface AppConfig {
   system: SystemConfig;
   detection: DetectionConfig;
+  rankSpace: RankSpaceConfig;
   execution: ExecutionConfig;
   risk: RiskConfig;
   venues: VenuesConfig;

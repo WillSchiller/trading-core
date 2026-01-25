@@ -185,7 +185,7 @@ describe('Opportunity Detection Integration', () => {
 
     detector.start();
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 2500));
 
     detector.stop();
 

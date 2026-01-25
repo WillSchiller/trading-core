@@ -1,0 +1,800 @@
+{
+  "id": null,
+  "uid": "rank-space",
+  "title": "Rank Space - Summary",
+  "tags": ["dislocation-trader", "rank-space", "opportunities"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "pair",
+        "type": "query",
+        "label": "Pair",
+        "datasource": {
+          "type": "postgres",
+          "uid": "postgresql"
+        },
+        "definition": "SELECT id as __value, canonical as __text FROM pairs WHERE is_enabled = true ORDER BY canonical",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": "0",
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "chain",
+        "type": "custom",
+        "label": "Chain",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "base", "value": "base", "selected": false},
+          {"text": "mainnet", "value": "mainnet", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Rank Space Opps",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "purple"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Buy DEX Signals",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'buy_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "green"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Sell DEX Signals",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND direction = 'sell_dex' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "red"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Avg Spread (bps)",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "blue"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg DEX Rank",
+      "description": "Average DEX rank when signal triggered (1 = cheapest)",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT AVG((metadata->>'dex_rank')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "orange"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Avg DEX Percentile",
+      "description": "Average DEX percentile position (0 = cheapest, 1 = most expensive)",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT AVG((metadata->>'dex_pct')::numeric) as value FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.5, "color": "yellow"},
+              {"value": 0.85, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Rank Space Opportunities per Hour",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY time ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "barAlignment": 0,
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "hue",
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {"mode": "none", "group": "A"},
+            "axisPlacement": "auto",
+            "axisLabel": "Count"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "purple"}]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "single", "sort": "none"},
+        "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Opportunities by Status",
+      "gridPos": {"x": 12, "y": 4, "w": 6, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY status ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "pieType": "pie",
+        "displayLabels": ["percent"],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "piechart",
+      "title": "Direction Split",
+      "gridPos": {"x": 18, "y": 4, "w": 6, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT direction as metric, COUNT(*) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY direction ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "pieType": "pie",
+        "displayLabels": ["name", "percent"],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "histogram",
+      "title": "DEX Rank Distribution",
+      "description": "Distribution of DEX rank when signals triggered",
+      "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT (metadata->>'dex_rank')::numeric as dex_rank FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() LIMIT 1000",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue",
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "purple"}
+        }
+      },
+      "options": {
+        "bucketSize": 1,
+        "bucketOffset": 0.5,
+        "combine": false
+      }
+    },
+    {
+      "id": 11,
+      "type": "histogram",
+      "title": "Spread Distribution (bps)",
+      "gridPos": {"x": 8, "y": 12, "w": 8, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT spread_bps FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() LIMIT 1000",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "blue"}
+        }
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "type": "histogram",
+      "title": "DEX Percentile Distribution",
+      "description": "Distribution of DEX percentile when signals triggered",
+      "gridPos": {"x": 16, "y": 12, "w": 8, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT (metadata->>'dex_pct')::numeric as dex_pct FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() LIMIT 1000",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue"
+          },
+          "unit": "percentunit",
+          "color": {"mode": "fixed", "fixedColor": "orange"}
+        }
+      },
+      "options": {
+        "bucketSize": 0.1
+      }
+    },
+    {
+      "id": 13,
+      "type": "barchart",
+      "title": "Opportunities by Pair",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "purple"}
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "pair",
+        "showValue": "always",
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 14,
+      "type": "barchart",
+      "title": "Venue Count Distribution",
+      "description": "How many venues had fresh quotes when signal triggered",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT (metadata->>'venue_count')::text as venue_count, COUNT(*) as count FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY venue_count ORDER BY venue_count",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "green"}
+        }
+      },
+      "options": {
+        "orientation": "vertical",
+        "xField": "venue_count",
+        "showValue": "always",
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Recent Rank Space Opportunities",
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 12},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.direction, ROUND(o.spread_bps::numeric, 2) as spread_bps, (o.metadata->>'dex_rank')::int as dex_rank, ROUND((o.metadata->>'dex_pct')::numeric * 100, 1) as dex_pct_pct, (o.metadata->>'venue_count')::int as venue_count, o.status, o.skip_reason, ROUND(o.estimated_profit_usd::numeric, 4) as estimated_profit_usd, ROUND(o.estimated_gas_usd::numeric, 4) as estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.strategy = 'rank_space' AND o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') ORDER BY o.detected_at DESC LIMIT 500",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{"displayName": "detected_at", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "spread_bps"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "decimals", "value": 2},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": -50, "color": "red"},
+                    {"value": -12, "color": "yellow"},
+                    {"value": 12, "color": "green"},
+                    {"value": 50, "color": "blue"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "dex_rank"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 1, "color": "green"},
+                    {"value": 2, "color": "yellow"},
+                    {"value": 4, "color": "red"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "dex_pct_pct"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 15, "color": "yellow"},
+                    {"value": 85, "color": "red"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "direction"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"buy_dex": {"text": "BUY DEX", "color": "green"}}},
+                  {"type": "value", "options": {"sell_dex": {"text": "SELL DEX", "color": "red"}}}
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "status"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"detected": {"text": "Detected", "color": "blue"}}},
+                  {"type": "value", "options": {"evaluating": {"text": "Evaluating", "color": "yellow"}}},
+                  {"type": "value", "options": {"skipped": {"text": "Skipped", "color": "orange"}}},
+                  {"type": "value", "options": {"submitted": {"text": "Submitted", "color": "green"}}},
+                  {"type": "value", "options": {"filled": {"text": "Filled", "color": "green"}}},
+                  {"type": "value", "options": {"reverted": {"text": "Reverted", "color": "red"}}},
+                  {"type": "value", "options": {"expired": {"text": "Expired", "color": "gray"}}}
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "estimated_profit_usd"},
+            "properties": [
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "decimals", "value": 4},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": -10, "color": "red"},
+                    {"value": 0, "color": "yellow"},
+                    {"value": 1, "color": "green"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "estimated_gas_usd"},
+            "properties": [
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "decimals", "value": 4}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Spread Over Time",
+      "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT detected_at as time, spread_bps FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 5,
+            "spanNulls": false,
+            "axisLabel": "Spread (bps)"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "purple"}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "DEX Rank Over Time",
+      "description": "DEX rank position when signals triggered",
+      "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT detected_at as time, (metadata->>'dex_rank')::numeric as dex_rank FROM opportunities WHERE strategy = 'rank_space' AND metadata IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 5,
+            "spanNulls": false,
+            "axisLabel": "DEX Rank"
+          },
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "orange"}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Avg Estimated Profit",
+      "gridPos": {"x": 0, "y": 48, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND estimated_profit_usd IS NOT NULL AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 0, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Skip Rate",
+      "gridPos": {"x": 6, "y": 48, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE strategy = 'rank_space' AND detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Executed (Paper)",
+      "gridPos": {"x": 12, "y": 48, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) as value FROM executions WHERE strategy = 'rank_space' AND status = 'confirmed' AND created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "green"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Simulated P&L",
+      "description": "Total profit/loss from rank space paper trades",
+      "gridPos": {"x": 18, "y": 48, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COALESCE(ROUND(SUM(realized_pnl_usd)::numeric, 2), 0) as value FROM executions WHERE strategy = 'rank_space' AND status = 'confirmed' AND created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 0, "color": "green"}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

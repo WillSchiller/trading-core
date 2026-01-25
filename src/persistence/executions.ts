@@ -1,6 +1,6 @@
 import { getPool } from './client.js';
 import { createChildLogger } from '../utils/logger.js';
-import type { Chain, TradeDirection } from '../types/index.js';
+import type { Chain, TradeDirection, Strategy } from '../types/index.js';
 
 const logger = createChildLogger({ component: 'executions-repo' });
 
@@ -42,6 +42,7 @@ export interface Execution {
   revertReason?: string;
   errorMessage?: string;
   metadata?: Record<string, unknown>;
+  strategy?: Strategy;
 }
 
 export async function insertExecution(execution: Execution): Promise<bigint> {
@@ -84,10 +85,11 @@ export async function insertExecution(execution: Execution): Promise<bigint> {
       realized_pnl_usd,
       revert_reason,
       error_message,
-      metadata
+      metadata,
+      strategy
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36
+      $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37
     )
     RETURNING id
   `;
@@ -129,6 +131,7 @@ export async function insertExecution(execution: Execution): Promise<bigint> {
     execution.revertReason ?? null,
     execution.errorMessage ?? null,
     execution.metadata ? JSON.stringify(execution.metadata) : null,
+    execution.strategy ?? 'dislocation',
   ];
 
   const result = await pool.query<{ id: string }>(query, params);
@@ -385,5 +388,6 @@ function mapRowToExecution(row: Record<string, unknown>): Execution {
     revertReason: row.revert_reason as string | undefined,
     errorMessage: row.error_message as string | undefined,
     metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+    strategy: (row.strategy as Strategy) || 'dislocation',
   };
 }
