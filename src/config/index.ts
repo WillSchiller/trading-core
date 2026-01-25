@@ -27,10 +27,26 @@ function loadEnvConfig(): EnvConfig {
       password: process.env.POSTGRES_PASSWORD ?? '',
     },
     rpc: {
-      mainnetHttp: process.env.RPC_MAINNET_HTTP,
-      mainnetWs: process.env.RPC_MAINNET_WS,
-      baseHttp: process.env.RPC_BASE_HTTP,
-      baseWs: process.env.RPC_BASE_WS,
+      mainnet: {
+        drpc: {
+          http: process.env.RPC_DRPC_MAINNET_HTTP,
+          ws: process.env.RPC_DRPC_MAINNET_WS,
+        },
+        alchemy: {
+          http: process.env.RPC_ALCHEMY_MAINNET_HTTP ?? process.env.RPC_MAINNET_HTTP,
+          ws: process.env.RPC_ALCHEMY_MAINNET_WS ?? process.env.RPC_MAINNET_WS,
+        },
+      },
+      base: {
+        drpc: {
+          http: process.env.RPC_DRPC_BASE_HTTP,
+          ws: process.env.RPC_DRPC_BASE_WS,
+        },
+        alchemy: {
+          http: process.env.RPC_ALCHEMY_BASE_HTTP ?? process.env.RPC_BASE_HTTP,
+          ws: process.env.RPC_ALCHEMY_BASE_WS ?? process.env.RPC_BASE_WS,
+        },
+      },
     },
     cex: {
       binanceApiKey: process.env.BINANCE_API_KEY,

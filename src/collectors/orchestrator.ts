@@ -5,14 +5,13 @@ import type { NormalizedQuote, Chain } from '../types/index.js';
 import { BinanceConnector, CoinbaseConnector, BybitConnector } from './cex/index.js';
 import { UniswapV3Connector, type PoolConfig } from './dex/index.js';
 import { QuoteCache, type QuoteCacheConfig } from '../state/index.js';
-import { ChainProvider, BlockWatcher } from '../chain/index.js';
+import { ChainProvider, BlockWatcher, type RpcEndpoint } from '../chain/index.js';
 import { QuotePersistence, HealthPersistence, type QuotePersistenceConfig } from '../persistence/index.js';
 
 export interface CollectorOrchestratorConfig {
   chains: {
     [key in Chain]?: {
-      httpUrl: string;
-      wsUrl?: string;
+      endpoints: RpcEndpoint[];
       enabled: boolean;
     };
   };
@@ -110,6 +109,14 @@ export class CollectorOrchestrator extends EventEmitter {
     return this.quoteCache;
   }
 
+  public getDexConnector(chain: Chain): UniswapV3Connector | undefined {
+    return this.dexConnectors.get(`uniswap_v3:${chain}`);
+  }
+
+  public getDexConnectors(): Map<string, UniswapV3Connector> {
+    return this.dexConnectors;
+  }
+
   private async loadVenueAndPairMappings(): Promise<void> {
     const venuesResult = await this.pool.query('SELECT id, name FROM venues');
     for (const row of venuesResult.rows) {
@@ -133,8 +140,7 @@ export class CollectorOrchestrator extends EventEmitter {
 
       const provider = new ChainProvider({
         chain: chain as Chain,
-        httpUrl: chainConfig.httpUrl,
-        wsUrl: chainConfig.wsUrl,
+        endpoints: chainConfig.endpoints,
       });
 
       this.chainProviders.set(chain as Chain, provider);

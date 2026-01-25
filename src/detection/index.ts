@@ -26,6 +26,7 @@ export interface OpportunityDetectorConfig {
   pairsConfig: PairConfig[];
   venueIdMap: Map<string, number>;
   pairIdMap: Map<string, number>;
+  onSpreadUpdate?: (chain: Chain, pair: string, spreadBps: number, thresholdBps: number) => void;
 }
 
 interface DetectionCycle {
@@ -74,6 +75,7 @@ export class OpportunityDetector {
   private intervalHandle: NodeJS.Timeout | null;
   private isRunning: boolean;
   private openOpportunities: Map<string, OpenOpportunity>;
+  private onSpreadUpdate?: (chain: Chain, pair: string, spreadBps: number, thresholdBps: number) => void;
 
   constructor(config: OpportunityDetectorConfig) {
     this.logger = createChildLogger({ component: 'opportunity-detector' });
@@ -87,6 +89,7 @@ export class OpportunityDetector {
     this.intervalHandle = null;
     this.isRunning = false;
     this.openOpportunities = new Map();
+    this.onSpreadUpdate = config.onSpreadUpdate;
   }
 
   public start(): void {
@@ -193,6 +196,11 @@ export class OpportunityDetector {
       confirmQuote: confirmQuote?.quote,
       dexQuote: dexQuote.quote,
     });
+
+    // Notify listeners about current spread vs threshold for adaptive polling
+    if (this.onSpreadUpdate) {
+      this.onSpreadUpdate(chain, pair, spreadResult.spreadBps, pairConfig.thresholds.minSpreadBps);
+    }
 
     const reasons: string[] = [];
     const filters: FilterResult[] = [];

@@ -110,6 +110,17 @@ export const pairsFileSchema = z.object({
   pairs: z.array(pairConfigSchema),
 });
 
+const optionalUrl = z
+  .string()
+  .optional()
+  .transform((val) => (val === '' || val === undefined ? undefined : val))
+  .pipe(z.string().url().optional());
+
+const rpcProviderSchema = z.object({
+  http: optionalUrl,
+  ws: optionalUrl,
+});
+
 export const envConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
@@ -121,10 +132,14 @@ export const envConfigSchema = z.object({
     password: z.string().default('devpassword'),
   }),
   rpc: z.object({
-    mainnetHttp: z.string().url().optional(),
-    mainnetWs: z.string().url().optional(),
-    baseHttp: z.string().url().optional(),
-    baseWs: z.string().url().optional(),
+    mainnet: z.object({
+      drpc: rpcProviderSchema,
+      alchemy: rpcProviderSchema,
+    }),
+    base: z.object({
+      drpc: rpcProviderSchema,
+      alchemy: rpcProviderSchema,
+    }),
   }),
   cex: z.object({
     binanceApiKey: z.string().optional(),

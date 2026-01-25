@@ -62,12 +62,8 @@ docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/
 echo "=== Preparing postgres data directory ==="
 # EBS volume is mounted at /data - ensure postgres directory exists with correct permissions
 sudo mkdir -p /data/postgres
-# Clear any existing data for fresh init (prevents corruption issues)
-sudo rm -rf /data/postgres/*
-# Postgres alpine runs as uid 70
 sudo chown -R 70:70 /data/postgres
 sudo chmod 700 /data/postgres
-ls -la /data/
 
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
@@ -88,19 +84,7 @@ done
 echo "=== Postgres logs ==="
 docker logs dislocation-postgres 2>&1 | tail -50
 
-echo "=== Running database migrations ==="
-# Source the secrets for POSTGRES_PASSWORD
-if [ -f .env.secrets ]; then
-  source .env.secrets
-fi
-# Run migrations via psql in the postgres container
-for sqlfile in sql/*.sql; do
-  echo "Applying $sqlfile..."
-  docker exec -i dislocation-postgres psql -U trader -d dislocation_trader < "$sqlfile"
-done
-echo "Migrations complete"
-
-echo "=== Starting remaining services ==="
+echo "=== Starting remaining services (app auto-migrates on startup) ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml up -d
 
 echo "=== Waiting for services ==="

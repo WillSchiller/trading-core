@@ -266,9 +266,12 @@ export class SlippageCalibrator {
     }
   }
 
-  startPeriodicCalibration(intervalMs: number = 5 * 60 * 1000): void {
-    this.logger.info({ intervalMs }, 'Starting periodic calibration');
-    this.calibrateAll().catch(e => this.logger.error({ error: e.message }, 'Initial calibration failed'));
+  startPeriodicCalibration(intervalMs: number = 5 * 60 * 1000, delayFirstRunMs: number = 60000): void {
+    this.logger.info({ intervalMs, delayFirstRunMs }, 'Starting periodic calibration');
+    // Delay first calibration to avoid startup RPC burst
+    setTimeout(() => {
+      this.calibrateAll().catch(e => this.logger.error({ error: e.message }, 'Initial calibration failed'));
+    }, delayFirstRunMs);
     this.intervalId = setInterval(() => {
       this.calibrateAll().catch(e => this.logger.error({ error: e.message }, 'Periodic calibration failed'));
     }, intervalMs);

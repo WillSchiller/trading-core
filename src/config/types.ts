@@ -119,10 +119,26 @@ export interface EnvConfig {
     password: string;
   };
   rpc: {
-    mainnetHttp?: string;
-    mainnetWs?: string;
-    baseHttp?: string;
-    baseWs?: string;
+    mainnet: {
+      drpc: {
+        http?: string;
+        ws?: string;
+      };
+      alchemy: {
+        http?: string;
+        ws?: string;
+      };
+    };
+    base: {
+      drpc: {
+        http?: string;
+        ws?: string;
+      };
+      alchemy: {
+        http?: string;
+        ws?: string;
+      };
+    };
   };
   cex: {
     binanceApiKey?: string;

@@ -16,20 +16,33 @@ export interface GasEstimatorConfig {
   chain: Chain;
   gasBufferPercent: number;
   maxGasGwei: number;
+  gasCacheTtlMs?: number;
 }
 
 const ETH_USD_FALLBACK = 3000;
+const DEFAULT_GAS_CACHE_TTL_MS = 10000;
+
+interface CachedGasPrice {
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+  gasPriceGwei: number;
+  timestamp: number;
+}
 
 export class GasEstimator {
   private logger: Logger;
   private publicClient: PublicClient;
-  private config: GasEstimatorConfig;
+  private config: Required<GasEstimatorConfig>;
   private ethUsdPrice: number;
+  private cachedGasPrice: CachedGasPrice | null = null;
 
   constructor(publicClient: PublicClient, config: GasEstimatorConfig) {
     this.logger = createChildLogger({ component: 'gas-estimator', chain: config.chain });
     this.publicClient = publicClient;
-    this.config = config;
+    this.config = {
+      ...config,
+      gasCacheTtlMs: config.gasCacheTtlMs ?? DEFAULT_GAS_CACHE_TTL_MS,
+    };
     this.ethUsdPrice = ETH_USD_FALLBACK;
   }
 
@@ -79,13 +92,44 @@ export class GasEstimator {
   }
 
   async getCurrentGasPrice(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint; gasPriceGwei: number }> {
+    const now = Date.now();
+
+    if (this.cachedGasPrice && (now - this.cachedGasPrice.timestamp) < this.config.gasCacheTtlMs) {
+      this.logger.debug(
+        {
+          cacheAgeMs: now - this.cachedGasPrice.timestamp,
+          gasPriceGwei: this.cachedGasPrice.gasPriceGwei,
+        },
+        'Using cached gas price'
+      );
+      return {
+        maxFeePerGas: this.cachedGasPrice.maxFeePerGas,
+        maxPriorityFeePerGas: this.cachedGasPrice.maxPriorityFeePerGas,
+        gasPriceGwei: this.cachedGasPrice.gasPriceGwei,
+      };
+    }
+
     const feeData = await this.publicClient.estimateFeesPerGas();
 
     const maxFeePerGas = feeData.maxFeePerGas ?? 0n;
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 1000000000n;
     const gasPriceGwei = Number(maxFeePerGas) / 1e9;
 
+    this.cachedGasPrice = {
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      gasPriceGwei,
+      timestamp: now,
+    };
+
+    this.logger.debug({ gasPriceGwei }, 'Gas price fetched and cached');
+
     return { maxFeePerGas, maxPriorityFeePerGas, gasPriceGwei };
+  }
+
+  invalidateGasCache(): void {
+    this.cachedGasPrice = null;
+    this.logger.debug('Gas price cache invalidated');
   }
 
   isGasPriceAcceptable(gasPriceGwei: number): boolean {

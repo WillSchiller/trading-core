@@ -1,14 +1,18 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createPublicClient, http, type Address } from 'viem';
 import { base, mainnet } from 'viem/chains';
 import { logger } from './utils/logger.js';
 import { getConfig } from './config/index.js';
 import { createPool, closePool, getPool } from './persistence/client.js';
+import { runMigrations } from './persistence/migrate.js';
 import { CollectorOrchestrator } from './collectors/orchestrator.js';
 import { OpportunityDetector } from './detection/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import type { Chain } from './types/index.js';
 import { checkNtpSync } from './utils/clock.js';
 import { initAlerts } from './utils/alerts.js';
+import { buildRpcEndpoints } from './chain/index.js';
 
 const BASE_TOKENS: Record<string, TokenConfig> = {
   WETH: {
@@ -119,25 +123,27 @@ async function main() {
 
   const pool = getPool();
 
-  const chainConfigs: Record<string, { httpUrl: string; wsUrl?: string; enabled: boolean }> = {};
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const sqlDir = join(__dirname, '..', 'sql');
+  await runMigrations(pool, sqlDir);
+
+
+  const chainConfigs: Record<string, { endpoints: any[]; enabled: boolean }> = {};
   for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
-    let httpUrl: string | undefined;
-    let wsUrl: string | undefined;
-
-    if (chainName === 'mainnet') {
-      httpUrl = config.env.rpc.mainnetHttp;
-      wsUrl = config.env.rpc.mainnetWs;
-    } else if (chainName === 'base') {
-      httpUrl = config.env.rpc.baseHttp;
-      wsUrl = config.env.rpc.baseWs;
-    }
-
-    if (chainConfig.enabled && httpUrl) {
-      chainConfigs[chainName] = {
-        httpUrl,
-        wsUrl,
-        enabled: true,
-      };
+    if (chainConfig.enabled) {
+      try {
+        const endpoints = buildRpcEndpoints(chainName as Chain, config.env);
+        chainConfigs[chainName] = {
+          endpoints,
+          enabled: true,
+        };
+        logger.info({ chain: chainName, endpointCount: endpoints.length }, 'RPC endpoints configured');
+      } catch (error) {
+        logger.error(
+          { chain: chainName, error: (error as Error).message },
+          'Failed to configure RPC endpoints'
+        );
+      }
     }
   }
 
@@ -147,7 +153,7 @@ async function main() {
     cexConfigs.binance = {
       enabled: true,
       pairs: config.pairs
-        .filter(p => p.venues.binance)
+        .filter(p => p.enabled !== false && p.venues.binance)
         .map(p => ({
           symbol: (p.venues.binance as any).symbol,
           canonical: `${p.base}/${p.quote}`,
@@ -159,7 +165,7 @@ async function main() {
     cexConfigs.coinbase = {
       enabled: true,
       pairs: config.pairs
-        .filter(p => p.venues.coinbase)
+        .filter(p => p.enabled !== false && p.venues.coinbase)
         .map(p => ({
           symbol: (p.venues.coinbase as any).symbol,
           canonical: `${p.base}/${p.quote}`,
@@ -171,7 +177,7 @@ async function main() {
     cexConfigs.bybit = {
       enabled: true,
       pairs: config.pairs
-        .filter(p => p.venues.bybit)
+        .filter(p => p.enabled !== false && p.venues.bybit)
         .map(p => ({
           symbol: (p.venues.bybit as any).symbol,
           canonical: `${p.base}/${p.quote}`,
@@ -185,6 +191,7 @@ async function main() {
     const uniswapChains: any = {};
 
     for (const pairConfig of config.pairs) {
+      if (pairConfig.enabled === false) continue;
       const chain = pairConfig.chain;
       const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
 
@@ -257,6 +264,12 @@ async function main() {
     pairsConfig: config.pairs,
     venueIdMap,
     pairIdMap,
+    onSpreadUpdate: (chain, _pair, spreadBps, thresholdBps) => {
+      const connector = orchestrator.getDexConnector(chain);
+      if (connector) {
+        connector.updateSpreadProximity(spreadBps, thresholdBps);
+      }
+    },
   });
 
   detector.start();
@@ -272,15 +285,9 @@ async function main() {
       if (!chainConfig.enabled) continue;
 
       const chain = chainName as Chain;
-      let httpUrl: string | undefined;
-
-      if (chain === 'mainnet') {
-        httpUrl = config.env.rpc.mainnetHttp;
-      } else if (chain === 'base') {
-        httpUrl = config.env.rpc.baseHttp;
-      }
-
-      if (!httpUrl) continue;
+      const endpoints = buildRpcEndpoints(chain, config.env);
+      const primaryEndpoint = endpoints.sort((a, b) => a.priority - b.priority)[0];
+      const httpUrl = primaryEndpoint.httpUrl;
 
       const viemChain = chain === 'base' ? base : mainnet;
       const publicClient = createPublicClient({
@@ -294,7 +301,7 @@ async function main() {
         chain,
         publicClient: publicClient as any,
         appConfig: config.app,
-        pairsConfig: config.pairs.filter((p) => p.chain === chain),
+        pairsConfig: config.pairs.filter((p) => p.enabled !== false && p.chain === chain),
         quoterAddress: chainConfig.contracts.uniswapV3QuoterV2 as Address,
         routerAddress: chainConfig.contracts.uniswapV3Router as Address,
         httpUrl,
@@ -319,7 +326,7 @@ async function main() {
       );
 
       const calibratorPools = config.pairs
-        .filter((p) => p.chain === chain)
+        .filter((p) => p.enabled !== false && p.chain === chain)
         .flatMap((pairConfig) => {
           const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
           if (!uniV3Venues || !uniV3Venues[chain]) return [];
