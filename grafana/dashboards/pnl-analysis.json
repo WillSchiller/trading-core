@@ -54,6 +54,19 @@
         "current": {"text": "All", "value": "all"},
         "multi": false,
         "includeAll": false
+      },
+      {
+        "name": "strategy",
+        "type": "custom",
+        "label": "Strategy",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Dislocation", "value": "dislocation", "selected": false},
+          {"text": "Rank Space", "value": "rank_space", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -67,7 +80,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(SUM(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd IS NOT NULL",
+          "rawSql": "SELECT COALESCE(SUM(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd IS NOT NULL",
           "format": "table"
         }
       ],
@@ -105,7 +118,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd IS NOT NULL",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd IS NOT NULL",
           "format": "table"
         }
       ],
@@ -143,7 +156,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(input_amount_human * quoted_price) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND input_amount_human IS NOT NULL AND quoted_price IS NOT NULL",
+          "rawSql": "SELECT AVG(input_amount_human * quoted_price) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND input_amount_human IS NOT NULL AND quoted_price IS NOT NULL",
           "format": "table"
         }
       ],
@@ -179,7 +192,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean)",
+          "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy')",
           "format": "table"
         }
       ],
@@ -214,7 +227,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -282,7 +295,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT DATE_TRUNC('day', created_at) as time, SUM(realized_pnl_usd) as \"Daily P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd IS NOT NULL GROUP BY DATE_TRUNC('day', created_at) ORDER BY time",
+          "rawSql": "SELECT DATE_TRUNC('day', created_at) as time, SUM(realized_pnl_usd) as \"Daily P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd IS NOT NULL GROUP BY DATE_TRUNC('day', created_at) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -345,7 +358,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT DATE_TRUNC('day', created_at) as time, COUNT(*) as \"Trades\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) GROUP BY DATE_TRUNC('day', created_at) ORDER BY time",
+          "rawSql": "SELECT DATE_TRUNC('day', created_at) as time, COUNT(*) as \"Trades\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') GROUP BY DATE_TRUNC('day', created_at) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -406,7 +419,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd > 0",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd > 0",
           "format": "table"
         }
       ],
@@ -442,7 +455,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd < 0",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd < 0",
           "format": "table"
         }
       ],
@@ -480,7 +493,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT MAX(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd > 0",
+          "rawSql": "SELECT MAX(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd > 0",
           "format": "table"
         }
       ],
@@ -516,7 +529,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT MIN(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd < 0",
+          "rawSql": "SELECT MIN(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd < 0",
           "format": "table"
         }
       ],
@@ -554,7 +567,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, gas_cost_usd as \"Gas Cost\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND gas_cost_usd IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT created_at as time, gas_cost_usd as \"Gas Cost\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND gas_cost_usd IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -618,7 +631,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN SUM(realized_pnl_usd + gas_cost_usd) > 0 THEN ROUND(100.0 * SUM(gas_cost_usd) / SUM(realized_pnl_usd + gas_cost_usd), 2) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_pnl_usd IS NOT NULL AND gas_cost_usd IS NOT NULL",
+          "rawSql": "SELECT CASE WHEN SUM(realized_pnl_usd + gas_cost_usd) > 0 THEN ROUND(100.0 * SUM(gas_cost_usd) / SUM(realized_pnl_usd + gas_cost_usd), 2) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_pnl_usd IS NOT NULL AND gas_cost_usd IS NOT NULL",
           "format": "table"
         }
       ],
@@ -657,7 +670,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COALESCE(SUM(e.realized_pnl_usd), 0) as \"P&L\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean) AND e.realized_pnl_usd IS NOT NULL GROUP BY p.canonical ORDER BY \"P&L\" DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COALESCE(SUM(e.realized_pnl_usd), 0) as \"P&L\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy') AND e.realized_pnl_usd IS NOT NULL GROUP BY p.canonical ORDER BY \"P&L\" DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -720,7 +733,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, CASE WHEN COUNT(e.id) > 0 THEN ROUND(100.0 * SUM(CASE WHEN e.realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(e.id), 1) ELSE 0 END as \"Win Rate\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean) AND e.realized_pnl_usd IS NOT NULL GROUP BY p.canonical HAVING COUNT(e.id) >= 5 ORDER BY \"Win Rate\" DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, CASE WHEN COUNT(e.id) > 0 THEN ROUND(100.0 * SUM(CASE WHEN e.realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(e.id), 1) ELSE 0 END as \"Win Rate\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy') AND e.realized_pnl_usd IS NOT NULL GROUP BY p.canonical HAVING COUNT(e.id) >= 5 ORDER BY \"Win Rate\" DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -783,7 +796,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, SUM(e.input_amount_human * e.quoted_price) as \"Volume\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean) AND e.input_amount_human IS NOT NULL AND e.quoted_price IS NOT NULL GROUP BY p.canonical ORDER BY \"Volume\" DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, SUM(e.input_amount_human * e.quoted_price) as \"Volume\" FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy') AND e.input_amount_human IS NOT NULL AND e.quoted_price IS NOT NULL GROUP BY p.canonical ORDER BY \"Volume\" DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -844,7 +857,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND realized_slippage_bps IS NOT NULL",
+          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND realized_slippage_bps IS NOT NULL",
           "format": "table"
         }
       ],
@@ -906,7 +919,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000) as value FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean)",
+          "rawSql": "SELECT AVG(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000) as value FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy')",
           "format": "table"
         }
       ],
@@ -944,7 +957,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH total_opps AS (SELECT COUNT(*) as cnt FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND status = 'submitted'), filled_execs AS (SELECT COUNT(*) as cnt FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade = '$paper_mode'::boolean) AND status IN ('confirmed', 'filled')) SELECT CASE WHEN total_opps.cnt > 0 THEN ROUND(100.0 * filled_execs.cnt / total_opps.cnt, 1) ELSE 0 END as value FROM total_opps, filled_execs",
+          "rawSql": "WITH total_opps AS (SELECT COUNT(*) as cnt FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND status = 'submitted'), filled_execs AS (SELECT COUNT(*) as cnt FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR pair_id = $pair) AND ('$chain' = 'all' OR chain::text = '$chain') AND ('$paper_mode' = 'all' OR is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR strategy = '$strategy') AND status IN ('confirmed', 'filled')) SELECT CASE WHEN total_opps.cnt > 0 THEN ROUND(100.0 * filled_execs.cnt / total_opps.cnt, 1) ELSE 0 END as value FROM total_opps, filled_execs",
           "format": "table"
         }
       ],
@@ -1085,7 +1098,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain, e.direction, e.is_paper_trade, e.realized_pnl_usd, e.realized_slippage_bps, e.gas_cost_usd FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean) AND e.realized_pnl_usd IS NOT NULL ORDER BY e.realized_pnl_usd DESC LIMIT 50",
+          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain, e.direction, e.is_paper_trade, e.realized_pnl_usd, e.realized_slippage_bps, e.gas_cost_usd FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy') AND e.realized_pnl_usd IS NOT NULL ORDER BY e.realized_pnl_usd DESC LIMIT 50",
           "format": "table"
         }
       ],
@@ -1145,7 +1158,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain, e.direction, e.is_paper_trade, e.realized_pnl_usd, e.realized_slippage_bps, e.gas_cost_usd FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade = '$paper_mode'::boolean) AND e.realized_pnl_usd IS NOT NULL ORDER BY e.realized_pnl_usd ASC LIMIT 50",
+          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain, e.direction, e.is_paper_trade, e.realized_pnl_usd, e.realized_slippage_bps, e.gas_cost_usd FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('$pair' = '0' OR e.pair_id = $pair) AND ('$chain' = 'all' OR e.chain::text = '$chain') AND ('$paper_mode' = 'all' OR e.is_paper_trade::text = '$paper_mode') AND ('$strategy' = 'all' OR e.strategy = '$strategy') AND e.realized_pnl_usd IS NOT NULL ORDER BY e.realized_pnl_usd ASC LIMIT 50",
           "format": "table"
         }
       ],

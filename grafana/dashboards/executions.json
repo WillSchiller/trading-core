@@ -548,7 +548,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, p.canonical as pair, expected_output_human as expected, actual_output_human as actual, ROUND((actual_output_human - expected_output_human) / NULLIF(expected_output_human, 0) * 100, 2) as diff_pct FROM executions e JOIN pairs p ON e.pair_id = p.id WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND expected_output_human IS NOT NULL AND actual_output_human IS NOT NULL ORDER BY created_at DESC LIMIT 50",
+          "rawSql": "SELECT e.created_at as time, p.canonical as pair, e.expected_output_human as expected, e.actual_output_human as actual, ROUND((e.actual_output_human - e.expected_output_human) / NULLIF(e.expected_output_human, 0) * 100, 2) as diff_pct FROM executions e JOIN pairs p ON e.pair_id = p.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND e.expected_output_human IS NOT NULL AND e.actual_output_human IS NOT NULL ORDER BY e.created_at DESC LIMIT 50",
           "format": "table"
         }
       ],
