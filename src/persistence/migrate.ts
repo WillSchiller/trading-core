@@ -20,6 +20,21 @@ export async function runMigrations(pool: pg.Pool, sqlDir: string): Promise<void
       .filter(f => f.endsWith('.sql'))
       .sort();
 
+    // Backfill tracking table for databases migrated before auto-migration existed
+    if (appliedSet.size === 0) {
+      const existing = await client.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'venues'"
+      );
+      if (existing.rows.length > 0) {
+        logger.info('Existing database detected — backfilling migration records');
+        for (const file of files) {
+          await client.query('INSERT INTO _schema_migrations (filename) VALUES ($1)', [file]);
+          appliedSet.add(file);
+        }
+        return;
+      }
+    }
+
     let count = 0;
     for (const file of files) {
       if (appliedSet.has(file)) continue;
