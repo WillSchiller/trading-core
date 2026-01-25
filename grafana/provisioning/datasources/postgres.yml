@@ -9,7 +9,7 @@ datasources:
     database: dislocation_trader
     user: trader
     secureJsonData:
-      password: devpassword
+      password: $POSTGRES_PASSWORD
     jsonData:
       sslmode: disable
       maxOpenConns: 5
