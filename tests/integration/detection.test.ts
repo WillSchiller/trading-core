@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -9,6 +8,7 @@ import { OpportunityDetector } from '../../src/detection/index.js';
 import type { AppConfig, PairConfig } from '../../src/config/types.js';
 import type { NormalizedQuote } from '../../src/types/index.js';
 import { createPool } from '../../src/persistence/client.js';
+import { runMigrations } from '../../src/persistence/migrate.js';
 import { getOpportunityById } from '../../src/persistence/opportunities.js';
 
 const { Pool } = pg;
@@ -35,11 +35,7 @@ describe('Opportunity Detection Integration', () => {
       max: 10,
     });
 
-    const schemaSql = readFileSync(join(__dirname, '../../sql/001_initial_schema.sql'), 'utf-8');
-    await pool.query(schemaSql);
-
-    const seedSql = readFileSync(join(__dirname, '../../sql/002_seed_venues.sql'), 'utf-8');
-    await pool.query(seedSql);
+    await runMigrations(pool, join(__dirname, '../../sql'));
   }, 60000);
 
   afterAll(async () => {
