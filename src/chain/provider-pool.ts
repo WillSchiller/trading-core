@@ -221,7 +221,7 @@ export class ProviderPool {
             health.totalCalls++;
 
             try {
-              const result = await (original as Function).apply(target, args);
+              const result = await (original as (...a: unknown[]) => unknown).apply(target, args);
               this.handleSuccess(endpointName);
               return result;
             } catch (error) {

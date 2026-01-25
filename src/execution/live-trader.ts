@@ -71,7 +71,7 @@ export class LiveTrader {
   }
 
   async executeLiveTrade(params: LiveTradeParams): Promise<LiveTradeResult> {
-    const { opportunity, quote: _quote, gasEstimate, riskCheck } = params;
+    const { opportunity, gasEstimate, riskCheck } = params;
 
     this.logger.info(
       {
