@@ -367,3 +367,38 @@ terraform init -backend-config="region=$AWS_DEFAULT_REGION"
 ```
 
 ---
+
+## 2026-01-26
+
+### DevOps/Platform Agent
+
+**IN_PROGRESS** - Dashboard Deployment Pipeline
+
+Adding dedicated Grafana dashboard sync workflow for faster dashboard iterations.
+
+**Problem:**
+- Dashboard changes in `grafana/dashboards/*.json` require full deployment via `deploy.yml`
+- Full deployment rebuilds Docker image, pushes to ECR, restarts all services
+- User wants faster iteration on dashboard changes
+
+**Solution:**
+Created lightweight dashboard sync workflow and script:
+
+**Files Created:**
+- `.github/workflows/sync-dashboards.yml` - GitHub Actions workflow for dashboard sync
+- `scripts/sync-dashboards.sh` - Local script for manual dashboard sync
+
+**Workflow Features:**
+- Triggers automatically on push to `main` when `grafana/**` files change
+- Can be triggered manually via workflow_dispatch
+- Syncs dashboards to S3, then to EC2 via SSM
+- Restarts Grafana container to reload dashboards
+- Includes health check verification
+- Provides summary with Grafana URL
+
+**Usage:**
+1. **Automatic:** Push dashboard changes to `main` branch
+2. **Manual (GitHub):** Go to Actions > "Sync Grafana Dashboards" > Run workflow
+3. **Manual (Local):** Run `./scripts/sync-dashboards.sh`
+
+---
