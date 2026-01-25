@@ -5,7 +5,7 @@
   "tags": ["dislocation-trader", "spreads"],
   "timezone": "utc",
   "schemaVersion": 38,
-  "version": 5,
+  "version": 6,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -25,6 +25,19 @@
         "includeAll": false,
         "current": {},
         "options": []
+      },
+      {
+        "name": "strategy",
+        "type": "custom",
+        "label": "Strategy",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Dislocation", "value": "dislocation", "selected": false},
+          {"text": "Rank Space", "value": "rank_space", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -32,8 +45,9 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "${pair:text} Prices - All Venues",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
+      "title": "${pair:text} Prices - All Venues (Diagnostic)",
+      "description": "Raw quote prices from all venues. Note: DEX quotes may be sparse due to adaptive polling.",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -69,53 +83,56 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Real-Time Spread: CEX vs DEX (bps)",
-      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 8},
+      "title": "Detected Spreads Over Time (bps)",
+      "description": "Spread values from detected opportunities - the source of truth for actual trading spreads.",
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} AND q.ts BETWEEN $__timeFrom() AND $__timeTo()), dex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} AND q.ts BETWEEN $__timeFrom() AND $__timeTo()) SELECT c.ts as time, ROUND((c.mid - d.mid) / c.mid * 10000, 2) as value, 'spread_bps' as metric FROM cex c JOIN dex d ON ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 3 ORDER BY c.ts",
+          "rawSql": "SELECT detected_at as time, ABS(spread_bps) as value, CONCAT(strategy, ' - ', direction) as metric FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY detected_at",
           "format": "time_series"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "thresholdsStyle": {"mode": "line+area"}
+            "drawStyle": "points",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "thresholdsStyle": {"mode": "line"}
           },
           "unit": "short",
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": null, "color": "transparent"},
-              {"value": -5, "color": "red"},
-              {"value": 5, "color": "green"}
+              {"value": null, "color": "green"},
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
       },
       "options": {
         "tooltip": {"mode": "multi", "sort": "none"},
-        "legend": {"showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean", "max", "min"]}
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "mean", "max"]}
       }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Current Spread (bps)",
-      "gridPos": {"x": 0, "y": 18, "w": 4, "h": 4},
+      "title": "Latest Detected Spread",
+      "description": "Most recent opportunity spread - reflects actual detected trading spread.",
+      "gridPos": {"x": 0, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex AS (SELECT mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} ORDER BY q.ts DESC LIMIT 1), dex AS (SELECT mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} ORDER BY q.ts DESC LIMIT 1) SELECT ROUND(((SELECT mid FROM cex) - (SELECT mid FROM dex)) / NULLIF((SELECT mid FROM cex), 0) * 10000, 2) as value",
+          "rawSql": "SELECT ROUND(ABS(spread_bps), 2) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') ORDER BY detected_at DESC LIMIT 1",
           "format": "table"
         }
       ],
@@ -133,9 +150,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 5, "color": "yellow"},
-              {"value": 10, "color": "orange"},
-              {"value": 15, "color": "red"}
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "orange"},
+              {"value": 70, "color": "red"}
             ]
           }
         }
@@ -145,12 +162,13 @@
       "id": 4,
       "type": "stat",
       "title": "Max Spread (15m)",
-      "gridPos": {"x": 4, "y": 18, "w": 4, "h": 4},
+      "description": "Maximum detected opportunity spread in last 15 minutes.",
+      "gridPos": {"x": 4, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} AND q.ts > now() - interval '15 minutes'), dex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} AND q.ts > now() - interval '15 minutes') SELECT MAX(ABS((c.mid - d.mid) / c.mid * 10000)) as value FROM cex c JOIN dex d ON ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 3",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -168,8 +186,8 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 8, "color": "yellow"},
-              {"value": 12, "color": "red"}
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
@@ -179,12 +197,13 @@
       "id": 7,
       "type": "stat",
       "title": "Max Spread (1h)",
-      "gridPos": {"x": 8, "y": 18, "w": 4, "h": 4},
+      "description": "Maximum detected opportunity spread in last hour.",
+      "gridPos": {"x": 8, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} AND q.ts > now() - interval '1 hour'), dex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} AND q.ts > now() - interval '1 hour') SELECT MAX(ABS((c.mid - d.mid) / c.mid * 10000)) as value FROM cex c JOIN dex d ON ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 3",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '1 hour'",
           "format": "table"
         }
       ],
@@ -202,8 +221,8 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 8, "color": "yellow"},
-              {"value": 12, "color": "red"}
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
@@ -213,12 +232,13 @@
       "id": 8,
       "type": "stat",
       "title": "Max Spread (24h)",
-      "gridPos": {"x": 12, "y": 18, "w": 4, "h": 4},
+      "description": "Maximum detected opportunity spread in last 24 hours.",
+      "gridPos": {"x": 12, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH rollup_max AS (SELECT COALESCE(MAX(ABS((c.mid - d.mid) / c.mid * 10000)), 0) as spread FROM (SELECT interval_start as ts, close_mid as mid FROM quote_rollups q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} AND q.interval_type = '1m' AND q.interval_start > now() - interval '24 hours') c JOIN (SELECT interval_start as ts, close_mid as mid FROM quote_rollups q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} AND q.interval_type = '1m' AND q.interval_start > now() - interval '24 hours') d ON c.ts = d.ts), opp_max AS (SELECT COALESCE(MAX(ABS(spread_bps)), 0) as spread FROM opportunities WHERE pair_id = ${pair} AND detected_at > now() - interval '24 hours') SELECT GREATEST((SELECT spread FROM rollup_max), (SELECT spread FROM opp_max)) as value",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -236,8 +256,8 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 8, "color": "yellow"},
-              {"value": 12, "color": "red"}
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
@@ -246,13 +266,14 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Avg Spread (15m)",
-      "gridPos": {"x": 16, "y": 18, "w": 4, "h": 4},
+      "title": "Avg Spread (24h)",
+      "description": "Average detected opportunity spread in last 24 hours.",
+      "gridPos": {"x": 16, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND q.pair_id = ${pair} AND q.ts > now() - interval '15 minutes'), dex AS (SELECT ts, mid FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.pair_id = ${pair} AND q.ts > now() - interval '15 minutes') SELECT ROUND(AVG(ABS((c.mid - d.mid) / c.mid * 10000)), 2) as value FROM cex c JOIN dex d ON ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 3",
+          "rawSql": "SELECT ROUND(COALESCE(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 0), 2) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -277,12 +298,12 @@
       "id": 6,
       "type": "stat",
       "title": "Opportunities Detected",
-      "gridPos": {"x": 20, "y": 18, "w": 4, "h": 4},
+      "gridPos": {"x": 20, "y": 16, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE pair_id = ${pair} AND detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -308,13 +329,13 @@
     {
       "id": 11,
       "type": "stat",
-      "title": "Opportunities Above Threshold (24h)",
-      "gridPos": {"x": 0, "y": 22, "w": 4, "h": 4},
+      "title": "Opportunities (24h)",
+      "gridPos": {"x": 0, "y": 20, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH threshold AS (SELECT COALESCE(MAX(min_spread_bps), 10) as min_bps FROM pair_venue_config WHERE pair_id = ${pair}) SELECT COUNT(*) as value FROM opportunities o, threshold t WHERE o.pair_id = ${pair} AND o.detected_at > now() - interval '24 hours' AND ABS(o.spread_bps) >= t.min_bps",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -342,13 +363,13 @@
     {
       "id": 14,
       "type": "stat",
-      "title": "Avg Opportunity Duration",
-      "gridPos": {"x": 4, "y": 22, "w": 4, "h": 4},
+      "title": "Avg Duration",
+      "gridPos": {"x": 4, "y": 20, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE pair_id = ${pair} AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -376,13 +397,13 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "Median Opportunity Duration",
-      "gridPos": {"x": 8, "y": 22, "w": 4, "h": 4},
+      "title": "Median Duration",
+      "gridPos": {"x": 8, "y": 20, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE pair_id = ${pair} AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -411,12 +432,12 @@
       "id": 12,
       "type": "histogram",
       "title": "Spread Distribution (24h)",
-      "gridPos": {"x": 12, "y": 22, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 20, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH threshold AS (SELECT COALESCE(MAX(min_spread_bps), 10) as min_bps FROM pair_venue_config WHERE pair_id = ${pair}) SELECT ABS(o.spread_bps) as spread_bps FROM opportunities o, threshold t WHERE o.pair_id = ${pair} AND o.detected_at > now() - interval '24 hours' AND ABS(o.spread_bps) >= t.min_bps ORDER BY o.detected_at DESC LIMIT 500",
+          "rawSql": "SELECT ABS(COALESCE(max_spread_bps, spread_bps)) as spread_bps FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -444,13 +465,13 @@
     {
       "id": 16,
       "type": "histogram",
-      "title": "Opportunity Duration Distribution (24h)",
-      "gridPos": {"x": 18, "y": 22, "w": 6, "h": 8},
+      "title": "Duration Distribution (24h)",
+      "gridPos": {"x": 18, "y": 20, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE pair_id = ${pair} AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
           "format": "table"
         }
       ],
@@ -479,12 +500,12 @@
       "id": 17,
       "type": "timeseries",
       "title": "Duration vs Spread (scatter)",
-      "gridPos": {"x": 12, "y": 30, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE pair_id = ${pair} AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
           "format": "table"
         }
       ],
@@ -528,12 +549,12 @@
       "id": 13,
       "type": "timeseries",
       "title": "Opportunities Over Time (24h)",
-      "gridPos": {"x": 0, "y": 30, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH threshold AS (SELECT COALESCE(MAX(min_spread_bps), 10) as min_bps FROM pair_venue_config WHERE pair_id = ${pair}) SELECT o.detected_at as time, ABS(o.spread_bps) as value, CONCAT(o.direction, ' (', o.status, ')') as metric FROM opportunities o, threshold t WHERE o.pair_id = ${pair} AND o.detected_at > now() - interval '24 hours' AND ABS(o.spread_bps) >= t.min_bps ORDER BY o.detected_at",
+          "rawSql": "SELECT detected_at as time, ABS(COALESCE(max_spread_bps, spread_bps)) as value, CONCAT(strategy, ' - ', direction, ' (', status, ')') as metric FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -552,9 +573,9 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": null, "color": "red"},
-              {"value": 25, "color": "yellow"},
-              {"value": 30, "color": "green"}
+              {"value": null, "color": "green"},
+              {"value": 30, "color": "yellow"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
@@ -568,12 +589,12 @@
       "id": 9,
       "type": "table",
       "title": "Recent Opportunities - ${pair:text}",
-      "gridPos": {"x": 0, "y": 38, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH threshold AS (SELECT COALESCE(MAX(min_spread_bps), 10) as min_bps FROM pair_venue_config WHERE pair_id = ${pair}) SELECT COALESCE(o.opened_at, o.detected_at) as opened_at, ROUND(EXTRACT(EPOCH FROM (o.closed_at - COALESCE(o.opened_at, o.detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(o.max_spread_bps, ABS(o.spread_bps)), 2) as max_spread_bps, o.direction, o.status, COALESCE(o.close_reason, '') as close_reason, ROUND(o.anchor_mid, 2) as cex_price, ROUND(o.dex_mid, 2) as dex_price FROM opportunities o, threshold t WHERE o.pair_id = ${pair} AND ABS(COALESCE(o.max_spread_bps, ABS(o.spread_bps))) >= t.min_bps ORDER BY COALESCE(o.opened_at, o.detected_at) DESC LIMIT 20",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as opened_at, ROUND(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(max_spread_bps, ABS(spread_bps)), 2) as max_spread_bps, direction, strategy, status, COALESCE(close_reason, '') as close_reason, ROUND(anchor_mid, 2) as cex_price, ROUND(dex_mid, 2) as dex_price FROM opportunities WHERE pair_id = ${pair} AND ('${strategy}' = 'all' OR strategy = '${strategy}') ORDER BY COALESCE(opened_at, detected_at) DESC LIMIT 30",
           "format": "table"
         }
       ],
@@ -584,7 +605,7 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "max_spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 25, "color": "yellow"}, {"value": 30, "color": "red"}]}}]},
+          {"matcher": {"id": "byName", "options": "max_spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 50, "color": "red"}]}}]},
           {"matcher": {"id": "byName", "options": "duration_s"}, "properties": [{"id": "unit", "value": "s"}]}
         ]
       }
@@ -592,8 +613,9 @@
     {
       "id": 10,
       "type": "table",
-      "title": "All Pairs - Current Spreads",
-      "gridPos": {"x": 0, "y": 46, "w": 24, "h": 8},
+      "title": "All Pairs - Current Market Spreads (Diagnostic)",
+      "description": "Current spread from raw quotes. May differ from detected spreads due to adaptive polling.",
+      "gridPos": {"x": 0, "y": 44, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",

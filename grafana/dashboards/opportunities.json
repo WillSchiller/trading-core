@@ -41,6 +41,36 @@
         "current": {"text": "All", "value": "all"},
         "multi": false,
         "includeAll": false
+      },
+      {
+        "name": "strategy",
+        "type": "custom",
+        "label": "Strategy",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Dislocation", "value": "dislocation", "selected": false},
+          {"text": "Rank Space", "value": "rank_space", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "pnl_filter",
+        "type": "custom",
+        "label": "Est. Profit",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Profitable (> $0)", "value": "profitable", "selected": false},
+          {"text": "Unprofitable (< $0)", "value": "unprofitable", "selected": false},
+          {"text": "> $1", "value": "gt1", "selected": false},
+          {"text": "> $5", "value": "gt5", "selected": false},
+          {"text": "> $10", "value": "gt10", "selected": false},
+          {"text": "> $50", "value": "gt50", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -54,7 +84,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY time ORDER BY time",
+          "rawSql": "SELECT date_trunc('hour', detected_at) as time, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY time ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -115,7 +145,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY status ORDER BY value DESC",
+          "rawSql": "SELECT status as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY status ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -155,7 +185,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(skip_reason, 'no_reason') as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND status = 'skipped' GROUP BY skip_reason ORDER BY value DESC",
+          "rawSql": "SELECT COALESCE(skip_reason, 'no_reason') as metric, COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND status = 'skipped' GROUP BY skip_reason ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -195,7 +225,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -255,7 +285,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT chain::text, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY chain ORDER BY count DESC",
+          "rawSql": "SELECT chain::text, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY chain ORDER BY count DESC",
           "format": "table"
         }
       ],
@@ -315,7 +345,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT spread_bps FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() LIMIT 1000",
+          "rawSql": "SELECT spread_bps FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') LIMIT 1000",
           "format": "table"
         }
       ],
@@ -376,7 +406,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT unnest(reason_codes) as reason, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND reason_codes IS NOT NULL GROUP BY reason ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT unnest(reason_codes) as reason, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND reason_codes IS NOT NULL GROUP BY reason ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -419,7 +449,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd, o.estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') ORDER BY o.detected_at DESC LIMIT 500",
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd, o.estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR o.pair_id = ${pair}) AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') ORDER BY o.detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -536,7 +566,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -571,7 +601,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT AVG(ABS(spread_bps)) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -607,7 +637,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND estimated_profit_usd IS NOT NULL",
+          "rawSql": "SELECT AVG(estimated_profit_usd) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND estimated_profit_usd IS NOT NULL",
           "format": "table"
         }
       ],
@@ -643,7 +673,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],

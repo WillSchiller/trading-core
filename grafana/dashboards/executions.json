@@ -41,6 +41,19 @@
         "current": {"text": "All", "value": "all"},
         "multi": false,
         "includeAll": false
+      },
+      {
+        "name": "strategy",
+        "type": "custom",
+        "label": "Strategy",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Dislocation", "value": "dislocation", "selected": false},
+          {"text": "Rank Space", "value": "rank_space", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -54,7 +67,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as cumulative_pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as cumulative_pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -122,7 +135,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT created_at as time, realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -189,7 +202,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_pnl_usd IS NOT NULL",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
           "format": "table"
         }
       ],
@@ -227,7 +240,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_pnl_usd > 0",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd > 0",
           "format": "table"
         }
       ],
@@ -263,7 +276,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_pnl_usd < 0",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd < 0",
           "format": "table"
         }
       ],
@@ -301,7 +314,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(SUM(gas_cost_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT COALESCE(SUM(gas_cost_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -337,7 +350,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status IN ('confirmed', 'filled') THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status IN ('confirmed', 'filled') THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -375,7 +388,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -410,7 +423,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_slippage_bps) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_slippage_bps IS NOT NULL",
+          "rawSql": "SELECT AVG(realized_slippage_bps) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
           "format": "table"
         }
       ],
@@ -448,7 +461,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'reverted' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN status = 'reverted' THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
           "format": "table"
         }
       ],
@@ -486,7 +499,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND realized_slippage_bps IS NOT NULL",
+          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
           "format": "table"
         }
       ],
@@ -587,7 +600,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(status, 'unknown') as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY status ORDER BY value DESC",
+          "rawSql": "SELECT COALESCE(status, 'unknown') as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY status ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -627,7 +640,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT revert_reason, COUNT(*) as count FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND status = 'reverted' AND revert_reason IS NOT NULL GROUP BY revert_reason ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT revert_reason, COUNT(*) as count FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND status = 'reverted' AND revert_reason IS NOT NULL GROUP BY revert_reason ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -820,7 +833,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, gas_cost_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND gas_cost_usd IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT created_at as time, gas_cost_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND gas_cost_usd IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -884,7 +897,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count, COALESCE(SUM(realized_pnl_usd), 0) as total_pnl FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${chain}' = 'all' OR e.chain::text = '${chain}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count, COALESCE(SUM(realized_pnl_usd), 0) as total_pnl FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
