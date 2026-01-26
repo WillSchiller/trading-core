@@ -92,3 +92,30 @@ export async function alertConnectorDown(venue: string, durationMs: number): Pro
     );
   }
 }
+
+export async function alertTradeProfit(
+  pair: string,
+  direction: string,
+  pnlUsd: number,
+  spreadBps: number
+): Promise<void> {
+  const emoji = pnlUsd >= 0 ? '💰' : '📉';
+  const sign = pnlUsd >= 0 ? '+' : '';
+  await sendAlert(
+    `${emoji} *TRADE COMPLETED*\n\nPair: ${pair}\nDirection: ${direction}\nP&L: ${sign}$${pnlUsd.toFixed(2)}\nSpread: ${spreadBps.toFixed(1)} bps`,
+    pnlUsd >= 0 ? 'info' : 'warn'
+  );
+}
+
+export async function alertDailySummary(
+  trades: number,
+  totalPnl: number,
+  winRate: number
+): Promise<void> {
+  const emoji = totalPnl >= 0 ? '📊' : '⚠️';
+  const sign = totalPnl >= 0 ? '+' : '';
+  await sendAlert(
+    `${emoji} *DAILY SUMMARY*\n\nTrades: ${trades}\nTotal P&L: ${sign}$${totalPnl.toFixed(2)}\nWin Rate: ${(winRate * 100).toFixed(1)}%`,
+    'info'
+  );
+}

@@ -26,20 +26,6 @@
         "allValue": "0",
         "current": {},
         "options": []
-      },
-      {
-        "name": "strategy",
-        "type": "custom",
-        "label": "Strategy",
-        "query": "all : All,dislocation : Dislocation,rank_space : Rank Space",
-        "options": [
-          {"text": "All", "value": "all", "selected": true},
-          {"text": "Dislocation", "value": "dislocation", "selected": false},
-          {"text": "Rank Space", "value": "rank_space", "selected": false}
-        ],
-        "current": {"text": "All", "value": "all"},
-        "multi": false,
-        "includeAll": false
       }
     ]
   },
@@ -92,7 +78,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, ABS(spread_bps) as value, CONCAT(strategy, ' - ', direction) as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, ABS(spread_bps) as value, CONCAT(strategy, ' - ', direction) as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -135,7 +121,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(ABS(spread_bps), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') ORDER BY detected_at DESC LIMIT 1",
+          "rawSql": "SELECT ROUND(ABS(spread_bps), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY detected_at DESC LIMIT 1",
           "format": "table"
         }
       ],
@@ -171,7 +157,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -207,7 +193,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '1 hour'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '1 hour'",
           "format": "table"
         }
       ],
@@ -243,7 +229,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -279,7 +265,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(COALESCE(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 0), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT ROUND(COALESCE(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 0), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -309,7 +295,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -341,7 +327,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -375,7 +361,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -409,7 +395,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -443,7 +429,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ABS(COALESCE(max_spread_bps, spread_bps)) as spread_bps FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at DESC LIMIT 500",
+          "rawSql": "SELECT ABS(COALESCE(max_spread_bps, spread_bps)) as spread_bps FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours' ORDER BY detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -477,7 +463,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
           "format": "table"
         }
       ],
@@ -511,7 +497,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
           "format": "table"
         }
       ],
@@ -560,7 +546,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, ABS(COALESCE(max_spread_bps, spread_bps)) as value, CONCAT(strategy, ' - ', direction, ' (', status, ')') as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, ABS(COALESCE(max_spread_bps, spread_bps)) as value, CONCAT(strategy, ' - ', direction, ' (', status, ')') as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours' ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -601,7 +587,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(opened_at, detected_at) as opened_at, ROUND(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(max_spread_bps, ABS(spread_bps)), 2) as max_spread_bps, direction, strategy, status, COALESCE(close_reason, '') as close_reason, ROUND(anchor_mid, 2) as cex_price, ROUND(dex_mid, 2) as dex_price FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') ORDER BY COALESCE(opened_at, detected_at) DESC LIMIT 30",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as opened_at, ROUND(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(max_spread_bps, ABS(spread_bps)), 2) as max_spread_bps, direction, strategy, status, COALESCE(close_reason, '') as close_reason, ROUND(anchor_mid, 2) as cex_price, ROUND(dex_mid, 2) as dex_price FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY COALESCE(opened_at, detected_at) DESC LIMIT 30",
           "format": "table"
         }
       ],
