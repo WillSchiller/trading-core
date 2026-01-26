@@ -193,7 +193,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH latest_cex AS (SELECT r.pair_id, r.close_mid as cex_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'cex' AND v.is_anchor = true AND r.interval_type = '10s' AND (${pair} = 0 OR r.pair_id = ${pair}) AND r.interval_start > now() - interval '2 minutes' ORDER BY r.interval_start DESC LIMIT 1), latest_dex AS (SELECT r.pair_id, r.close_mid as dex_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'dex' AND r.interval_type = '10s' AND (${pair} = 0 OR r.pair_id = ${pair}) AND r.interval_start > now() - interval '2 minutes' ORDER BY r.interval_start DESC LIMIT 1) SELECT COALESCE(ROUND(ABS((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000), 2), 0) as value FROM latest_cex c, latest_dex d WHERE c.pair_id = d.pair_id",
+          "rawSql": "WITH latest_quotes AS (SELECT DISTINCT ON (r.pair_id, v.venue_type) r.pair_id, v.venue_type, v.is_anchor, r.close_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start > now() - interval '5 minutes' AND (${pair} = 0 OR r.pair_id = ${pair}) ORDER BY r.pair_id, v.venue_type, r.interval_start DESC) SELECT COALESCE(ROUND(ABS((cex.close_mid - dex.close_mid) / NULLIF(cex.close_mid, 0) * 10000), 2), 0) as value FROM latest_quotes cex JOIN latest_quotes dex ON cex.pair_id = dex.pair_id WHERE cex.venue_type = 'cex' AND cex.is_anchor = true AND dex.venue_type = 'dex' LIMIT 1",
           "format": "table"
         }
       ],
