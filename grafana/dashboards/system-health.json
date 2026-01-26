@@ -25,7 +25,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.exchange_ts_ms IS NOT NULL GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.exchange_ts_ms IS NOT NULL GROUP BY 1, 2 ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -201,14 +201,14 @@
     },
     {
       "id": 6,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Latency Distribution by Venue (1h)",
       "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT latency_ms, v.name as venue FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts > now() - interval '1 hour' AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms BETWEEN 0 AND 2000 ORDER BY q.ts DESC LIMIT 5000",
+          "rawSql": "SELECT latency_ms, v.name as venue FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms BETWEEN 0 AND 2000 ORDER BY q.ts DESC LIMIT 5000",
           "format": "table"
         }
       ],
@@ -241,7 +241,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, COUNT(*) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, COUNT(*) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -503,7 +503,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND v.name = 'binance' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()), dex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()) SELECT date_trunc('minute', c.ts) as time, 'cex_dex_skew' as metric, ROUND(AVG(ABS(c.received_ts_ms - d.received_ts_ms))) as value FROM cex_quotes c JOIN dex_quotes d ON c.pair_id = d.pair_id AND ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 60 GROUP BY 1 ORDER BY 1",
+          "rawSql": "WITH cex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND v.name = 'binance' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()), dex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()) SELECT date_trunc('minute', c.ts) as time, 'cex_dex_skew' as metric, ROUND(AVG(ABS(c.received_ts_ms - d.received_ts_ms))) as value FROM cex_quotes c JOIN dex_quotes d ON c.pair_id = d.pair_id AND ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 60 GROUP BY 1 ORDER BY time",
           "format": "time_series"
         }
       ],

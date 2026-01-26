@@ -24,7 +24,7 @@
     },
     {
       "id": 1,
-      "type": "xychart",
+      "type": "graph",
       "title": "Slippage by Trade Size (Latest Calibration)",
       "gridPos": {"x": 0, "y": 3, "w": 12, "h": 10},
       "targets": [
@@ -69,7 +69,7 @@
     },
     {
       "id": 2,
-      "type": "xychart",
+      "type": "graph",
       "title": "Break-Even Threshold by Trade Size",
       "gridPos": {"x": 12, "y": 3, "w": 12, "h": 10},
       "targets": [
@@ -257,7 +257,7 @@
     },
     {
       "id": 7,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Cost Breakdown by Trade Size ($500)",
       "gridPos": {"x": 0, "y": 17, "w": 12, "h": 8},
       "targets": [

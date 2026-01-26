@@ -344,7 +344,7 @@
     },
     {
       "id": 10,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "DEX Rank Distribution",
       "description": "Distribution of DEX rank when signals triggered",
       "gridPos": {"x": 0, "y": 15, "w": 8, "h": 8},
@@ -375,7 +375,7 @@
     },
     {
       "id": 11,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Spread Distribution (bps)",
       "gridPos": {"x": 8, "y": 15, "w": 8, "h": 8},
       "targets": [
@@ -400,7 +400,7 @@
     },
     {
       "id": 12,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "DEX Percentile Distribution",
       "description": "Distribution of DEX percentile when signals triggered",
       "gridPos": {"x": 16, "y": 15, "w": 8, "h": 8},
@@ -428,7 +428,7 @@
     },
     {
       "id": 13,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Opportunities by Pair",
       "gridPos": {"x": 0, "y": 23, "w": 12, "h": 8},
       "targets": [
@@ -458,7 +458,7 @@
     },
     {
       "id": 14,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Venue Count Distribution",
       "description": "How many venues had fresh quotes when signal triggered",
       "gridPos": {"x": 12, "y": 23, "w": 12, "h": 8},

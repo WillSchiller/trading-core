@@ -40,7 +40,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT r.interval_start as time, r.close_mid as value, v.name as metric FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR r.pair_id = ${pair}) ORDER BY r.interval_start",
+          "rawSql": "SELECT r.interval_start as time, r.close_mid as value, v.name as metric FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR r.pair_id = ${pair}) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -422,7 +422,7 @@
     },
     {
       "id": 12,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Spread Distribution (24h)",
       "gridPos": {"x": 12, "y": 20, "w": 6, "h": 8},
       "targets": [
@@ -456,7 +456,7 @@
     },
     {
       "id": 16,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Duration Distribution (24h)",
       "gridPos": {"x": 18, "y": 20, "w": 6, "h": 8},
       "targets": [

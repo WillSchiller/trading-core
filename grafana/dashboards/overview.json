@@ -206,7 +206,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
           "format": "table"
         }
       ],
@@ -243,7 +243,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(AVG(spread_bps), 0) as value FROM opportunities WHERE detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COALESCE(AVG(spread_bps), 0) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
           "format": "table"
         }
       ],
@@ -282,7 +282,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as metric, COUNT(*) as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts > now() - interval '15 minutes' GROUP BY v.name ORDER BY value DESC",
+          "rawSql": "SELECT v.name as metric, COUNT(*) as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY v.name ORDER BY value DESC",
           "format": "table"
         }
       ],

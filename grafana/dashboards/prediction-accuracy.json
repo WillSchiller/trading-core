@@ -254,7 +254,7 @@
     },
     {
       "id": 10,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Prediction Error Distribution",
       "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
       "targets": [
@@ -460,7 +460,7 @@
     },
     {
       "id": 17,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Latency Distribution",
       "gridPos": {"x": 12, "y": 39, "w": 12, "h": 8},
       "targets": [

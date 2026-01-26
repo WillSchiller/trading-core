@@ -108,7 +108,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as cumulative_pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
+          "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as cumulative_pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -176,7 +176,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
+          "rawSql": "SELECT created_at as time, realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -244,7 +244,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN realized_pnl_usd > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
           "format": "table"
         }
       ],
@@ -282,7 +282,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd > 0 AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd > 0 AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
           "format": "table"
         }
       ],
@@ -318,7 +318,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd < 0 AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
+          "rawSql": "SELECT AVG(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd < 0 AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
           "format": "table"
         }
       ],
@@ -467,7 +467,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(realized_slippage_bps) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
+          "rawSql": "SELECT AVG(realized_slippage_bps) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
           "format": "table"
         }
       ],
@@ -537,14 +537,14 @@
     },
     {
       "id": 11,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Slippage Distribution (Realized)",
       "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
+          "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5))",
           "format": "table"
         }
       ],
@@ -645,7 +645,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(status, 'unknown') as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) GROUP BY status ORDER BY value DESC",
+          "rawSql": "SELECT COALESCE(status, 'unknown') as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) GROUP BY status ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -685,7 +685,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT revert_reason, COUNT(*) as count FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) AND status = 'reverted' AND revert_reason IS NOT NULL GROUP BY revert_reason ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT revert_reason, COUNT(*) as count FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) AND status = 'reverted' AND revert_reason IS NOT NULL GROUP BY revert_reason ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],
@@ -728,7 +728,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain::text as chain, e.direction, e.status, e.is_paper_trade, e.input_amount_human, e.expected_output_human, e.actual_output_human, e.realized_slippage_bps, e.realized_pnl_usd, e.gas_cost_usd, e.tx_hash FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND e.realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND e.realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND e.realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND e.realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND e.realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND e.realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND e.realized_pnl_usd < -5)) ORDER BY e.created_at DESC LIMIT 500",
+          "rawSql": "SELECT e.created_at, p.canonical as pair, e.chain::text as chain, e.direction, e.status, e.is_paper_trade, e.input_amount_human, e.expected_output_human, e.actual_output_human, e.realized_slippage_bps, e.realized_pnl_usd, e.gas_cost_usd, e.tx_hash FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND e.realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND e.realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND e.realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND e.realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND e.realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND e.realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND e.realized_pnl_usd < -5)) ORDER BY e.created_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -879,7 +879,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT created_at as time, gas_cost_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND gas_cost_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
+          "rawSql": "SELECT created_at as time, gas_cost_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND gas_cost_usd IS NOT NULL AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND realized_pnl_usd < -5)) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -936,14 +936,14 @@
     },
     {
       "id": 17,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Executions by Pair",
       "gridPos": {"x": 12, "y": 48, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count, COALESCE(SUM(e.realized_pnl_usd), 0) as total_pnl FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND e.realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND e.realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND e.realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND e.realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND e.realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND e.realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND e.realized_pnl_usd < -5)) GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
+          "rawSql": "SELECT p.canonical as pair, COUNT(*) as count, COALESCE(SUM(e.realized_pnl_usd), 0) as total_pnl FROM executions e JOIN pairs p ON p.id = e.pair_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND e.realized_pnl_usd > 0) OR ('${pnl_filter}' = 'loss' AND e.realized_pnl_usd < 0) OR ('${pnl_filter}' = 'gt1' AND e.realized_pnl_usd > 1) OR ('${pnl_filter}' = 'gt5' AND e.realized_pnl_usd > 5) OR ('${pnl_filter}' = 'gt10' AND e.realized_pnl_usd > 10) OR ('${pnl_filter}' = 'lt_neg1' AND e.realized_pnl_usd < -1) OR ('${pnl_filter}' = 'lt_neg5' AND e.realized_pnl_usd < -5)) GROUP BY p.canonical ORDER BY count DESC LIMIT 20",
           "format": "table"
         }
       ],

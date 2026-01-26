@@ -58,7 +58,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -78,7 +78,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -92,7 +92,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl_usd > 0) / COUNT(*)::numeric, 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl_usd > 0) / COUNT(*)::numeric, 1) ELSE 0 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 70, "color": "green"}]}}}
@@ -106,7 +106,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(AVG(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
+        "rawSql": "SELECT COALESCE(AVG(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}}
@@ -120,7 +120,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(SUM(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -134,7 +134,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(AVG(realized_slippage_bps), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
+        "rawSql": "SELECT COALESCE(AVG(realized_slippage_bps), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "suffix: bps", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}}
@@ -148,7 +148,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(gas_cost_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(SUM(gas_cost_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 4, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "orange"}]}}}
@@ -162,7 +162,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN COALESCE(SUM(CASE WHEN realized_pnl_usd < 0 THEN ABS(realized_pnl_usd) ELSE 0 END), 0) > 0 THEN ROUND(SUM(CASE WHEN realized_pnl_usd > 0 THEN realized_pnl_usd ELSE 0 END) / SUM(CASE WHEN realized_pnl_usd < 0 THEN ABS(realized_pnl_usd) ELSE 0 END), 2) ELSE 999 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
+        "rawSql": "SELECT CASE WHEN COALESCE(SUM(CASE WHEN realized_pnl_usd < 0 THEN ABS(realized_pnl_usd) ELSE 0 END), 0) > 0 THEN ROUND(SUM(CASE WHEN realized_pnl_usd > 0 THEN realized_pnl_usd ELSE 0 END) / SUM(CASE WHEN realized_pnl_usd < 0 THEN ABS(realized_pnl_usd) ELSE 0 END), 2) ELSE 999 END as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 1, "color": "yellow"}, {"value": 2, "color": "green"}]}}}
@@ -176,7 +176,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND direction = 'buy_dex'",
+        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND direction = 'buy_dex'",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}]}}}
@@ -190,7 +190,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND direction = 'sell_dex'",
+        "rawSql": "SELECT COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND direction = 'sell_dex'",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}]}}}
@@ -204,7 +204,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(MAX(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(MAX(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}]}}}
@@ -218,7 +218,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(MIN(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(MIN(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}}
@@ -232,7 +232,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(STDDEV(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
+        "rawSql": "SELECT COALESCE(STDDEV(realized_pnl_usd), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -246,7 +246,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(AVG(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(AVG(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -260,7 +260,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000), 0) as value FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000), 0) as value FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${strategy}' = 'all' OR e.strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 500, "color": "yellow"}, {"value": 1000, "color": "red"}]}}}
@@ -274,7 +274,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH gaps AS (SELECT EXTRACT(EPOCH FROM (created_at - LAG(created_at) OVER (ORDER BY created_at))) as gap FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}')) SELECT COALESCE(AVG(gap), 0) as value FROM gaps WHERE gap IS NOT NULL AND gap < 86400",
+        "rawSql": "WITH gaps AS (SELECT EXTRACT(EPOCH FROM (created_at - LAG(created_at) OVER (ORDER BY created_at))) as gap FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')) SELECT COALESCE(AVG(gap), 0) as value FROM gaps WHERE gap IS NOT NULL AND gap < 86400",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "s", "decimals": 1, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -295,7 +295,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT e.id, e.created_at as \"Time\", p.canonical as \"Pair\", e.strategy as \"Strategy\", e.direction as \"Direction\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", ROUND(o.anchor_mid::numeric, 2) as \"CEX Price\", ROUND(o.dex_mid::numeric, 2) as \"DEX Price\", ROUND(e.input_amount_human::numeric, 6) as \"Input Amt\", ROUND((e.input_amount_human * e.quoted_price)::numeric, 2) as \"Trade Size ($)\", ROUND(e.quoted_price::numeric, 2) as \"Quote Price\", ROUND(e.realized_price::numeric, 2) as \"Realized Price\", ROUND(e.realized_slippage_bps::numeric, 2) as \"Slippage (bps)\", ROUND(e.gas_cost_usd::numeric, 4) as \"Gas ($)\", ROUND(e.realized_pnl_usd::numeric, 4) as \"P&L ($)\", ROUND(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000) as \"Latency (ms)\", e.status as \"Status\" FROM executions e JOIN pairs p ON p.id = e.pair_id LEFT JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') ORDER BY e.created_at DESC LIMIT 100",
+        "rawSql": "SELECT e.id, e.created_at as \"Time\", p.canonical as \"Pair\", e.strategy as \"Strategy\", e.direction as \"Direction\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", ROUND(o.anchor_mid::numeric, 2) as \"CEX Price\", ROUND(o.dex_mid::numeric, 2) as \"DEX Price\", ROUND(e.input_amount_human::numeric, 6) as \"Input Amt\", ROUND((e.input_amount_human * e.quoted_price)::numeric, 2) as \"Trade Size ($)\", ROUND(e.quoted_price::numeric, 2) as \"Quote Price\", ROUND(e.realized_price::numeric, 2) as \"Realized Price\", ROUND(e.realized_slippage_bps::numeric, 2) as \"Slippage (bps)\", ROUND(e.gas_cost_usd::numeric, 4) as \"Gas ($)\", ROUND(e.realized_pnl_usd::numeric, 4) as \"P&L ($)\", ROUND(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000) as \"Latency (ms)\", e.status as \"Status\" FROM executions e JOIN pairs p ON p.id = e.pair_id LEFT JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') ORDER BY e.created_at DESC LIMIT 100",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Time", "desc": true}]},
@@ -326,7 +326,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
+        "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "gradientMode": "scheme"}, "unit": "currencyUSD", "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}}
@@ -339,7 +339,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at as time, realized_pnl_usd as \"P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
+        "rawSql": "SELECT created_at as time, realized_pnl_usd as \"P&L\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {"defaults": {"custom": {"drawStyle": "points", "pointSize": 8}, "unit": "currencyUSD", "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}}
@@ -352,7 +352,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT e.created_at as time, EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000 as \"Latency (ms)\" FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') ORDER BY time",
+        "rawSql": "SELECT e.created_at as time, EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000 as \"Latency (ms)\" FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {"defaults": {"custom": {"drawStyle": "points", "pointSize": 8}, "unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 500, "color": "yellow"}, {"value": 1000, "color": "red"}]}}}
@@ -365,7 +365,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at as time, realized_slippage_bps as \"Slippage (bps)\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL ORDER BY time",
+        "rawSql": "SELECT created_at as time, realized_slippage_bps as \"Slippage (bps)\" FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {"defaults": {"custom": {"drawStyle": "points", "pointSize": 8}, "unit": "short", "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 25, "color": "red"}]}}}
@@ -379,39 +379,39 @@
     },
     {
       "id": 25,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "P&L Distribution",
       "gridPos": {"x": 0, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
+        "rawSql": "SELECT realized_pnl_usd FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}}
     },
     {
       "id": 26,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Slippage Distribution",
       "gridPos": {"x": 8, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
+        "rawSql": "SELECT realized_slippage_bps FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}, "color": {"mode": "fixed", "fixedColor": "orange"}}}
     },
     {
       "id": 27,
-      "type": "histogram",
+      "type": "heatmap",
       "title": "Spread Distribution",
       "gridPos": {"x": 16, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT o.spread_bps FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND o.spread_bps IS NOT NULL",
+        "rawSql": "SELECT o.spread_bps FROM executions e JOIN opportunities o ON o.id = e.opportunity_id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR e.pair_id = ${pair}) AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND o.spread_bps IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}, "color": {"mode": "fixed", "fixedColor": "blue"}}}
@@ -431,7 +431,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT direction as metric, SUM(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL GROUP BY direction",
+        "rawSql": "SELECT direction as metric, SUM(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL GROUP BY direction",
         "format": "table"
       }],
       "options": {"pieType": "pie", "displayLabels": ["name", "percent"], "legend": {"showLegend": true, "placement": "right"}}
@@ -444,7 +444,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT direction as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY direction",
+        "rawSql": "SELECT direction as metric, COUNT(*) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY direction",
         "format": "table"
       }],
       "options": {"pieType": "pie", "displayLabels": ["name", "percent"], "legend": {"showLegend": true, "placement": "right"}}
@@ -457,14 +457,14 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT strategy as metric, SUM(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND realized_pnl_usd IS NOT NULL GROUP BY strategy",
+        "rawSql": "SELECT strategy as metric, SUM(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND realized_pnl_usd IS NOT NULL GROUP BY strategy",
         "format": "table"
       }],
       "options": {"pieType": "pie", "displayLabels": ["name", "percent"], "legend": {"showLegend": true, "placement": "right"}}
     },
     {
       "id": 31,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "P&L by Pair",
       "gridPos": {"x": 18, "y": 50, "w": 6, "h": 8},
       "targets": [{
@@ -485,13 +485,13 @@
     },
     {
       "id": 32,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Trades by Hour of Day",
       "gridPos": {"x": 0, "y": 59, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as trades FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY hour ORDER BY hour",
+        "rawSql": "SELECT EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as trades FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') GROUP BY hour ORDER BY hour",
         "format": "table"
       }],
       "options": {"orientation": "vertical", "showValue": "always", "xField": "hour"},
@@ -499,13 +499,13 @@
     },
     {
       "id": 33,
-      "type": "barchart",
+      "type": "bargauge",
       "title": "P&L by Hour of Day",
       "gridPos": {"x": 12, "y": 59, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT EXTRACT(HOUR FROM created_at)::int as hour, SUM(realized_pnl_usd) as pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL GROUP BY hour ORDER BY hour",
+        "rawSql": "SELECT EXTRACT(HOUR FROM created_at)::int as hour, SUM(realized_pnl_usd) as pnl FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL GROUP BY hour ORDER BY hour",
         "format": "table"
       }],
       "options": {"orientation": "vertical", "showValue": "always", "xField": "hour"},
