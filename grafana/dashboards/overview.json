@@ -41,7 +41,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ts as time, v.name as metric, mid as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND p.canonical = 'WETH/USDC' AND qr.mid IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT qr.interval_start as time, v.name as metric, qr.close_mid as value FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.interval_type = '1s' AND p.canonical = 'WETH/USDC' AND qr.close_mid IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -134,7 +134,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH binance_quotes AS (SELECT ts, pair_id, mid FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE v.name = 'binance' AND qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND qr.mid IS NOT NULL), uniswap_quotes AS (SELECT ts, pair_id, mid FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE v.name = 'uniswap_v3' AND qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND qr.mid IS NOT NULL) SELECT GREATEST(b.ts, u.ts) as time, 10000.0 * (u.mid - b.mid) / b.mid as spread_bps FROM binance_quotes b JOIN uniswap_quotes u ON b.pair_id = u.pair_id WHERE ABS(EXTRACT(EPOCH FROM (b.ts - u.ts))) < 5 ORDER BY time",
+          "rawSql": "WITH binance_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'binance' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND p.canonical = 'WETH/USDC'), uniswap_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'uniswap_v3' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND p.canonical = 'WETH/USDC') SELECT b.interval_start as time, 10000.0 * (u.close_mid - b.close_mid) / b.close_mid as spread_bps FROM binance_quotes b JOIN uniswap_quotes u ON b.pair_id = u.pair_id AND b.interval_start = u.interval_start ORDER BY time",
           "format": "time_series"
         }
       ],

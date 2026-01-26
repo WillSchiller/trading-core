@@ -17,7 +17,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Opportunities\" FROM opportunities",
+        "rawSql": "SELECT COUNT(*) as \"Opportunities\" FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -36,7 +36,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Skipped\" FROM opportunities WHERE status = 'skipped'",
+        "rawSql": "SELECT COUNT(*) as \"Skipped\" FROM opportunities WHERE status = 'skipped' AND detected_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -55,7 +55,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Executed\" FROM executions WHERE status = 'confirmed'",
+        "rawSql": "SELECT COUNT(*) as \"Executed\" FROM executions WHERE status = 'confirmed' AND executed_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -75,7 +75,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(ROUND(SUM(realized_pnl_usd)::numeric, 2), 0) as \"P&L\" FROM executions WHERE status = 'confirmed'",
+        "rawSql": "SELECT COALESCE(ROUND(SUM(realized_pnl_usd)::numeric, 2), 0) as \"P&L\" FROM executions WHERE status = 'confirmed' AND executed_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -98,7 +98,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(ROUND(AVG(estimated_profit_usd)::numeric, 4), 0) as \"Est Profit\" FROM opportunities WHERE estimated_profit_usd IS NOT NULL",
+        "rawSql": "SELECT COALESCE(ROUND(AVG(estimated_profit_usd)::numeric, 4), 0) as \"Est Profit\" FROM opportunities WHERE estimated_profit_usd IS NOT NULL AND detected_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -120,7 +120,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT o.detected_at as \"Time\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id ORDER BY o.detected_at DESC LIMIT 20",
+        "rawSql": "SELECT o.detected_at as \"Time\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY o.detected_at DESC LIMIT 20",
         "format": "table"
       }],
       "fieldConfig": {
@@ -139,7 +139,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT status as \"Status\", COUNT(*) as \"Count\" FROM opportunities GROUP BY status",
+        "rawSql": "SELECT status as \"Status\", COUNT(*) as \"Count\" FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY status",
         "format": "table"
       }],
       "options": {"legend": {"displayMode": "list", "placement": "right"}}
@@ -152,7 +152,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE status = 'confirmed' ORDER BY created_at",
+        "rawSql": "SELECT created_at as time, SUM(realized_pnl_usd) OVER (ORDER BY created_at) as \"Cumulative P&L\" FROM executions WHERE status = 'confirmed' AND created_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY created_at",
         "format": "time_series"
       }],
       "fieldConfig": {

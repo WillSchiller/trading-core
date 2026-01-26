@@ -14,26 +14,24 @@
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
+      "type": "xychart",
       "title": "Slippage by Trade Size (Latest Calibration)",
       "gridPos": {"x": 0, "y": 0, "w": 12, "h": 10},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT notional_usd as time, slippage_bps as value, direction || ' (' || fee_tier_bps || ' bps fee)' as metric FROM latest_slippage_curves WHERE chain = 'base' ORDER BY notional_usd",
-          "format": "time_series"
+          "rawSql": "SELECT notional_usd, slippage_bps, direction || ' (' || fee_tier_bps || ' bps fee)' as series FROM latest_slippage_curves WHERE chain = 'base' ORDER BY direction, fee_tier_bps, notional_usd",
+          "format": "table"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
+            "show": "lines+points",
             "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "always",
-            "pointSize": 8
+            "lineStyle": {"fill": "solid"},
+            "pointSize": {"fixed": 8}
           },
           "unit": "short",
           "decimals": 2
@@ -44,49 +42,74 @@
         ]
       },
       "options": {
-        "tooltip": {"mode": "multi", "sort": "none"},
+        "seriesMapping": "manual",
+        "dims": {
+          "x": "notional_usd"
+        },
+        "series": [
+          {
+            "x": "notional_usd",
+            "y": "slippage_bps",
+            "frame": {"matcher": {"id": "byFrameRefID", "options": "A"}}
+          }
+        ],
+        "tooltip": {"mode": "multi"},
         "legend": {"showLegend": true, "displayMode": "table", "placement": "right"}
       }
     },
     {
       "id": 2,
-      "type": "timeseries",
+      "type": "xychart",
       "title": "Break-Even Threshold by Trade Size",
       "gridPos": {"x": 12, "y": 0, "w": 12, "h": 10},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT notional_usd as time, break_even_bps as value, direction || ' break-even' as metric FROM latest_slippage_curves WHERE chain = 'base' ORDER BY notional_usd",
-          "format": "time_series"
+          "rawSql": "SELECT notional_usd, break_even_bps, direction || ' break-even' as series FROM latest_slippage_curves WHERE chain = 'base' ORDER BY direction, notional_usd",
+          "format": "table"
         },
         {
           "refId": "B",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT notional_usd as time, recommended_min_spread_bps as value, direction || ' min spread' as metric FROM latest_slippage_curves WHERE chain = 'base' ORDER BY notional_usd",
-          "format": "time_series"
+          "rawSql": "SELECT notional_usd, recommended_min_spread_bps, direction || ' min spread' as series FROM latest_slippage_curves WHERE chain = 'base' ORDER BY direction, notional_usd",
+          "format": "table"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
+            "show": "lines+points",
             "lineWidth": 2,
-            "fillOpacity": 5,
-            "showPoints": "always",
-            "pointSize": 6
+            "lineStyle": {"fill": "solid"},
+            "pointSize": {"fixed": 6}
           },
           "unit": "short",
           "decimals": 1
         },
         "overrides": [
           {"matcher": {"id": "byRegexp", "options": ".*break-even.*"}, "properties": [{"id": "custom.lineStyle", "value": {"fill": "solid"}}]},
-          {"matcher": {"id": "byRegexp", "options": ".*min spread.*"}, "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 5]}}]}
+          {"matcher": {"id": "byRegexp", "options": ".*min spread.*"}, "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash"}}]}
         ]
       },
       "options": {
-        "tooltip": {"mode": "multi", "sort": "none"},
+        "seriesMapping": "manual",
+        "dims": {
+          "x": "notional_usd"
+        },
+        "series": [
+          {
+            "x": "notional_usd",
+            "y": "break_even_bps",
+            "frame": {"matcher": {"id": "byFrameRefID", "options": "A"}}
+          },
+          {
+            "x": "notional_usd",
+            "y": "recommended_min_spread_bps",
+            "frame": {"matcher": {"id": "byFrameRefID", "options": "B"}}
+          }
+        ],
+        "tooltip": {"mode": "multi"},
         "legend": {"showLegend": true, "displayMode": "table", "placement": "right"}
       }
     },

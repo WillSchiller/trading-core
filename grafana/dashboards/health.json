@@ -41,7 +41,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name as venue, CASE WHEN ch.ws_connected THEN 1 ELSE 0 END as connected FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() ${venue:csv} ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, v.name as venue, CASE WHEN ch.ws_connected THEN 1 ELSE 0 END as connected FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR ch.venue_id::text = '${venue}') ORDER BY time",
           "format": "table"
         }
       ],
@@ -85,7 +85,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote FROM connector_health ch JOIN venues v ON v.id = ch.venue_id ${venue:csv} ORDER BY v.name",
+          "rawSql": "SELECT v.name, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR ch.venue_id::text = '${venue}') ORDER BY v.name",
           "format": "table"
         }
       ],
@@ -124,7 +124,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT SUM(reconnect_count) as value FROM connector_health ${venue:csv}",
+          "rawSql": "SELECT SUM(reconnect_count) as value FROM connector_health WHERE (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR venue_id::text = '${venue}')",
           "format": "table"
         }
       ],
@@ -161,7 +161,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT SUM(error_count) as value FROM connector_health ${venue:csv}",
+          "rawSql": "SELECT SUM(error_count) as value FROM connector_health WHERE (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR venue_id::text = '${venue}')",
           "format": "table"
         }
       ],
@@ -235,7 +235,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM connector_health WHERE ws_connected = true ${venue:csv}",
+          "rawSql": "SELECT COUNT(*) as value FROM connector_health WHERE ws_connected = true AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR venue_id::text = '${venue}')",
           "format": "table"
         }
       ],
@@ -272,7 +272,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT qr.ts as time, v.name, AVG(qr.latency_ms) as avg_latency FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() ${venue:csv} AND qr.latency_ms IS NOT NULL GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
+          "rawSql": "SELECT qr.ts as time, v.name, AVG(qr.latency_ms) as avg_latency FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR qr.venue_id::text = '${venue}') AND qr.latency_ms IS NOT NULL GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -340,7 +340,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', qr.ts) as time, v.name, COUNT(*) / 60.0 as quotes_per_sec FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() ${venue:csv} GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
+          "rawSql": "SELECT date_trunc('minute', qr.ts) as time, v.name, COUNT(*) / 60.0 as quotes_per_sec FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR qr.venue_id::text = '${venue}') GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -403,7 +403,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as venue, v.venue_type, ch.chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote, ch.last_block, ch.reconnect_count, ch.error_count, ch.updated_at FROM connector_health ch JOIN venues v ON v.id = ch.venue_id ${venue:csv} ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
+          "rawSql": "SELECT v.name as venue, v.venue_type, ch.chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote, ch.last_block, ch.reconnect_count, ch.error_count, ch.updated_at FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR ch.venue_id::text = '${venue}') ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
           "format": "table"
         }
       ],
@@ -527,7 +527,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name, ch.reconnect_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() ${venue:csv} ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, v.name, ch.reconnect_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR ch.venue_id::text = '${venue}') ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -588,7 +588,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name, ch.error_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() ${venue:csv} ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, v.name, ch.error_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${venue}', ''), '0') = '0' OR ch.venue_id::text = '${venue}') ORDER BY time",
           "format": "time_series"
         }
       ],
