@@ -10,11 +10,21 @@
   "time": {"from": "now-1h", "to": "now"},
   "panels": [
     {
+      "id": 100,
+      "type": "text",
+      "title": "Trading Summary",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard shows aggregated trading metrics. Data appears after opportunities are detected and trades are executed. Start with PAPER_MODE=true for safe testing."
+      }
+    },
+    {
       "id": 1,
       "type": "stat",
       "title": "Opportunities Found",
       "description": "Number of trading opportunities detected in the selected time range",
-      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 0, "y": 3, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},

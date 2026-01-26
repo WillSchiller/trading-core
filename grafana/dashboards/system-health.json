@@ -64,6 +64,7 @@
       "id": 2,
       "type": "stat",
       "title": "Binance Avg Latency",
+      "description": "Average clock drift from Binance in the last 15 minutes",
       "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
@@ -98,6 +99,7 @@
       "id": 3,
       "type": "stat",
       "title": "Coinbase Avg Latency",
+      "description": "Average clock drift from Coinbase in the last 15 minutes",
       "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
@@ -132,6 +134,7 @@
       "id": 4,
       "type": "stat",
       "title": "Bybit Avg Latency",
+      "description": "Average clock drift from Bybit in the last 15 minutes",
       "gridPos": {"x": 16, "y": 4, "w": 4, "h": 4},
       "targets": [
         {

@@ -80,10 +80,20 @@
   },
   "panels": [
     {
+      "id": 101,
+      "type": "text",
+      "title": "Getting Started",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "Executions appear when profitable opportunities are traded (paper or live). Requires: 1) Data collection running 2) Detection enabled 3) Paper/live trading enabled."
+      }
+    },
+    {
       "id": 100,
       "type": "text",
       "title": "Execution Reality Check",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "gridPos": {"x": 0, "y": 3, "w": 24, "h": 3},
       "options": {
         "mode": "markdown",
         "content": "**REALITY CHECK**: This dashboard shows ACTUAL execution outcomes compared to estimates.\n\n- All metrics here are **execution-time actuals** (realized P&L, gas, slippage)\n- For comparison with detection-time spread & execution-time estimates, see 'Prediction Accuracy' dashboard\n- Key question: Are we making money after real costs?"

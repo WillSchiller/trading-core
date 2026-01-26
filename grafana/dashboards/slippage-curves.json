@@ -13,10 +13,20 @@
   },
   "panels": [
     {
+      "id": 100,
+      "type": "text",
+      "title": "Slippage Calibration",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "Slippage curves are populated by running the calibration process which samples on-chain quotes at various trade sizes. Run `npm run calibrate` to populate this data."
+      }
+    },
+    {
       "id": 1,
       "type": "xychart",
       "title": "Slippage by Trade Size (Latest Calibration)",
-      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 10},
+      "gridPos": {"x": 0, "y": 3, "w": 12, "h": 10},
       "targets": [
         {
           "refId": "A",

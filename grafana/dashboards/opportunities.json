@@ -79,10 +79,20 @@
   },
   "panels": [
     {
+      "id": 101,
+      "type": "text",
+      "title": "Getting Started",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "Opportunities appear when the detection loop identifies CEX/DEX price spreads exceeding configured thresholds. Ensure data collection (Phase 1) is running and detection (Phase 2) is enabled."
+      }
+    },
+    {
       "id": 100,
       "type": "text",
       "title": "Understanding Detection vs Execution Time",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "gridPos": {"x": 0, "y": 3, "w": 24, "h": 3},
       "options": {
         "mode": "markdown",
         "content": "**TIMING NOTE**: This dashboard shows BOTH detection-time and execution-time metrics:\n\n- **DETECTION TIME** = When spread first exceeded threshold (`detected_at`, `spread_bps` from CEX/DEX delta)\n- **EXECUTION TIME** = When trade was evaluated/submitted (`estimated_profit_usd` from quoter with fresh prices)\n\nTypically 100-2000ms lag between detection and execution. See 'Prediction Accuracy' dashboard for detailed comparison."

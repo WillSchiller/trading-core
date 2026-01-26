@@ -282,6 +282,7 @@
       "id": 11,
       "type": "stat",
       "title": "Mean Prediction Error",
+      "description": "Average difference between realized P&L and estimated profit (negative = overestimation)",
       "gridPos": {"x": 0, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
@@ -381,6 +382,7 @@
       "id": 14,
       "type": "stat",
       "title": "Overestimation Rate (%)",
+      "description": "Percentage of trades where estimated profit exceeded realized P&L",
       "gridPos": {"x": 18, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
