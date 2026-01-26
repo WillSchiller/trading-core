@@ -44,6 +44,11 @@ export const riskConfigSchema = z.object({
   skipProfitCheckForTesting: z.boolean().optional(),
 });
 
+export const inventoryConfigSchema = z.object({
+  trackingEnabled: z.boolean().default(true),
+  initialBalances: z.record(z.number().nonnegative()).default({}),
+});
+
 export const chainContractsSchema = z.object({
   uniswapV3Factory: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   uniswapV3Quoter: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -110,6 +115,7 @@ export const appConfigSchema = z.object({
   rankSpace: rankSpaceConfigSchema,
   execution: executionConfigSchema,
   risk: riskConfigSchema,
+  inventory: inventoryConfigSchema.default({ trackingEnabled: true, initialBalances: {} }),
   venues: venuesConfigSchema,
   chains: z.record(chainConfigSchema),
 });

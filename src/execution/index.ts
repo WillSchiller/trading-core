@@ -3,6 +3,7 @@ import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain, Opportunity } from '../types/index.js';
 import type { AppConfig, PairConfig } from '../config/types.js';
 import type { OpportunityEmitter } from '../detection/emitter.js';
+import type { QuoteCache } from '../state/quote-cache.js';
 import { UniswapQuoter, QuoterError, type QuoteParams } from './quoter.js';
 import { GasEstimator } from './gas.js';
 import { RiskManager } from './risk.js';
@@ -10,6 +11,7 @@ import { SwapRouter } from './router.js';
 import { TransactionSigner } from './signer.js';
 import { PaperTrader } from './paper-trader.js';
 import { LiveTrader } from './live-trader.js';
+import { InventoryManager } from './inventory.js';
 import { updateOpportunityStatus } from '../persistence/opportunities.js';
 
 export interface TokenConfig {
@@ -30,6 +32,7 @@ export interface ExecutionManagerConfig {
   paperMode: boolean;
   tokenMap: Map<string, TokenConfig>;
   pairIdMap: Map<string, number>;
+  quoteCache: QuoteCache;
 }
 
 export class ExecutionManager {
@@ -40,6 +43,7 @@ export class ExecutionManager {
   private paperMode: boolean;
   private tokenMap: Map<string, TokenConfig>;
   private pairIdMap: Map<string, number>;
+  private quoteCache: QuoteCache;
 
   private quoter: UniswapQuoter;
   private gasEstimator: GasEstimator;
@@ -48,6 +52,7 @@ export class ExecutionManager {
   private paperTrader: PaperTrader;
   private liveTrader?: LiveTrader;
   private signer?: TransactionSigner;
+  private inventory: InventoryManager;
 
   private isRunning: boolean = false;
 
@@ -59,6 +64,7 @@ export class ExecutionManager {
     this.paperMode = config.paperMode;
     this.tokenMap = config.tokenMap;
     this.pairIdMap = config.pairIdMap;
+    this.quoteCache = config.quoteCache;
 
     this.quoter = new UniswapQuoter(config.publicClient, {
       quoterAddress: config.quoterAddress,
@@ -80,7 +86,9 @@ export class ExecutionManager {
       maxSlippageBps: config.appConfig.execution.maxSlippageBps,
     });
 
-    this.paperTrader = new PaperTrader(config.chain);
+    this.inventory = new InventoryManager(config.chain, config.appConfig.inventory);
+
+    this.paperTrader = new PaperTrader(config.chain, this.inventory);
 
     if (config.privateKey && !config.paperMode) {
       this.signer = new TransactionSigner(config.publicClient, {
@@ -166,6 +174,14 @@ export class ExecutionManager {
 
   getRiskState() {
     return this.riskManager.getState();
+  }
+
+  getInventoryState() {
+    return this.inventory.getState();
+  }
+
+  getInventorySummary() {
+    return this.inventory.getBalanceSummary();
   }
 
   haltExecution(reason: string): void {
@@ -269,26 +285,63 @@ export class ExecutionManager {
 
     const gasEstimate = await this.gasEstimator.estimateSwapGas(quote.gasEstimate);
 
-    // Dynamic break-even check
+    // Re-validate spread with fresh CEX price
+    const pair = `${pairConfig.base}/${pairConfig.quote}`;
+    const freshAnchorQuote = this.quoteCache.getQuoteWithStaleness({ venue: 'binance', pair });
+
+    if (!freshAnchorQuote) {
+      this.logger.warn(
+        { opportunityId: opportunity.id?.toString(), pair },
+        'Fresh anchor quote not available - skipping'
+      );
+      await updateOpportunityStatus(opportunity.id!, 'skipped', 'Fresh anchor quote unavailable');
+      return;
+    }
+
+    const freshAnchorMid = freshAnchorQuote.quote.mid;
+    const freshDexPrice = quote.quotedPrice;
+
+    // Calculate fresh spread
+    const freshSpreadBps = ((freshAnchorMid - freshDexPrice) / freshAnchorMid) * 10000;
+    const spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
+
+    this.logger.info(
+      {
+        opportunityId: opportunity.id?.toString(),
+        originalSpreadBps: opportunity.spreadBps,
+        freshSpreadBps,
+        spreadDecay,
+        originalAnchorMid: opportunity.anchorMid,
+        freshAnchorMid,
+        freshDexPrice,
+        anchorAgeMs: freshAnchorQuote.staleDurationMs,
+      },
+      'Spread re-validation'
+    );
+
+    // Dynamic break-even check using FRESH prices
     const feeTierBps = fee / 100;
     const gasBps = (gasEstimate.estimatedGasUsd / tradeSizeUsd) * 10000;
     const breakEvenBps = feeTierBps + Math.abs(quote.slippageBps) + gasBps;
     const edgeBufferBps = 10;
     const requiredSpreadBps = breakEvenBps + edgeBufferBps;
 
-    if (Math.abs(opportunity.spreadBps) < requiredSpreadBps) {
-      const reason = `Spread ${Math.abs(opportunity.spreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (fee:${feeTierBps} + slip:${Math.abs(quote.slippageBps).toFixed(1)} + gas:${gasBps.toFixed(1)} + buffer:${edgeBufferBps})`;
+    // Use FRESH spread for break-even check
+    if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
+      const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
       this.logger.info(
         {
           opportunityId: opportunity.id?.toString(),
-          spreadBps: opportunity.spreadBps,
+          originalSpreadBps: opportunity.spreadBps,
+          freshSpreadBps,
+          spreadDecay,
           requiredSpreadBps,
           feeTierBps,
           slippageBps: quote.slippageBps,
           gasBps,
           breakEvenBps,
         },
-        'Below break-even threshold'
+        'Below break-even threshold (fresh spread)'
       );
       await updateOpportunityStatus(opportunity.id!, 'skipped', reason);
       return;
@@ -303,13 +356,14 @@ export class ExecutionManager {
     const inputAmountHuman = Number(amountIn) / 10 ** tokenInConfig.decimals;
     const outputAmountHuman = Number(quote.amountOut) / 10 ** tokenOutConfig.decimals;
 
+    // Use FRESH anchor price for P&L calculation
     let inputValueUsd: number;
     let outputValueUsd: number;
     if (opportunity.direction === 'buy_dex') {
       inputValueUsd = inputAmountHuman;
-      outputValueUsd = outputAmountHuman * opportunity.anchorMid;
+      outputValueUsd = outputAmountHuman * freshAnchorMid;
     } else {
-      inputValueUsd = inputAmountHuman * opportunity.anchorMid;
+      inputValueUsd = inputAmountHuman * freshAnchorMid;
       outputValueUsd = outputAmountHuman;
     }
     const grossPnlUsd = outputValueUsd - inputValueUsd;
@@ -333,6 +387,8 @@ export class ExecutionManager {
       tokenOut,
       tokenInDecimals: tokenInConfig.decimals,
       tokenOutDecimals: tokenOutConfig.decimals,
+      tokenInSymbol: tokenInConfig.symbol,
+      tokenOutSymbol: tokenOutConfig.symbol,
       amountIn,
       amountOutMinimum,
       fee,
@@ -424,3 +480,4 @@ export { TransactionSigner, NonceError, SimulationError, ReceiptTimeoutError } f
 export { PaperTrader, type PaperTradeParams, type PaperTradeResult } from './paper-trader.js';
 export { LiveTrader, type LiveTradeParams, type LiveTradeResult } from './live-trader.js';
 export { SlippageCalibrator, type CalibrationConfig, type SlippagePoint } from './slippage-calibrator.js';
+export { InventoryManager, type InventoryConfig, type InventoryState } from './inventory.js';

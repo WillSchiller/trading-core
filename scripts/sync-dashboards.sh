@@ -47,7 +47,7 @@ COMMAND_ID=$(aws ssm send-command \
   --parameters "commands=[
     \"cd /home/ubuntu/app\",
     \"mkdir -p grafana/provisioning grafana/dashboards\",
-    \"aws s3 sync s3://$S3_BUCKET/deploy/grafana/ grafana/ --delete\",
+    \"aws s3 sync s3://$S3_BUCKET/deploy/grafana/ grafana/ --delete --exact-timestamps\",
     \"ls -la grafana/dashboards/\",
     \"docker restart dislocation-grafana 2>/dev/null || echo 'Grafana container not running'\",
     \"echo 'Sync complete'\"

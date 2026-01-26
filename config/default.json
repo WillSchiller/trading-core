@@ -20,8 +20,8 @@
   },
   "rankSpace": {
     "minVenues": 3,
-    "triggerPercentile": 0.2,
-    "minSpreadBps": 3,
+    "triggerPercentile": 0.15,
+    "minSpreadBps": 5,
     "minDurationMs": 1000
   },
   "execution": {
@@ -40,6 +40,13 @@
     "cooldownSeconds": 30,
     "maxGasGwei": 10,
     "haltOnConsecutiveReverts": 3
+  },
+  "inventory": {
+    "trackingEnabled": true,
+    "initialBalances": {
+      "USDC": 5000,
+      "WETH": 1.75
+    }
   },
   "venues": {
     "cex": {

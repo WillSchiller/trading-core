@@ -46,6 +46,11 @@ export interface RiskConfig {
   skipProfitCheckForTesting?: boolean;
 }
 
+export interface InventoryConfig {
+  trackingEnabled: boolean;
+  initialBalances: Record<string, number>;
+}
+
 export interface ChainContracts {
   uniswapV3Factory: string;
   uniswapV3Quoter: string;
@@ -112,6 +117,7 @@ export interface AppConfig {
   rankSpace: RankSpaceConfig;
   execution: ExecutionConfig;
   risk: RiskConfig;
+  inventory: InventoryConfig;
   venues: VenuesConfig;
   chains: Record<string, ChainConfig>;
 }

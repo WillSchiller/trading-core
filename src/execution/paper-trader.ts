@@ -6,6 +6,7 @@ import type { GasEstimate } from './gas.js';
 import type { RiskCheckResult } from './risk.js';
 import { insertExecution, updateExecutionStatus, type Execution } from '../persistence/executions.js';
 import { updateOpportunityStatus } from '../persistence/opportunities.js';
+import type { InventoryManager } from './inventory.js';
 
 export interface PaperTradeParams {
   opportunity: Opportunity;
@@ -16,6 +17,8 @@ export interface PaperTradeParams {
   tokenOut: Address;
   tokenInDecimals: number;
   tokenOutDecimals: number;
+  tokenInSymbol: string;
+  tokenOutSymbol: string;
   amountIn: bigint;
   amountOutMinimum: bigint;
   fee: number;
@@ -38,14 +41,18 @@ export interface PaperTradeResult {
 export class PaperTrader {
   private logger: Logger;
   private chain: Chain;
+  private inventory?: InventoryManager;
 
-  constructor(chain: Chain) {
+  constructor(chain: Chain, inventory?: InventoryManager) {
     this.logger = createChildLogger({ component: 'paper-trader', chain });
     this.chain = chain;
+    this.inventory = inventory;
   }
 
   async executePaperTrade(params: PaperTradeParams): Promise<PaperTradeResult> {
     const { opportunity, quote, gasEstimate, riskCheck } = params;
+
+    const inputAmountHuman = Number(params.amountIn) / 10 ** params.tokenInDecimals;
 
     this.logger.info(
       {
@@ -58,6 +65,9 @@ export class PaperTrader {
         estimatedGasUsd: gasEstimate.estimatedGasUsd,
         estimatedProfitUsd: params.estimatedProfitUsd,
         riskAllowed: riskCheck.allowed,
+        tokenIn: params.tokenInSymbol,
+        tokenOut: params.tokenOutSymbol,
+        amountIn: inputAmountHuman,
       },
       'Processing paper trade'
     );
@@ -79,9 +89,40 @@ export class PaperTrader {
       };
     }
 
+    if (this.inventory) {
+      const hasBalance = this.inventory.hasEnoughBalance(params.tokenInSymbol, inputAmountHuman);
+      if (!hasBalance) {
+        const available = this.inventory.getBalance(params.tokenInSymbol);
+        const skipReason = `Insufficient ${params.tokenInSymbol}: need ${inputAmountHuman.toFixed(4)}, have ${available.toFixed(4)}`;
+
+        this.logger.info(
+          {
+            opportunityId: opportunity.id?.toString(),
+            tokenIn: params.tokenInSymbol,
+            required: inputAmountHuman,
+            available,
+          },
+          'Trade skipped - insufficient inventory'
+        );
+
+        await this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
+
+        return {
+          executionId: 0n,
+          status: 'skipped',
+          skipReason,
+          simulatedOutput: 0n,
+          simulatedOutputHuman: 0,
+          simulatedPrice: 0,
+          simulatedSlippageBps: 0,
+          simulatedGasUsd: gasEstimate.estimatedGasUsd,
+          simulatedPnlUsd: 0,
+        };
+      }
+    }
+
     const deadline = new Date(Date.now() + 120 * 1000);
 
-    const inputAmountHuman = Number(params.amountIn) / 10 ** params.tokenInDecimals;
     const expectedOutputHuman = Number(quote.amountOut) / 10 ** params.tokenOutDecimals;
 
     const simulatedSlippageBps = this.simulateSlippage(quote.slippageBps);
@@ -138,6 +179,15 @@ export class PaperTrader {
 
     await updateOpportunityStatus(opportunity.id!, 'filled', undefined, params.estimatedProfitUsd);
 
+    if (this.inventory) {
+      this.inventory.executeTrade(
+        params.tokenInSymbol,
+        inputAmountHuman,
+        params.tokenOutSymbol,
+        simulatedOutputHuman
+      );
+    }
+
     this.logger.info(
       {
         executionId: executionId.toString(),
@@ -147,6 +197,11 @@ export class PaperTrader {
         simulatedSlippageBps,
         simulatedGasUsd,
         simulatedPnlUsd,
+        inventoryUpdate: this.inventory ? {
+          deducted: { token: params.tokenInSymbol, amount: inputAmountHuman },
+          received: { token: params.tokenOutSymbol, amount: simulatedOutputHuman },
+          newBalances: this.inventory.getBalanceSummary(),
+        } : undefined,
       },
       'Paper trade completed'
     );

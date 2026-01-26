@@ -33,8 +33,12 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
 
       PAPER_MODE: ${PAPER_MODE:-true}
+      ENABLE_EXECUTION: ${ENABLE_EXECUTION:-true}
       ENABLE_BASE: ${ENABLE_BASE:-true}
       ENABLE_MAINNET: ${ENABLE_MAINNET:-false}
+    volumes:
+      - ../config:/app/config:ro
+      - ../sql:/app/sql:ro
     networks:
       - app-network
     logging:

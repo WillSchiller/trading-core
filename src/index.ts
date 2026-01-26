@@ -322,6 +322,7 @@ async function main() {
         paperMode: config.env.paperMode,
         tokenMap,
         pairIdMap,
+        quoteCache: orchestrator.getQuoteCache(),
       });
 
       executionManager.subscribeToOpportunities(emitter);
