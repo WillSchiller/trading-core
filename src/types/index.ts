@@ -45,6 +45,7 @@ export interface Opportunity {
   id?: bigint;
   detectedAt: Date;
   pairId: number;
+  pairCanonical?: string;
   chain: Chain;
   anchorVenueId: number;
   anchorMid: number;
