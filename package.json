@@ -13,6 +13,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
+    "test:dashboards": "vitest run tests/unit/dashboards",
     "lint": "eslint src tests --ext .ts",
     "lint:fix": "eslint src tests --ext .ts --fix",
     "typecheck": "tsc --noEmit",
