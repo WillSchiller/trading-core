@@ -540,3 +540,71 @@ Implemented fire-and-forget background queue pattern for DB operations:
 - Target maintained: <50ms detection cycle duration
 
 ---
+
+## 2026-01-26
+
+### Dashboard UX Overhaul for Live Trading Readiness
+
+✅ **DONE** — Major dashboard improvements to prevent team confusion during quiet markets
+
+**Problem Identified:**
+- Adaptive polling backs off to every 10 blocks (~20s) when market is quiet
+- Dashboard panels showed "No data" causing confusion
+- Team thought system was broken when it was actually working correctly
+
+**Root Causes Found & Fixed:**
+
+1. **Duplicate Dashboard Naming** - Two dashboards named "System Health"
+   - Renamed to "Connector Health" and "System Health - Latency & Timing"
+
+2. **Missing Status Indicators** - No way to know system state at a glance
+   - Added TRADING MODE panel (PAPER/LIVE)
+   - Added SYSTEM STATUS panel (ACTIVE/CONSERVING/STALE/OFFLINE)
+   - Added MARKET ACTIVITY panel (BUSY/MODERATE/QUIET/VERY QUIET)
+   - Added Risk Status and Exposure panels to top row
+
+3. **Stale Data Detection** - No indication when data is old
+   - Added Last Quote freshness indicator
+   - Updated thresholds to account for adaptive polling (25s = normal during conserve)
+
+4. **Sparse Data Visualization** - Gaps in charts during conserve mode
+   - Added spanNulls: 60000 to time series to connect sparse points
+
+5. **Panel Query Issues** - Several panels returned "No data"
+   - Fixed column name: `is_connected` → `ws_connected`
+   - Added missing `fields` selector to stat panels for value mapping
+   - Simplified complex queries that failed silently
+
+6. **Spread Panel Clarity** - Confusion between live vs historical data
+   - Renamed panels to distinguish opportunity data vs live market data
+   - Added "Last Opp Age" to show how old opportunity data is
+   - Added "Live Spread Now" for actual current market spread
+
+**New Dashboard Created:**
+- **Dislocation Diagnostics** - Analyzes why opportunities appear/disappear
+  - Opportunities per hour histogram
+  - Spread distribution over time
+  - Near-miss spreads (close to threshold)
+  - Quote volume by venue
+  - CEX vs DEX price overlay
+
+**Files Changed:**
+- `grafana/dashboards/overview.json` - 5 new panels, query fixes
+- `grafana/dashboards/spreads.json` - Renamed panels, added clarity
+- `grafana/dashboards/health.json` - Renamed title
+- `grafana/dashboards/system-health.json` - Renamed title
+- `grafana/dashboards/opportunities.json` - Threshold standardization
+- `grafana/dashboards/executions.json` - Gas thresholds for Base
+- `grafana/dashboards/dislocation-diagnostics.json` - NEW
+- `tests/unit/dashboards/sql-query-validator.test.ts` - Added exceptions
+
+**Auto-Deploy Verified:**
+- GitHub Actions workflow syncs dashboards to EC2 on push
+- Grafana restarts automatically to load changes
+
+**Outcome:**
+- Team can now see at a glance: "System healthy, market quiet"
+- No more false alarms during low-volatility periods
+- Clear distinction between historical opportunities and live market data
+
+---
