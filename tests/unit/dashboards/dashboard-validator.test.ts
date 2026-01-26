@@ -578,7 +578,7 @@ describe('Grafana Dashboard Validation', () => {
         const queries = extractQueries(dashboard);
 
         for (const { panelTitle, query } of queries) {
-          let preparedQuery = query
+          const preparedQuery = query
             .replace(/\$__timeFrom\(\)/g, "'2024-01-01 00:00:00'::timestamptz")
             .replace(/\$__timeTo\(\)/g, "'2024-01-01 01:00:00'::timestamptz")
             .replace(/\$\{pair\}/g, '1')
