@@ -1,7 +1,7 @@
 {
   "id": null,
   "uid": "health",
-  "title": "System Health",
+  "title": "Connector Health",
   "tags": ["dislocation-trader", "health"],
   "timezone": "utc",
   "schemaVersion": 38,

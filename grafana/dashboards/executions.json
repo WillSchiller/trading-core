@@ -80,30 +80,10 @@
   },
   "panels": [
     {
-      "id": 101,
-      "type": "text",
-      "title": "Getting Started",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-      "options": {
-        "mode": "markdown",
-        "content": "Executions appear when profitable opportunities are traded (paper or live). Requires: 1) Data collection running 2) Detection enabled 3) Paper/live trading enabled."
-      }
-    },
-    {
-      "id": 100,
-      "type": "text",
-      "title": "Execution Reality Check",
-      "gridPos": {"x": 0, "y": 3, "w": 24, "h": 3},
-      "options": {
-        "mode": "markdown",
-        "content": "**REALITY CHECK**: This dashboard shows ACTUAL execution outcomes compared to estimates.\n\n- All metrics here are **execution-time actuals** (realized P&L, gas, slippage)\n- For comparison with detection-time spread & execution-time estimates, see 'Prediction Accuracy' dashboard\n- Key question: Are we making money after real costs?"
-      }
-    },
-    {
       "id": 1,
       "type": "timeseries",
       "title": "Cumulative PnL (Realized)",
-      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -171,7 +151,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "PnL per Trade (Realized)",
-      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -239,7 +219,7 @@
       "type": "stat",
       "title": "Win Rate",
       "description": "Percentage of trades with positive realized P&L",
-      "gridPos": {"x": 0, "y": 14, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -277,7 +257,7 @@
       "id": 4,
       "type": "stat",
       "title": "Avg Win",
-      "gridPos": {"x": 6, "y": 14, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -313,7 +293,7 @@
       "id": 5,
       "type": "stat",
       "title": "Avg Loss",
-      "gridPos": {"x": 12, "y": 14, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -351,7 +331,7 @@
       "id": 6,
       "type": "stat",
       "title": "Total Gas Spent",
-      "gridPos": {"x": 18, "y": 14, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -388,7 +368,7 @@
       "type": "stat",
       "title": "Fill Rate",
       "description": "Percentage of executions that were confirmed or filled",
-      "gridPos": {"x": 0, "y": 18, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 12, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -426,7 +406,7 @@
       "id": 8,
       "type": "stat",
       "title": "Total Executions",
-      "gridPos": {"x": 6, "y": 18, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 12, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -462,7 +442,7 @@
       "type": "stat",
       "title": "Avg Slippage (Realized)",
       "description": "Average realized slippage in basis points",
-      "gridPos": {"x": 12, "y": 18, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 12, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -501,7 +481,7 @@
       "id": 10,
       "type": "stat",
       "title": "Revert Rate",
-      "gridPos": {"x": 18, "y": 18, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 12, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -539,7 +519,7 @@
       "id": 11,
       "type": "heatmap",
       "title": "Slippage Distribution (Realized)",
-      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -601,7 +581,7 @@
       "id": 12,
       "type": "table",
       "title": "Expected vs Actual Output",
-      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -640,7 +620,7 @@
       "id": 13,
       "type": "piechart",
       "title": "Executions by Status",
-      "gridPos": {"x": 0, "y": 30, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 24, "w": 8, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -680,7 +660,7 @@
       "id": 14,
       "type": "table",
       "title": "Revert Reasons",
-      "gridPos": {"x": 8, "y": 30, "w": 16, "h": 8},
+      "gridPos": {"x": 8, "y": 24, "w": 16, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -723,7 +703,7 @@
       "id": 15,
       "type": "table",
       "title": "Recent Executions",
-      "gridPos": {"x": 0, "y": 38, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 10},
       "targets": [
         {
           "refId": "A",
@@ -874,7 +854,7 @@
       "id": 16,
       "type": "timeseries",
       "title": "Gas Cost Over Time (Realized)",
-      "gridPos": {"x": 0, "y": 48, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -915,9 +895,9 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
-              {"value": 5, "color": "yellow"},
-              {"value": 10, "color": "red"}
+              {"value": null, "color": "green"},
+              {"value": 0.05, "color": "yellow"},
+              {"value": 0.20, "color": "red"}
             ]
           }
         }
@@ -938,7 +918,7 @@
       "id": 17,
       "type": "bargauge",
       "title": "Executions by Pair",
-      "gridPos": {"x": 12, "y": 48, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",

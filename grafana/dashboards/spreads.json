@@ -1,7 +1,7 @@
 {
   "id": null,
   "uid": "spreads",
-  "title": "Spreads - Live",
+  "title": "Spreads & Opportunities",
   "tags": ["dislocation-trader", "spreads"],
   "timezone": "utc",
   "schemaVersion": 38,
@@ -71,8 +71,8 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Detected Spreads Over Time (bps)",
-      "description": "Spread values from detected opportunities - the source of truth for actual trading spreads. If no data appears, try selecting 'All' for both Pair and Strategy, or expand the time range.",
+      "title": "Opportunity Spreads Over Time (bps)",
+      "description": "Spread values from TRIGGERED OPPORTUNITIES only (not live quotes). Empty means no opportunities were detected. Check 'Live Spread Now' to see current market spread.",
       "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
       "targets": [
         {
@@ -99,9 +99,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -114,9 +114,9 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Latest Detected Spread",
-      "description": "Most recent opportunity spread - reflects actual detected trading spread.",
-      "gridPos": {"x": 0, "y": 16, "w": 4, "h": 4},
+      "title": "Last Opp Spread",
+      "description": "Spread from the most recent OPPORTUNITY (could be old if no recent detections). Check 'Last Opp Age' to see how stale this is.",
+      "gridPos": {"x": 0, "y": 16, "w": 3, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -139,9 +139,81 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Last Opp Age",
+      "description": "How long ago the last opportunity was detected. If this is hours old, no opportunities are being found.",
+      "gridPos": {"x": 3, "y": 16, "w": 3, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - detected_at)) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY detected_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 300, "color": "yellow"},
+              {"value": 900, "color": "orange"},
+              {"value": 3600, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Live Spread Now",
+      "description": "CURRENT market spread from latest quotes (CEX anchor vs DEX). This is the real-time spread, NOT from opportunities.",
+      "gridPos": {"x": 6, "y": 16, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "WITH latest_cex AS (SELECT r.pair_id, r.close_mid as cex_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'cex' AND v.is_anchor = true AND r.interval_type = '10s' AND (${pair} = 0 OR r.pair_id = ${pair}) AND r.interval_start > now() - interval '2 minutes' ORDER BY r.interval_start DESC LIMIT 1), latest_dex AS (SELECT r.pair_id, r.close_mid as dex_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'dex' AND r.interval_type = '10s' AND (${pair} = 0 OR r.pair_id = ${pair}) AND r.interval_start > now() - interval '2 minutes' ORDER BY r.interval_start DESC LIMIT 1) SELECT COALESCE(ROUND(ABS((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000), 2), 0) as value FROM latest_cex c, latest_dex d WHERE c.pair_id = d.pair_id",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: bps",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -150,9 +222,9 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Max Spread (15m)",
-      "description": "Maximum detected opportunity spread in last 15 minutes.",
-      "gridPos": {"x": 4, "y": 16, "w": 4, "h": 4},
+      "title": "Max Opp (15m)",
+      "description": "Maximum spread from OPPORTUNITIES in last 15 minutes. Returns 0 if no opportunities detected.",
+      "gridPos": {"x": 10, "y": 16, "w": 3, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -175,9 +247,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -186,9 +258,9 @@
     {
       "id": 7,
       "type": "stat",
-      "title": "Max Spread (1h)",
-      "description": "Maximum detected opportunity spread in last hour.",
-      "gridPos": {"x": 8, "y": 16, "w": 4, "h": 4},
+      "title": "Max Opp (1h)",
+      "description": "Maximum spread from OPPORTUNITIES in last hour. Returns 0 if no opportunities.",
+      "gridPos": {"x": 13, "y": 16, "w": 3, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -211,9 +283,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -222,9 +294,9 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "Max Spread (24h)",
+      "title": "Max Opp (24h)",
       "description": "Maximum detected opportunity spread in last 24 hours.",
-      "gridPos": {"x": 12, "y": 16, "w": 4, "h": 4},
+      "gridPos": {"x": 16, "y": 16, "w": 3, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -247,9 +319,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -258,9 +330,9 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Avg Spread (24h)",
+      "title": "Avg Opp (24h)",
       "description": "Average detected opportunity spread in last 24 hours.",
-      "gridPos": {"x": 16, "y": 16, "w": 4, "h": 4},
+      "gridPos": {"x": 19, "y": 16, "w": 3, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -290,7 +362,7 @@
       "id": 6,
       "type": "stat",
       "title": "Opportunities Detected",
-      "gridPos": {"x": 20, "y": 16, "w": 4, "h": 4},
+      "gridPos": {"x": 22, "y": 16, "w": 2, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -566,9 +638,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -598,7 +670,7 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "max_spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}]},
+          {"matcher": {"id": "byName", "options": "max_spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 30, "color": "red"}]}}]},
           {"matcher": {"id": "byName", "options": "duration_s"}, "properties": [{"id": "unit", "value": "s"}]}
         ]
       }
@@ -606,7 +678,7 @@
     {
       "id": 10,
       "type": "table",
-      "title": "All Pairs - Current Market Spreads (Diagnostic)",
+      "title": "Live Market Spreads (All Pairs)",
       "description": "Current spread from raw quotes. May differ from detected spreads due to adaptive polling.",
       "gridPos": {"x": 0, "y": 44, "w": 24, "h": 8},
       "targets": [
@@ -623,7 +695,7 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}]}
+          {"matcher": {"id": "byName", "options": "spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 30, "color": "red"}]}}]}
         ]
       }
     }

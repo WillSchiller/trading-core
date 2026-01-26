@@ -33,15 +33,200 @@
   },
   "panels": [
     {
-      "id": 1,
-      "type": "timeseries",
-      "title": "Live Quote Prices - WETH/USDC (All Venues)",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
+      "id": 9,
+      "type": "stat",
+      "title": "Last Quote",
+      "description": "Seconds since last quote received. RED means data may be stale.",
+      "gridPos": {"x": 10, "y": 0, "w": 4, "h": 3},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT qr.interval_start as time, v.name as metric, qr.close_mid as value FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.interval_type = '1s' AND p.canonical = 'WETH/USDC' AND qr.close_mid IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - MAX(ts)))::integer as value FROM quotes_raw",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 30, "color": "yellow"},
+              {"value": 60, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "TRADING MODE",
+      "description": "Shows whether system is in PAPER (simulation) or LIVE (real money) mode",
+      "gridPos": {"x": 0, "y": 0, "w": 3, "h": 3},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT CASE WHEN is_paper_mode THEN 'PAPER' ELSE 'LIVE' END as value FROM (SELECT true as is_paper_mode) t",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "PAPER": {
+                  "text": "PAPER",
+                  "color": "green",
+                  "index": 0
+                },
+                "LIVE": {
+                  "text": "LIVE",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"}
+            ]
+          },
+          "custom": {
+            "neutral": "green"
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Risk Status",
+      "description": "Current risk state - HALTED means trading is stopped",
+      "gridPos": {"x": 3, "y": 0, "w": 4, "h": 3},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT CASE WHEN is_halted THEN 'HALTED' ELSE 'ACTIVE' END as status, open_exposure_usd, trades_last_hour FROM risk_state WHERE chain = 'base' ORDER BY updated_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": "/^status$/"
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "HALTED": {
+                  "text": "HALTED",
+                  "color": "red",
+                  "index": 0
+                },
+                "ACTIVE": {
+                  "text": "ACTIVE",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Exposure (USD)",
+      "description": "Current open exposure in USD (max $5000)",
+      "gridPos": {"x": 7, "y": 0, "w": 3, "h": 3},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT ROUND(open_exposure_usd, 2) as value FROM risk_state WHERE chain = 'base' ORDER BY updated_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 2500, "color": "yellow"},
+              {"value": 4000, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Live Quote Prices (All Venues)",
+      "gridPos": {"x": 0, "y": 3, "w": 24, "h": 10},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT qr.interval_start as time, v.name as metric, qr.close_mid as value FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.interval_type = '1s' AND (${pair} = 0 OR p.id = ${pair}) AND qr.close_mid IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -129,12 +314,12 @@
       "id": 2,
       "type": "timeseries",
       "title": "Real-Time Spread (Binance vs Uniswap) - bps",
-      "gridPos": {"x": 0, "y": 10, "w": 16, "h": 8},
+      "gridPos": {"x": 0, "y": 13, "w": 16, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH binance_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'binance' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND p.canonical = 'WETH/USDC'), uniswap_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'uniswap_v3' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND p.canonical = 'WETH/USDC') SELECT b.interval_start as time, 10000.0 * (u.close_mid - b.close_mid) / b.close_mid as spread_bps FROM binance_quotes b JOIN uniswap_quotes u ON b.pair_id = u.pair_id AND b.interval_start = u.interval_start ORDER BY time",
+          "rawSql": "WITH binance_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'binance' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND (${pair} = 0 OR p.id = ${pair})), uniswap_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'uniswap_v3' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND (${pair} = 0 OR p.id = ${pair})) SELECT b.interval_start as time, 10000.0 * (u.close_mid - b.close_mid) / b.close_mid as spread_bps FROM binance_quotes b JOIN uniswap_quotes u ON b.pair_id = u.pair_id AND b.interval_start = u.interval_start ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -173,12 +358,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": -50, "color": "red"},
-              {"value": -30, "color": "orange"},
-              {"value": -15, "color": "yellow"},
-              {"value": 15, "color": "green"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": null, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -201,7 +384,7 @@
       "type": "stat",
       "title": "Opportunities (15m)",
       "description": "Number of trading opportunities detected in the last 15 minutes",
-      "gridPos": {"x": 16, "y": 10, "w": 8, "h": 4},
+      "gridPos": {"x": 16, "y": 13, "w": 8, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -238,7 +421,7 @@
       "type": "stat",
       "title": "Avg Spread (15m)",
       "description": "Average spread in basis points for opportunities detected in the last 15 minutes",
-      "gridPos": {"x": 16, "y": 14, "w": 8, "h": 4},
+      "gridPos": {"x": 16, "y": 17, "w": 8, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -264,10 +447,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": null, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -277,7 +460,7 @@
       "id": 5,
       "type": "bargauge",
       "title": "Quote Counts by Venue (15m)",
-      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -313,7 +496,7 @@
       "id": 6,
       "type": "table",
       "title": "Connector Health Status",
-      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -422,7 +605,7 @@
       "id": 7,
       "type": "table",
       "title": "Recent Opportunities",
-      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",

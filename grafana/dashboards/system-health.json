@@ -1,7 +1,7 @@
 {
   "id": null,
   "uid": "system-health",
-  "title": "System Health",
+  "title": "System Health - Latency & Timing",
   "tags": ["dislocation-trader", "system"],
   "timezone": "utc",
   "schemaVersion": 38,

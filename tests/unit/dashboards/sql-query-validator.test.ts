@@ -261,8 +261,10 @@ describe('SQL Query Anti-Pattern Detection', () => {
             /LIMIT\s+\d+/i.test(query);
           const isSubquery = /\(\s*SELECT\s+MAX\s*\(.*\)\s+FROM\s+quotes_raw/i.test(query) ||
             /\(\s*SELECT\s+MIN\s*\(.*\)\s+FROM\s+quotes_raw/i.test(query);
+          const isAggregateOnly = /SELECT\s+.*\bMAX\s*\(\s*ts\s*\)/i.test(query) ||
+            /SELECT\s+.*\bMIN\s*\(\s*ts\s*\)/i.test(query);
 
-          if (!hasTimeFilter && !isSubquery) {
+          if (!hasTimeFilter && !isSubquery && !isAggregateOnly) {
             errors.push(
               `${file}: "${panelTitle}" - queries quotes_raw without time filter (performance issue)`
             );

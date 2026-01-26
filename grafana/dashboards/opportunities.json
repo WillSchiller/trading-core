@@ -79,30 +79,10 @@
   },
   "panels": [
     {
-      "id": 101,
-      "type": "text",
-      "title": "Getting Started",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-      "options": {
-        "mode": "markdown",
-        "content": "Opportunities appear when the detection loop identifies CEX/DEX price spreads exceeding configured thresholds. Ensure data collection (Phase 1) is running and detection (Phase 2) is enabled."
-      }
-    },
-    {
-      "id": 100,
-      "type": "text",
-      "title": "Understanding Detection vs Execution Time",
-      "gridPos": {"x": 0, "y": 3, "w": 24, "h": 3},
-      "options": {
-        "mode": "markdown",
-        "content": "**TIMING NOTE**: This dashboard shows BOTH detection-time and execution-time metrics:\n\n- **DETECTION TIME** = When spread first exceeded threshold (`detected_at`, `spread_bps` from CEX/DEX delta)\n- **EXECUTION TIME** = When trade was evaluated/submitted (`estimated_profit_usd` from quoter with fresh prices)\n\nTypically 100-2000ms lag between detection and execution. See 'Prediction Accuracy' dashboard for detailed comparison."
-      }
-    },
-    {
       "id": 1,
       "type": "timeseries",
       "title": "Opportunities per Hour",
-      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -163,7 +143,7 @@
       "id": 2,
       "type": "piechart",
       "title": "Opportunities by Status",
-      "gridPos": {"x": 12, "y": 6, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -203,7 +183,7 @@
       "id": 3,
       "type": "piechart",
       "title": "Skip Reasons",
-      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 8},
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -243,7 +223,7 @@
       "id": 4,
       "type": "bargauge",
       "title": "Opportunities by Pair",
-      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -303,7 +283,7 @@
       "id": 5,
       "type": "bargauge",
       "title": "Opportunities by Chain",
-      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -363,7 +343,7 @@
       "id": 6,
       "type": "heatmap",
       "title": "DETECTION TIME: Spread Distribution (bps)",
-      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -424,7 +404,7 @@
       "id": 7,
       "type": "table",
       "title": "Reason Codes Summary",
-      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -467,7 +447,7 @@
       "id": 8,
       "type": "table",
       "title": "Recent Opportunities",
-      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 10},
       "targets": [
         {
           "refId": "A",
@@ -510,12 +490,10 @@
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    {"value": -50, "color": "red"},
-                    {"value": -30, "color": "orange"},
-                    {"value": -15, "color": "yellow"},
-                    {"value": 15, "color": "green"},
-                    {"value": 30, "color": "orange"},
-                    {"value": 50, "color": "red"}
+                    {"value": null, "color": "green"},
+                    {"value": 10, "color": "yellow"},
+                    {"value": 20, "color": "orange"},
+                    {"value": 30, "color": "red"}
                   ]
                 }
               }
@@ -599,7 +577,7 @@
       "type": "stat",
       "title": "Total Opportunities",
       "description": "Number of opportunities detected in the selected time range",
-      "gridPos": {"x": 0, "y": 40, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -635,7 +613,7 @@
       "type": "stat",
       "title": "DETECT TIME: Avg Spread (abs)",
       "description": "Average absolute spread in bps at the moment of opportunity detection",
-      "gridPos": {"x": 6, "y": 40, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -661,10 +639,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
-              {"value": 15, "color": "yellow"},
-              {"value": 30, "color": "orange"},
-              {"value": 50, "color": "red"}
+              {"value": null, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "orange"},
+              {"value": 30, "color": "red"}
             ]
           }
         }
@@ -675,7 +653,7 @@
       "type": "stat",
       "title": "EXEC TIME: Avg Estimated Profit",
       "description": "Average estimated profit from quoter evaluation at execution time",
-      "gridPos": {"x": 12, "y": 40, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -712,7 +690,7 @@
       "type": "stat",
       "title": "Skip Rate",
       "description": "Percentage of opportunities skipped due to filters or unprofitability",
-      "gridPos": {"x": 18, "y": 40, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 34, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
