@@ -35,6 +35,7 @@ fetch_secret "coinbase-api-secret" "COINBASE_API_SECRET"
 fetch_secret "coinbase-passphrase" "COINBASE_PASSPHRASE"
 fetch_secret "executor-private-key" "EXECUTOR_PRIVATE_KEY"
 fetch_secret "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
+fetch_secret "telegram-chat-id" "TELEGRAM_CHAT_ID"
 
 echo "Secrets fetched successfully"
 
@@ -53,6 +54,8 @@ COINBASE_API_SECRET=$COINBASE_API_SECRET
 COINBASE_PASSPHRASE=$COINBASE_PASSPHRASE
 EXECUTOR_PRIVATE_KEY=$EXECUTOR_PRIVATE_KEY
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+ALERTS_ENABLED=true
 EOF
   chmod 600 /home/ubuntu/app/.env.secrets
   echo "Secrets exported to .env.secrets"
