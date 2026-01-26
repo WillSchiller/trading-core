@@ -106,7 +106,13 @@ export class GasEstimator {
 
   async estimateSwapGas(gasLimitEstimate: bigint): Promise<GasEstimate> {
     const feeData = await this.publicClient.estimateFeesPerGas();
+    return this.estimateSwapGasWithFeeData(gasLimitEstimate, feeData);
+  }
 
+  estimateSwapGasWithFeeData(
+    gasLimitEstimate: bigint,
+    feeData: { maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }
+  ): GasEstimate {
     const baseFeePerGas = feeData.maxFeePerGas ?? 0n;
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 1000000000n;
 
@@ -178,6 +184,10 @@ export class GasEstimator {
     this.logger.debug({ gasPriceGwei }, 'Gas price fetched and cached');
 
     return { maxFeePerGas, maxPriorityFeePerGas, gasPriceGwei };
+  }
+
+  async fetchFeeData(): Promise<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }> {
+    return this.publicClient.estimateFeesPerGas();
   }
 
   invalidateGasCache(): void {

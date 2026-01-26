@@ -108,3 +108,14 @@ resource "aws_secretsmanager_secret" "telegram_bot_token" {
     Name = "${var.project_name}-telegram-bot-token"
   }
 }
+
+resource "aws_secretsmanager_secret" "telegram_chat_id" {
+  name        = "${var.project_name}/telegram-chat-id"
+  description = "Telegram chat ID for alerts"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-telegram-chat-id"
+  }
+}
