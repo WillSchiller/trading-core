@@ -56,6 +56,8 @@ export class ExecutionManager {
   private inventory: InventoryManager;
 
   private isRunning: boolean = false;
+  private cachedGasPrice: { gwei: number; timestamp: number } | null = null;
+  private readonly gasPriceCacheTtlMs = 10000;
 
   constructor(config: ExecutionManagerConfig) {
     this.logger = createChildLogger({ component: 'execution-manager', chain: config.chain });
@@ -194,6 +196,8 @@ export class ExecutionManager {
   }
 
   private async handleOpportunity(opportunity: Opportunity): Promise<void> {
+    const startTime = Date.now();
+
     this.logger.info(
       {
         opportunityId: opportunity.id?.toString(),
@@ -204,7 +208,7 @@ export class ExecutionManager {
       'Processing opportunity'
     );
 
-    await updateOpportunityStatus(opportunity.id!, 'evaluating');
+    // Skip DB status update for speed - update only at end
 
     const pairConfig = this.pairsConfig.find((p) => {
       const canonical = `${p.base}/${p.quote}`;
@@ -241,17 +245,32 @@ export class ExecutionManager {
 
     const fee = this.getPoolFee(pairConfig, opportunity.chain);
 
+    // Get fresh CEX price immediately (in-memory, fast)
+    const pair = `${pairConfig.base}/${pairConfig.quote}`;
+    const freshAnchorQuote = this.quoteCache.getQuoteWithStaleness({ venue: 'binance', pair });
+
+    if (!freshAnchorQuote) {
+      this.logger.warn(
+        { opportunityId: opportunity.id?.toString(), pair },
+        'Fresh anchor quote not available - skipping'
+      );
+      await updateOpportunityStatus(opportunity.id!, 'skipped', 'Fresh anchor quote unavailable');
+      return;
+    }
+
+    const quoteParams: QuoteParams = {
+      tokenIn,
+      tokenOut,
+      amountIn,
+      fee,
+    };
+    const invertPrice = opportunity.direction === 'buy_dex';
+
+    // Parallel RPC calls - quote + gas price (gas estimate needs quote result)
+    const gasPricePromise = this.getCachedGasPrice();
+
     let quote;
     try {
-      const quoteParams: QuoteParams = {
-        tokenIn,
-        tokenOut,
-        amountIn,
-        fee,
-      };
-
-      // For buy_dex we swap quote→base (USDC→WETH), need to invert price calculation
-      const invertPrice = opportunity.direction === 'buy_dex';
       quote = await this.quoter.quoteExactInputSingle(
         quoteParams,
         opportunity.dexMid,
@@ -271,6 +290,12 @@ export class ExecutionManager {
       throw error;
     }
 
+    // Now get gas estimate (needs quote.gasEstimate) and await gas price in parallel
+    const [gasEstimate, gasPriceGwei] = await Promise.all([
+      this.gasEstimator.estimateSwapGas(quote.gasEstimate),
+      gasPricePromise,
+    ]);
+
     if (quote.slippageBps > this.appConfig.execution.maxSlippageBps) {
       this.logger.warn(
         {
@@ -284,18 +309,8 @@ export class ExecutionManager {
       return;
     }
 
-    const gasEstimate = await this.gasEstimator.estimateSwapGas(quote.gasEstimate);
-
-    // Re-validate spread with fresh CEX price
-    const pair = `${pairConfig.base}/${pairConfig.quote}`;
-    const freshAnchorQuote = this.quoteCache.getQuoteWithStaleness({ venue: 'binance', pair });
-
-    if (!freshAnchorQuote) {
-      this.logger.warn(
-        { opportunityId: opportunity.id?.toString(), pair },
-        'Fresh anchor quote not available - skipping'
-      );
-      await updateOpportunityStatus(opportunity.id!, 'skipped', 'Fresh anchor quote unavailable');
+    if (!this.gasEstimator.isGasPriceAcceptable(gasPriceGwei)) {
+      await updateOpportunityStatus(opportunity.id!, 'skipped', `Gas price ${gasPriceGwei.toFixed(2)} gwei > max`);
       return;
     }
 
@@ -312,21 +327,7 @@ export class ExecutionManager {
       .toNumber();
     const spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
 
-    this.logger.info(
-      {
-        opportunityId: opportunity.id?.toString(),
-        originalSpreadBps: opportunity.spreadBps,
-        freshSpreadBps,
-        spreadDecay,
-        originalAnchorMid: opportunity.anchorMid,
-        freshAnchorMid,
-        freshDexPrice,
-        anchorAgeMs: freshAnchorQuote.staleDurationMs,
-      },
-      'Spread re-validation'
-    );
-
-    // Dynamic break-even check using FRESH prices (Decimal.js for precision)
+    // Dynamic break-even check using FRESH prices
     const feeTierBps = new Decimal(fee).dividedBy(100).toNumber();
     const gasBps = new Decimal(gasEstimate.estimatedGasUsd)
       .dividedBy(tradeSizeUsd)
@@ -336,30 +337,36 @@ export class ExecutionManager {
     const edgeBufferBps = 10;
     const requiredSpreadBps = breakEvenBps + edgeBufferBps;
 
+    const latencyMs = Date.now() - startTime;
+    this.logger.info(
+      {
+        opportunityId: opportunity.id?.toString(),
+        originalSpreadBps: opportunity.spreadBps,
+        freshSpreadBps,
+        spreadDecay,
+        requiredSpreadBps,
+        latencyMs,
+        anchorAgeMs: freshAnchorQuote.staleDurationMs,
+      },
+      'Spread re-validation'
+    );
+
     // Use FRESH spread for break-even check
     if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
       const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
       this.logger.info(
         {
           opportunityId: opportunity.id?.toString(),
-          originalSpreadBps: opportunity.spreadBps,
           freshSpreadBps,
-          spreadDecay,
           requiredSpreadBps,
           feeTierBps,
           slippageBps: quote.slippageBps,
           gasBps,
-          breakEvenBps,
+          latencyMs,
         },
         'Below break-even threshold (fresh spread)'
       );
       await updateOpportunityStatus(opportunity.id!, 'skipped', reason);
-      return;
-    }
-
-    const { gasPriceGwei } = await this.gasEstimator.getCurrentGasPrice();
-    if (!this.gasEstimator.isGasPriceAcceptable(gasPriceGwei)) {
-      await updateOpportunityStatus(opportunity.id!, 'skipped', `Gas price ${gasPriceGwei.toFixed(2)} gwei > max`);
       return;
     }
 
@@ -485,6 +492,17 @@ export class ExecutionManager {
 
   private getPairIdFromConfig(canonical: string): number {
     return this.pairIdMap.get(canonical) ?? 0;
+  }
+
+  private async getCachedGasPrice(): Promise<number> {
+    const now = Date.now();
+    if (this.cachedGasPrice && now - this.cachedGasPrice.timestamp < this.gasPriceCacheTtlMs) {
+      return this.cachedGasPrice.gwei;
+    }
+
+    const { gasPriceGwei } = await this.gasEstimator.getCurrentGasPrice();
+    this.cachedGasPrice = { gwei: gasPriceGwei, timestamp: now };
+    return gasPriceGwei;
   }
 }
 
