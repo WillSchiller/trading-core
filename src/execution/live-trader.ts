@@ -1,4 +1,5 @@
 import type { Address, Hash, TransactionReceipt } from 'viem';
+import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain, Opportunity } from '../types/index.js';
 import type { QuoteResult } from './quoter.js';
@@ -264,10 +265,13 @@ export class LiveTrader {
     gasEstimate: GasEstimate
   ): Promise<LiveTradeResult> {
     const actualOutput = params.quote.amountOut;
-    const actualOutputHuman = Number(actualOutput) / 10 ** params.tokenOutDecimals;
-    const inputAmountHuman = Number(params.amountIn) / 10 ** params.tokenInDecimals;
-    const realizedPrice = actualOutputHuman / inputAmountHuman;
-    const realizedSlippageBps = ((params.quote.quotedPrice - realizedPrice) / params.quote.quotedPrice) * 10000;
+    const tokenOutScale = new Decimal(10).pow(params.tokenOutDecimals);
+    const tokenInScale = new Decimal(10).pow(params.tokenInDecimals);
+    const actualOutputHuman = new Decimal(actualOutput.toString()).dividedBy(tokenOutScale).toNumber();
+    const inputAmountHuman = new Decimal(params.amountIn.toString()).dividedBy(tokenInScale).toNumber();
+    const realizedPrice = new Decimal(actualOutputHuman).dividedBy(inputAmountHuman).toNumber();
+    const quotedPriceDecimal = new Decimal(params.quote.quotedPrice);
+    const realizedSlippageBps = quotedPriceDecimal.minus(realizedPrice).dividedBy(quotedPriceDecimal).times(10000).toNumber();
 
     const gasCostUsd = this.calculateGasCost(receipt.gasUsed, receipt.effectiveGasPrice, gasEstimate);
     const realizedPnlUsd = this.calculatePnl(params, actualOutputHuman, gasCostUsd);
@@ -366,16 +370,18 @@ export class LiveTrader {
   }
 
   private calculateGasCost(gasUsed: bigint, effectiveGasPrice: bigint, gasEstimate: GasEstimate): number {
-    const gasWei = gasUsed * effectiveGasPrice;
-    const gasEth = Number(gasWei) / 1e18;
-    const ethPrice = gasEstimate.estimatedGasUsd / (Number(gasEstimate.estimatedGasWei) / 1e18);
-    return gasEth * ethPrice;
+    const gasWei = new Decimal((gasUsed * effectiveGasPrice).toString());
+    const gasEth = gasWei.dividedBy(new Decimal('1e18'));
+    const estimatedGasWeiDecimal = new Decimal(gasEstimate.estimatedGasWei.toString());
+    const ethPrice = new Decimal(gasEstimate.estimatedGasUsd).dividedBy(estimatedGasWeiDecimal.dividedBy(new Decimal('1e18')));
+    return gasEth.times(ethPrice).toNumber();
   }
 
   private calculatePnl(params: LiveTradeParams, actualOutputHuman: number, gasCostUsd: number): number {
-    const expectedOutputHuman = Number(params.quote.amountOut) / 10 ** params.tokenOutDecimals;
-    const outputDiff = actualOutputHuman - expectedOutputHuman;
-    const outputDiffUsd = outputDiff * params.opportunity.anchorMid;
-    return params.estimatedProfitUsd + outputDiffUsd - gasCostUsd;
+    const tokenOutScale = new Decimal(10).pow(params.tokenOutDecimals);
+    const expectedOutputHuman = new Decimal(params.quote.amountOut.toString()).dividedBy(tokenOutScale);
+    const outputDiff = new Decimal(actualOutputHuman).minus(expectedOutputHuman);
+    const outputDiffUsd = outputDiff.times(params.opportunity.anchorMid);
+    return new Decimal(params.estimatedProfitUsd).plus(outputDiffUsd).minus(gasCostUsd).toNumber();
   }
 }

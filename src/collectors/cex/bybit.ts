@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import WebSocket from 'ws';
+import { Decimal } from 'decimal.js';
 import { CexConnector, type CexConnectorConfig } from './base.js';
 import type { NormalizedQuote } from '../../types/index.js';
 
@@ -109,14 +110,16 @@ export class BybitConnector extends CexConnector {
         return null;
       }
 
-      const bid = parseFloat(validated.data.b[0][0]);
-      const ask = parseFloat(validated.data.a[0][0]);
+      const bidDecimal = new Decimal(validated.data.b[0][0]);
+      const askDecimal = new Decimal(validated.data.a[0][0]);
 
-      if (bid === 0 || ask === 0) {
+      if (bidDecimal.isZero() || askDecimal.isZero()) {
         return null;
       }
 
-      const mid = (bid + ask) / 2;
+      const bid = bidDecimal.toNumber();
+      const ask = askDecimal.toNumber();
+      const mid = bidDecimal.plus(askDecimal).dividedBy(2).toNumber();
       const ts = new Date(validated.ts);
       const exchangeTsMs = validated.ts;
       const receivedTsMs = receivedAt.getTime();

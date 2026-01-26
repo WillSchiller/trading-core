@@ -13,6 +13,31 @@ import { base, mainnet } from 'viem/chains';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain } from '../types/index.js';
 
+class Mutex {
+  private locked = false;
+  private queue: (() => void)[] = [];
+
+  async acquire(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.locked) {
+        this.locked = true;
+        resolve();
+      } else {
+        this.queue.push(resolve);
+      }
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.locked = false;
+    }
+  }
+}
+
 export interface SignerConfig {
   chain: Chain;
   httpUrl: string;
@@ -27,6 +52,7 @@ export class TransactionSigner {
   private viemChain: ViemChain;
   private currentNonce: number | null;
   private pendingNonces: Set<number>;
+  private nonceMutex: Mutex;
 
   constructor(publicClient: PublicClient, config: SignerConfig) {
     this.logger = createChildLogger({ component: 'signer', chain: config.chain });
@@ -34,6 +60,7 @@ export class TransactionSigner {
     this.viemChain = this.getViemChain(config.chain);
     this.currentNonce = null;
     this.pendingNonces = new Set();
+    this.nonceMutex = new Mutex();
 
     this.account = privateKeyToAccount(config.privateKey as `0x${string}`);
 
@@ -82,11 +109,16 @@ export class TransactionSigner {
   }
 
   async reserveNonce(): Promise<number> {
-    const nonce = await this.getNonce();
-    this.pendingNonces.add(nonce);
-    this.currentNonce = nonce + 1;
-    this.logger.debug({ reservedNonce: nonce }, 'Nonce reserved');
-    return nonce;
+    await this.nonceMutex.acquire();
+    try {
+      const nonce = await this.getNonce();
+      this.pendingNonces.add(nonce);
+      this.currentNonce = nonce + 1;
+      this.logger.debug({ reservedNonce: nonce }, 'Nonce reserved');
+      return nonce;
+    } finally {
+      this.nonceMutex.release();
+    }
   }
 
   releaseNonce(nonce: number): void {

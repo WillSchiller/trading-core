@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js';
 import type { QuoteWithStaleness, NormalizedQuote, Chain } from '../types/index.js';
 
 export interface FilterResult {
@@ -90,7 +91,9 @@ export function depthFilter(input: DepthFilterInput): FilterResult {
     };
   }
 
-  const liquidityUsd = Number(liquidity) * dexMid;
+  const liquidityDecimal = new Decimal(liquidity.toString());
+  const dexMidDecimal = new Decimal(dexMid);
+  const liquidityUsd = liquidityDecimal.times(dexMidDecimal).toNumber();
 
   if (liquidityUsd >= minLiquidityUsd) {
     return {

@@ -13,6 +13,7 @@ export interface CexConnectorConfig {
   reconnectMaxDelayMs?: number;
   reconnectBackoffMultiplier?: number;
   resetAttemptsAfterMs?: number;
+  maxReconnectAttempts?: number;
 }
 
 interface WsReconnectState {
@@ -44,6 +45,7 @@ export abstract class CexConnector extends EventEmitter {
       reconnectMaxDelayMs: config.reconnectMaxDelayMs ?? 60000,
       reconnectBackoffMultiplier: config.reconnectBackoffMultiplier ?? 2,
       resetAttemptsAfterMs: config.resetAttemptsAfterMs ?? 300000,
+      maxReconnectAttempts: config.maxReconnectAttempts ?? 10,
     };
 
     this.logger = createChildLogger({ venue: this.config.venue, component: 'cex-connector' });
@@ -224,6 +226,23 @@ export abstract class CexConnector extends EventEmitter {
 
     this.reconnectState.reconnectAttempts++;
 
+    if (this.reconnectState.reconnectAttempts > this.config.maxReconnectAttempts) {
+      this.logger.error(
+        {
+          attempts: this.reconnectState.reconnectAttempts,
+          maxAttempts: this.config.maxReconnectAttempts,
+          venue: this.config.venue,
+        },
+        'Max reconnection attempts exceeded'
+      );
+      this.emit('maxReconnectAttemptsExceeded', {
+        venue: this.config.venue,
+        attempts: this.reconnectState.reconnectAttempts,
+        lastError: this.reconnectState.lastError,
+      });
+      return;
+    }
+
     const baseDelay = Math.min(
       this.config.reconnectInitialDelayMs *
         Math.pow(this.config.reconnectBackoffMultiplier, this.reconnectState.reconnectAttempts - 1),
@@ -236,6 +255,7 @@ export abstract class CexConnector extends EventEmitter {
     this.logger.info(
       {
         attempt: this.reconnectState.reconnectAttempts,
+        maxAttempts: this.config.maxReconnectAttempts,
         delayMs: delay,
       },
       'Scheduling reconnect'
@@ -243,8 +263,28 @@ export abstract class CexConnector extends EventEmitter {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      this.connect().catch((err) => {
+        this.logger.error({ error: (err as Error).message }, 'Error during reconnect');
+        this.scheduleReconnect();
+      });
     }, delay);
+  }
+
+  public manualReconnect(): void {
+    this.logger.info('Manual reconnect triggered');
+    this.reconnectState.reconnectAttempts = 0;
+    if (this.ws) {
+      this.ws.terminate();
+    } else {
+      this.connect().catch((err) => {
+        this.logger.error({ error: (err as Error).message }, 'Error during manual reconnect');
+      });
+    }
+  }
+
+  public resetReconnectAttempts(): void {
+    this.reconnectState.reconnectAttempts = 0;
+    this.logger.debug('Reconnect attempts reset');
   }
 
   protected clearTimers(): void {

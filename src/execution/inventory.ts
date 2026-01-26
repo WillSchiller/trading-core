@@ -1,3 +1,5 @@
+import { Mutex } from 'async-mutex';
+import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain } from '../types/index.js';
 
@@ -21,10 +23,12 @@ export class InventoryManager {
   private totalTradesExecuted: number = 0;
   private totalTradesSkipped: number = 0;
   private skippedByInsufficientFunds: number = 0;
+  private readonly mutex: Mutex;
 
   constructor(chain: Chain, config: InventoryConfig) {
     this.logger = createChildLogger({ component: 'inventory', chain });
     this.trackingEnabled = config.trackingEnabled;
+    this.mutex = new Mutex();
 
     this.balances = new Map();
     this.initialBalances = new Map();
@@ -59,6 +63,10 @@ export class InventoryManager {
     return this.balances.get(normalizedToken) ?? 0;
   }
 
+  private getBalanceUnsafe(token: string): number {
+    return this.balances.get(token) ?? 0;
+  }
+
   deductBalance(token: string, amount: number): boolean {
     if (!this.trackingEnabled) {
       return true;
@@ -79,8 +87,15 @@ export class InventoryManager {
       return false;
     }
 
-    this.balances.set(normalizedToken, current - amount);
+    const newBalance = new Decimal(current).minus(amount).toNumber();
+    this.balances.set(normalizedToken, newBalance);
     return true;
+  }
+
+  private deductBalanceUnsafe(token: string, amount: number): void {
+    const current = this.balances.get(token) ?? 0;
+    const newBalance = new Decimal(current).minus(amount).toNumber();
+    this.balances.set(token, newBalance);
   }
 
   addBalance(token: string, amount: number): void {
@@ -90,93 +105,107 @@ export class InventoryManager {
 
     const normalizedToken = token.toUpperCase();
     const current = this.balances.get(normalizedToken) ?? 0;
-    this.balances.set(normalizedToken, current + amount);
+    const newBalance = new Decimal(current).plus(amount).toNumber();
+    this.balances.set(normalizedToken, newBalance);
   }
 
-  executeTrade(
+  private addBalanceUnsafe(token: string, amount: number): void {
+    const current = this.balances.get(token) ?? 0;
+    const newBalance = new Decimal(current).plus(amount).toNumber();
+    this.balances.set(token, newBalance);
+  }
+
+  async executeTrade(
     tokenIn: string,
     amountIn: number,
     tokenOut: string,
     amountOut: number
-  ): { success: boolean; reason?: string } {
-    if (!this.trackingEnabled) {
+  ): Promise<{ success: boolean; reason?: string }> {
+    return this.mutex.runExclusive(() => {
+      if (!this.trackingEnabled) {
+        this.totalTradesExecuted++;
+        return { success: true };
+      }
+
+      const normalizedIn = tokenIn.toUpperCase();
+      const normalizedOut = tokenOut.toUpperCase();
+      const currentBalance = this.getBalanceUnsafe(normalizedIn);
+
+      if (currentBalance < amountIn) {
+        this.totalTradesSkipped++;
+        this.skippedByInsufficientFunds++;
+
+        this.logger.info(
+          {
+            tokenIn: normalizedIn,
+            required: amountIn,
+            available: currentBalance,
+            tokenOut: normalizedOut,
+            amountOut,
+          },
+          'Trade skipped - insufficient balance'
+        );
+
+        return {
+          success: false,
+          reason: `Insufficient ${normalizedIn}: need ${amountIn.toFixed(4)}, have ${currentBalance.toFixed(4)}`,
+        };
+      }
+
+      this.deductBalanceUnsafe(normalizedIn, amountIn);
+      this.addBalanceUnsafe(normalizedOut, amountOut);
       this.totalTradesExecuted++;
-      return { success: true };
-    }
-
-    const normalizedIn = tokenIn.toUpperCase();
-    const normalizedOut = tokenOut.toUpperCase();
-    const currentBalance = this.getBalance(normalizedIn);
-
-    if (currentBalance < amountIn) {
-      this.totalTradesSkipped++;
-      this.skippedByInsufficientFunds++;
 
       this.logger.info(
         {
           tokenIn: normalizedIn,
-          required: amountIn,
-          available: currentBalance,
+          amountIn,
           tokenOut: normalizedOut,
           amountOut,
+          newBalanceIn: this.getBalanceUnsafe(normalizedIn),
+          newBalanceOut: this.getBalanceUnsafe(normalizedOut),
         },
-        'Trade skipped - insufficient balance'
+        'Trade executed - inventory updated'
       );
 
-      return {
-        success: false,
-        reason: `Insufficient ${normalizedIn}: need ${amountIn.toFixed(4)}, have ${currentBalance.toFixed(4)}`,
-      };
-    }
-
-    this.deductBalance(normalizedIn, amountIn);
-    this.addBalance(normalizedOut, amountOut);
-    this.totalTradesExecuted++;
-
-    this.logger.info(
-      {
-        tokenIn: normalizedIn,
-        amountIn,
-        tokenOut: normalizedOut,
-        amountOut,
-        newBalanceIn: this.getBalance(normalizedIn),
-        newBalanceOut: this.getBalance(normalizedOut),
-      },
-      'Trade executed - inventory updated'
-    );
-
-    return { success: true };
+      return { success: true };
+    });
   }
 
-  getState(): InventoryState {
-    return {
+  async getState(): Promise<InventoryState> {
+    return this.mutex.runExclusive(() => ({
       balances: new Map(this.balances),
       totalTradesExecuted: this.totalTradesExecuted,
       totalTradesSkipped: this.totalTradesSkipped,
       skippedByInsufficientFunds: this.skippedByInsufficientFunds,
-    };
+    }));
   }
 
-  getBalanceSummary(): Record<string, { initial: number; current: number; change: number }> {
-    const summary: Record<string, { initial: number; current: number; change: number }> = {};
+  async getBalanceSummary(): Promise<Record<string, { initial: number; current: number; change: number }>> {
+    return this.mutex.runExclusive(() => {
+      const summary: Record<string, { initial: number; current: number; change: number }> = {};
 
-    for (const [token, current] of this.balances) {
-      const initial = this.initialBalances.get(token) ?? 0;
-      summary[token] = {
-        initial,
-        current,
-        change: current - initial,
-      };
-    }
+      for (const [token, current] of this.balances) {
+        const initial = this.initialBalances.get(token) ?? 0;
+        const change = new Decimal(current).minus(initial).toNumber();
+        summary[token] = {
+          initial,
+          current,
+          change,
+        };
+      }
 
-    return summary;
+      return summary;
+    });
   }
 
-  reset(): void {
-    this.balances = new Map(this.initialBalances);
-    this.totalTradesExecuted = 0;
-    this.totalTradesSkipped = 0;
-    this.skippedByInsufficientFunds = 0;
+  async reset(): Promise<void> {
+    await this.mutex.runExclusive(() => {
+      this.balances = new Map(this.initialBalances);
+      this.totalTradesExecuted = 0;
+      this.totalTradesSkipped = 0;
+      this.skippedByInsufficientFunds = 0;
+    });
 
     this.logger.info(
       { balances: Object.fromEntries(this.balances) },

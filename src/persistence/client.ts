@@ -12,6 +12,9 @@ export interface DbConfig {
   user: string;
   password: string;
   max?: number;
+  connectionTimeoutMillis?: number;
+  idleTimeoutMillis?: number;
+  statementTimeoutMillis?: number;
 }
 
 export function createPool(config: DbConfig): pg.Pool {
@@ -26,6 +29,9 @@ export function createPool(config: DbConfig): pg.Pool {
     user: config.user,
     password: config.password,
     max: config.max ?? 10,
+    connectionTimeoutMillis: config.connectionTimeoutMillis ?? 5000,
+    idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+    statement_timeout: config.statementTimeoutMillis ?? 10000,
   });
 
   pool.on('error', (err) => {
@@ -54,6 +60,11 @@ export async function closePool(): Promise<void> {
   }
 }
 
+function redactParams(params?: unknown[]): string {
+  if (!params || params.length === 0) return '[]';
+  return `[${params.length} params]`;
+}
+
 export async function query<T extends pg.QueryResultRow>(
   text: string,
   params?: unknown[]
@@ -62,6 +73,24 @@ export async function query<T extends pg.QueryResultRow>(
   const start = Date.now();
   const result = await p.query<T>(text, params);
   const duration = Date.now() - start;
-  logger.debug({ query: text.slice(0, 100), duration, rows: result.rowCount }, 'Query executed');
+  logger.debug({ query: text.slice(0, 100), params: redactParams(params), duration, rows: result.rowCount }, 'Query executed');
   return result;
+}
+
+export async function withTransaction<T>(
+  fn: (client: pg.PoolClient) => Promise<T>
+): Promise<T> {
+  const p = getPool();
+  const client = await p.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

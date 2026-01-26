@@ -1,4 +1,5 @@
 import type { Address } from 'viem';
+import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain, Opportunity } from '../types/index.js';
 import type { QuoteResult } from './quoter.js';
@@ -123,13 +124,14 @@ export class PaperTrader {
 
     const deadline = new Date(Date.now() + 120 * 1000);
 
-    const expectedOutputHuman = Number(quote.amountOut) / 10 ** params.tokenOutDecimals;
+    const tokenOutScale = new Decimal(10).pow(params.tokenOutDecimals);
+    const expectedOutputHuman = new Decimal(quote.amountOut.toString()).dividedBy(tokenOutScale).toNumber();
 
     const simulatedSlippageBps = this.simulateSlippage(quote.slippageBps);
-    const slippageFactor = 1 - simulatedSlippageBps / 10000;
-    const simulatedOutput = BigInt(Math.floor(Number(quote.amountOut) * slippageFactor));
-    const simulatedOutputHuman = Number(simulatedOutput) / 10 ** params.tokenOutDecimals;
-    const simulatedPrice = simulatedOutputHuman / inputAmountHuman;
+    const slippageFactor = new Decimal(1).minus(new Decimal(simulatedSlippageBps).dividedBy(10000));
+    const simulatedOutput = BigInt(slippageFactor.times(quote.amountOut.toString()).floor().toString());
+    const simulatedOutputHuman = new Decimal(simulatedOutput.toString()).dividedBy(tokenOutScale).toNumber();
+    const simulatedPrice = new Decimal(simulatedOutputHuman).dividedBy(inputAmountHuman).toNumber();
 
     const simulatedGasUsd = this.simulateGasCost(gasEstimate.estimatedGasUsd);
     const simulatedPnlUsd = this.calculatePnl(
@@ -232,15 +234,20 @@ export class PaperTrader {
   }
 
   private simulateSlippage(expectedSlippageBps: number): number {
-    const variance = 0.2;
-    const randomFactor = 1 + (Math.random() - 0.5) * variance;
-    return Math.max(0, expectedSlippageBps * randomFactor);
+    const variance = new Decimal('0.2');
+    const randomFactor = new Decimal(1).plus(
+      new Decimal(Math.random()).minus('0.5').times(variance)
+    );
+    const result = new Decimal(expectedSlippageBps).times(randomFactor);
+    return Decimal.max(0, result).toNumber();
   }
 
   private simulateGasCost(estimatedGasUsd: number): number {
-    const variance = 0.15;
-    const randomFactor = 1 + (Math.random() - 0.5) * variance;
-    return estimatedGasUsd * randomFactor;
+    const variance = new Decimal('0.15');
+    const randomFactor = new Decimal(1).plus(
+      new Decimal(Math.random()).minus('0.5').times(variance)
+    );
+    return new Decimal(estimatedGasUsd).times(randomFactor).toNumber();
   }
 
   private calculatePnl(
@@ -249,20 +256,25 @@ export class PaperTrader {
     outputAmountHuman: number,
     gasCostUsd: number
   ): number {
-    let tradeSizeUsd: number;
-    let outputValueUsd: number;
+    const inputDecimal = new Decimal(inputAmountHuman);
+    const outputDecimal = new Decimal(outputAmountHuman);
+    const anchorMid = new Decimal(opportunity.anchorMid);
+    const gas = new Decimal(gasCostUsd);
+
+    let tradeSizeUsd: Decimal;
+    let outputValueUsd: Decimal;
 
     if (opportunity.direction === 'buy_dex') {
-      tradeSizeUsd = inputAmountHuman;
-      outputValueUsd = outputAmountHuman * opportunity.anchorMid;
+      tradeSizeUsd = inputDecimal;
+      outputValueUsd = outputDecimal.times(anchorMid);
     } else {
-      tradeSizeUsd = inputAmountHuman * opportunity.anchorMid;
-      outputValueUsd = outputAmountHuman;
+      tradeSizeUsd = inputDecimal.times(anchorMid);
+      outputValueUsd = outputDecimal;
     }
 
-    const grossPnl = outputValueUsd - tradeSizeUsd;
-    const netPnl = grossPnl - gasCostUsd;
+    const grossPnl = outputValueUsd.minus(tradeSizeUsd);
+    const netPnl = grossPnl.minus(gas);
 
-    return netPnl;
+    return netPnl.toNumber();
   }
 }

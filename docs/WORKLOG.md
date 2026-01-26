@@ -402,3 +402,41 @@ Created lightweight dashboard sync workflow and script:
 3. **Manual (Local):** Run `./scripts/sync-dashboards.sh`
 
 ---
+
+## 2026-01-26 (evening)
+
+### Data Collector Agent
+
+**DONE** - Fixed missing block timestamps in DEX quotes (Medium Priority Audit Issue)
+
+**Problem:**
+- DEX quotes (from UniswapV3Connector) were using `ts: new Date()` which captured system time, not actual block timestamp
+- This caused time alignment issues with CEX quotes which use exchange timestamps
+- The `blockTsMs` field in NormalizedQuote interface was not being populated
+
+**Solution:**
+Updated `/Users/will/dev/blockhelix/src/collectors/dex/uniswap-v3.ts` to properly propagate block timestamps:
+
+1. Modified `handleNewBlockEventDriven()` to accept full `blockInfo` object instead of just `blockNumber`
+2. Modified `handleNewBlockPolling()` to accept full `blockInfo` object
+3. Updated `fetchAllPoolsMulticall()` to accept `blockInfo` and set:
+   - `ts: new Date(blockInfo.timestamp)` - uses actual block timestamp
+   - `blockTsMs: blockInfo.timestamp` - populates the field for time alignment checks
+4. Updated `fetchPoolQuote()` with same changes
+5. Updated initial fetch to retrieve block timestamp via `blockWatcher.fetchBlockWithTimestamp()`
+
+**Files Changed:**
+- `/Users/will/dev/blockhelix/src/collectors/dex/uniswap-v3.ts` - 6 method signatures and implementations updated
+- `/Users/will/dev/blockhelix/src/detection/index.ts` - Fixed unused import warning
+
+**Verification:**
+- All unit tests pass (67 tests)
+- TypeScript compilation succeeds with no errors
+- Build completes successfully
+
+**Impact:**
+- DEX quotes now have accurate block timestamps for proper time alignment with CEX quotes
+- Time alignment filter in detection layer can now correctly validate temporal synchronization
+- Improved audit trail for quote timing analysis
+
+---

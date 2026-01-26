@@ -136,7 +136,7 @@ export class UniswapV3Connector extends EventEmitter {
     await this.poolEventWatcher.start();
 
     this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) =>
-      this.handleNewBlockEventDriven(blockInfo.blockNumber)
+      this.handleNewBlockEventDriven(blockInfo)
     );
 
     this.logger.info('Event-driven mode activated');
@@ -145,7 +145,8 @@ export class UniswapV3Connector extends EventEmitter {
     const currentBlock = this.blockWatcher.getLastBlock();
     if (currentBlock > 0n) {
       this.logger.info({ blockNumber: currentBlock.toString() }, 'Performing initial pool fetch');
-      await this.handleNewBlockEventDriven(currentBlock);
+      const blockInfo = await this.blockWatcher.fetchBlockWithTimestamp(currentBlock);
+      await this.handleNewBlockEventDriven(blockInfo);
     }
   }
 
@@ -154,23 +155,23 @@ export class UniswapV3Connector extends EventEmitter {
 
     this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) => {
       this.logger.info({ blockNumber: blockInfo.blockNumber.toString(), timestamp: blockInfo.timestamp }, 'Block event received in Uniswap connector');
-      this.handleNewBlockPolling(blockInfo.blockNumber);
+      this.handleNewBlockPolling(blockInfo);
     });
 
     this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Polling mode activated (legacy)');
   }
 
-  private async handleNewBlockEventDriven(blockNumber: bigint): Promise<void> {
+  private async handleNewBlockEventDriven(blockInfo: { blockNumber: bigint; timestamp: number }): Promise<void> {
     if (!this.isRunning || !this.poolStateTracker) return;
 
-    this.poolStateTracker.updateGlobalBlock(blockNumber);
+    this.poolStateTracker.updateGlobalBlock(blockInfo.blockNumber);
 
     const dirtyPools = this.poolStateTracker.getDirtyPools();
     const cleanPools = this.poolStateTracker.getCleanPools();
 
     this.logger.debug(
       {
-        blockNumber: blockNumber.toString(),
+        blockNumber: blockInfo.blockNumber.toString(),
         dirtyPools: dirtyPools.length,
         cleanPools: cleanPools.length,
         totalPools: this.config.pools.length,
@@ -180,7 +181,7 @@ export class UniswapV3Connector extends EventEmitter {
 
     if (dirtyPools.length === 0) {
       this.logger.debug(
-        { blockNumber: blockNumber.toString() },
+        { blockNumber: blockInfo.blockNumber.toString() },
         'No dirty pools, skipping RPC calls'
       );
       return;
@@ -194,7 +195,7 @@ export class UniswapV3Connector extends EventEmitter {
         return Promise.resolve(null);
       }
 
-      return this.fetchPoolQuote(pool, blockNumber).catch((error) => {
+      return this.fetchPoolQuote(pool, blockInfo).catch((error) => {
         this.logger.error(
           {
             pool: pool.address,
@@ -216,32 +217,32 @@ export class UniswapV3Connector extends EventEmitter {
     }
   }
 
-  private async handleNewBlockPolling(blockNumber: bigint): Promise<void> {
+  private async handleNewBlockPolling(blockInfo: { blockNumber: bigint; timestamp: number }): Promise<void> {
     if (!this.isRunning) {
-      this.logger.warn({ blockNumber: blockNumber.toString() }, 'Received block but connector not running');
+      this.logger.warn({ blockNumber: blockInfo.blockNumber.toString() }, 'Received block but connector not running');
       return;
     }
 
     // Adaptive polling: skip blocks based on spread proximity
     if (this.config.adaptivePolling && this.lastPollBlock > 0n) {
-      const blocksSinceLastPoll = blockNumber - this.lastPollBlock;
+      const blocksSinceLastPoll = blockInfo.blockNumber - this.lastPollBlock;
       if (blocksSinceLastPoll < BigInt(this.currentPollInterval)) {
         this.logger.debug(
-          { blockNumber: blockNumber.toString(), blocksSinceLastPoll: blocksSinceLastPoll.toString(), currentPollInterval: this.currentPollInterval },
+          { blockNumber: blockInfo.blockNumber.toString(), blocksSinceLastPoll: blocksSinceLastPoll.toString(), currentPollInterval: this.currentPollInterval },
           'Skipping block due to adaptive polling'
         );
         return; // Skip this block
       }
     }
 
-    this.lastPollBlock = blockNumber;
+    this.lastPollBlock = blockInfo.blockNumber;
     this.logger.info(
-      { blockNumber: blockNumber.toString(), pollInterval: this.currentPollInterval },
+      { blockNumber: blockInfo.blockNumber.toString(), pollInterval: this.currentPollInterval },
       'Processing block (polling)'
     );
 
     try {
-      const quotes = await this.fetchAllPoolsMulticall(blockNumber);
+      const quotes = await this.fetchAllPoolsMulticall(blockInfo);
       for (const quote of quotes) {
         if (quote) {
           this.emit('quote', quote);
@@ -250,7 +251,7 @@ export class UniswapV3Connector extends EventEmitter {
     } catch (error) {
       this.logger.error({ error: (error as Error).message }, 'Multicall failed, falling back to individual calls');
       const promises = this.config.pools.map((pool) =>
-        this.fetchPoolQuote(pool, blockNumber).catch((err) => {
+        this.fetchPoolQuote(pool, blockInfo).catch((err) => {
           this.logger.error({ pool: pool.address, error: err.message }, 'Failed to fetch pool quote');
           return null;
         })
@@ -297,7 +298,7 @@ export class UniswapV3Connector extends EventEmitter {
     }
   }
 
-  private async fetchAllPoolsMulticall(blockNumber: bigint): Promise<(NormalizedQuote | null)[]> {
+  private async fetchAllPoolsMulticall(blockInfo: { blockNumber: bigint; timestamp: number }): Promise<(NormalizedQuote | null)[]> {
     const startTime = Date.now();
     const client = this.provider.getPublicClient();
 
@@ -347,13 +348,14 @@ export class UniswapV3Connector extends EventEmitter {
       );
 
       quotes.push({
-        ts: new Date(),
+        ts: new Date(blockInfo.timestamp),
         receivedTsMs: Date.now(),
         venue: 'uniswap_v3',
         pair: pool.canonical,
         chain: this.config.chain,
         mid: price,
-        blockNumber,
+        blockNumber: blockInfo.blockNumber,
+        blockTsMs: blockInfo.timestamp,
         sqrtPriceX96,
         liquidity,
         latencyMs,
@@ -361,14 +363,14 @@ export class UniswapV3Connector extends EventEmitter {
     }
 
     this.logger.debug(
-      { blockNumber: blockNumber.toString(), poolCount: this.config.pools.length, latencyMs },
+      { blockNumber: blockInfo.blockNumber.toString(), poolCount: this.config.pools.length, latencyMs },
       'Multicall fetched all pools'
     );
 
     return quotes;
   }
 
-  private async fetchPoolQuote(pool: PoolConfig, blockNumber: bigint): Promise<NormalizedQuote | null> {
+  private async fetchPoolQuote(pool: PoolConfig, blockInfo: { blockNumber: bigint; timestamp: number }): Promise<NormalizedQuote | null> {
     const startTime = Date.now();
 
     try {
@@ -391,7 +393,7 @@ export class UniswapV3Connector extends EventEmitter {
       const liquidity = liquidityResult;
 
       if (this.poolStateTracker && this.config.useEventDriven) {
-        this.poolStateTracker.markClean(pool.address, blockNumber, sqrtPriceX96);
+        this.poolStateTracker.markClean(pool.address, blockInfo.blockNumber, sqrtPriceX96);
       }
 
       const price = this.sqrtPriceX96ToPrice(
@@ -404,13 +406,14 @@ export class UniswapV3Connector extends EventEmitter {
       const latencyMs = Date.now() - startTime;
 
       return {
-        ts: new Date(),
+        ts: new Date(blockInfo.timestamp),
         receivedTsMs: Date.now(),
         venue: 'uniswap_v3',
         pair: pool.canonical,
         chain: this.config.chain,
         mid: price,
-        blockNumber,
+        blockNumber: blockInfo.blockNumber,
+        blockTsMs: blockInfo.timestamp,
         sqrtPriceX96,
         liquidity,
         latencyMs,

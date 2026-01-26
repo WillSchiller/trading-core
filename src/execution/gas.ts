@@ -21,6 +21,7 @@ export interface GasEstimatorConfig {
 
 const ETH_USD_FALLBACK = 3000;
 const DEFAULT_GAS_CACHE_TTL_MS = 10000;
+const DEFAULT_ETH_PRICE_STALENESS_MS = 60000;
 
 interface CachedGasPrice {
   maxFeePerGas: bigint;
@@ -29,11 +30,18 @@ interface CachedGasPrice {
   timestamp: number;
 }
 
+interface EthPriceState {
+  price: number;
+  updatedAt: number;
+  source: 'live' | 'fallback';
+}
+
 export class GasEstimator {
   private logger: Logger;
   private publicClient: PublicClient;
   private config: Required<GasEstimatorConfig>;
-  private ethUsdPrice: number;
+  private ethPriceState: EthPriceState;
+  private ethPriceStalenessTtlMs: number;
   private cachedGasPrice: CachedGasPrice | null = null;
 
   constructor(publicClient: PublicClient, config: GasEstimatorConfig) {
@@ -43,12 +51,57 @@ export class GasEstimator {
       ...config,
       gasCacheTtlMs: config.gasCacheTtlMs ?? DEFAULT_GAS_CACHE_TTL_MS,
     };
-    this.ethUsdPrice = ETH_USD_FALLBACK;
+    this.ethPriceStalenessTtlMs = DEFAULT_ETH_PRICE_STALENESS_MS;
+    this.ethPriceState = {
+      price: ETH_USD_FALLBACK,
+      updatedAt: 0,
+      source: 'fallback',
+    };
+    this.logger.warn(
+      { fallbackPrice: ETH_USD_FALLBACK },
+      'Using fallback ETH/USD price - call setEthUsdPrice() with live data'
+    );
   }
 
   setEthUsdPrice(price: number): void {
-    this.ethUsdPrice = price;
+    this.ethPriceState = {
+      price,
+      updatedAt: Date.now(),
+      source: 'live',
+    };
     this.logger.debug({ ethUsdPrice: price }, 'ETH/USD price updated');
+  }
+
+  setEthPriceStalenessTtl(ttlMs: number): void {
+    this.ethPriceStalenessTtlMs = ttlMs;
+  }
+
+  getEthPriceState(): { price: number; isStale: boolean; ageMs: number; source: 'live' | 'fallback' } {
+    const now = Date.now();
+    const ageMs = now - this.ethPriceState.updatedAt;
+    const isStale = this.ethPriceState.source === 'fallback' || ageMs > this.ethPriceStalenessTtlMs;
+    return {
+      price: this.ethPriceState.price,
+      isStale,
+      ageMs,
+      source: this.ethPriceState.source,
+    };
+  }
+
+  private get ethUsdPrice(): number {
+    const state = this.getEthPriceState();
+    if (state.isStale) {
+      this.logger.warn(
+        {
+          price: state.price,
+          ageMs: state.ageMs,
+          source: state.source,
+          staleTtlMs: this.ethPriceStalenessTtlMs,
+        },
+        'ETH/USD price is stale'
+      );
+    }
+    return state.price;
   }
 
   async estimateSwapGas(gasLimitEstimate: bigint): Promise<GasEstimate> {

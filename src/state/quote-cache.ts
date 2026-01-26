@@ -1,3 +1,4 @@
+import { Mutex } from 'async-mutex';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { NormalizedQuote, QuoteWithStaleness, Chain, QuoteQuality } from '../types/index.js';
 import { validateTimestamps } from '../utils/clock.js';
@@ -45,10 +46,12 @@ export class QuoteCache {
   private currentBlocks: Map<Chain, bigint>;
   private blockTimestamps: Map<string, number>;
   private thinMarketMap: Map<string, number>;
+  private readonly mutex: Mutex;
 
   constructor(config: QuoteCacheConfig) {
     this.logger = createChildLogger({ component: 'quote-cache' });
     this.cache = new Map();
+    this.mutex = new Mutex();
     this.config = {
       ...config,
       maxFutureTsMs: config.maxFutureTsMs ?? 500,
@@ -62,12 +65,14 @@ export class QuoteCache {
     );
   }
 
-  public addThinMarketPair(pair: string, maxQuoteAgeMs: number): void {
-    this.thinMarketMap.set(pair, maxQuoteAgeMs);
-    this.logger.info({ pair, maxQuoteAgeMs }, 'Added thin market pair');
+  public async addThinMarketPair(pair: string, maxQuoteAgeMs: number): Promise<void> {
+    await this.mutex.runExclusive(() => {
+      this.thinMarketMap.set(pair, maxQuoteAgeMs);
+      this.logger.info({ pair, maxQuoteAgeMs }, 'Added thin market pair');
+    });
   }
 
-  public updateQuote(quote: NormalizedQuote): void {
+  public async updateQuote(quote: NormalizedQuote): Promise<void> {
     const key = this.buildKey({
       venue: quote.venue,
       pair: quote.pair,
@@ -129,13 +134,17 @@ export class QuoteCache {
       }
     }
 
-    this.cache.set(key, {
+    const entry: CacheEntry = {
       quote,
       receivedAt: new Date(),
       isValidTs,
       invalidTsReason,
       isThinMarket,
       quality,
+    };
+
+    await this.mutex.runExclusive(() => {
+      this.cache.set(key, entry);
     });
 
     this.logger.debug(
@@ -153,19 +162,21 @@ export class QuoteCache {
     );
   }
 
-  public updateCurrentBlock(chain: Chain, blockNumber: bigint, timestamp?: number): void {
-    this.currentBlocks.set(chain, blockNumber);
-    if (timestamp !== undefined) {
-      const key = `${chain}:${blockNumber.toString()}`;
-      this.blockTimestamps.set(key, timestamp);
+  public async updateCurrentBlock(chain: Chain, blockNumber: bigint, timestamp?: number): Promise<void> {
+    await this.mutex.runExclusive(() => {
+      this.currentBlocks.set(chain, blockNumber);
+      if (timestamp !== undefined) {
+        const key = `${chain}:${blockNumber.toString()}`;
+        this.blockTimestamps.set(key, timestamp);
 
-      if (this.blockTimestamps.size > 100) {
-        const firstKey = this.blockTimestamps.keys().next().value;
-        if (firstKey) {
-          this.blockTimestamps.delete(firstKey);
+        if (this.blockTimestamps.size > 100) {
+          const firstKey = this.blockTimestamps.keys().next().value;
+          if (firstKey) {
+            this.blockTimestamps.delete(firstKey);
+          }
         }
       }
-    }
+    });
     this.logger.debug(
       { chain, blockNumber: blockNumber.toString(), timestamp },
       'Current block updated'
@@ -281,8 +292,10 @@ export class QuoteCache {
     return quotes;
   }
 
-  public clear(): void {
-    this.cache.clear();
+  public async clear(): Promise<void> {
+    await this.mutex.runExclusive(() => {
+      this.cache.clear();
+    });
     this.logger.info('Cache cleared');
   }
 

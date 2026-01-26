@@ -11,6 +11,35 @@ import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import type { Chain } from './types/index.js';
+import type { RpcEndpoint } from './chain/provider-pool.js';
+import type { PoolConfig } from './config/types.js';
+
+interface ChainRpcConfig {
+  endpoints: RpcEndpoint[];
+  enabled: boolean;
+}
+
+interface CexPairConfig {
+  symbol: string;
+  canonical: string;
+}
+
+interface CexConnectorConfig {
+  enabled: boolean;
+  pairs: CexPairConfig[];
+}
+
+interface UniswapPoolConfig {
+  poolAddress: string;
+  canonical: string;
+  feeTier: number;
+  isPrimary: boolean;
+}
+
+interface DexConnectorConfig {
+  enabled: boolean;
+  chains: Record<string, UniswapPoolConfig[]>;
+}
 import { checkNtpSync } from './utils/clock.js';
 import { initAlerts } from './utils/alerts.js';
 import { buildRpcEndpoints } from './chain/index.js';
@@ -129,7 +158,7 @@ async function main() {
   await runMigrations(pool, sqlDir);
 
 
-  const chainConfigs: Record<string, { endpoints: any[]; enabled: boolean }> = {};
+  const chainConfigs: Record<string, ChainRpcConfig> = {};
   for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
     if (chainConfig.enabled) {
       try {
@@ -148,7 +177,7 @@ async function main() {
     }
   }
 
-  const cexConfigs: any = {};
+  const cexConfigs: Record<string, CexConnectorConfig> = {};
 
   if (config.app.venues.cex.binance.enabled) {
     cexConfigs.binance = {
@@ -156,7 +185,7 @@ async function main() {
       pairs: config.pairs
         .filter(p => p.enabled !== false && p.venues.binance)
         .map(p => ({
-          symbol: (p.venues.binance as any).symbol,
+          symbol: (p.venues.binance as { symbol: string }).symbol,
           canonical: `${p.base}/${p.quote}`,
         })),
     };
@@ -168,7 +197,7 @@ async function main() {
       pairs: config.pairs
         .filter(p => p.enabled !== false && p.venues.coinbase)
         .map(p => ({
-          symbol: (p.venues.coinbase as any).symbol,
+          symbol: (p.venues.coinbase as { symbol: string }).symbol,
           canonical: `${p.base}/${p.quote}`,
         })),
     };
@@ -180,21 +209,21 @@ async function main() {
       pairs: config.pairs
         .filter(p => p.enabled !== false && p.venues.bybit)
         .map(p => ({
-          symbol: (p.venues.bybit as any).symbol,
+          symbol: (p.venues.bybit as { symbol: string }).symbol,
           canonical: `${p.base}/${p.quote}`,
         })),
     };
   }
 
-  const dexConfigs: any = {};
+  const dexConfigs: Record<string, DexConnectorConfig> = {};
 
   if (config.app.venues.dex.uniswap_v3.enabled) {
-    const uniswapChains: any = {};
+    const uniswapChains: Record<string, UniswapPoolConfig[]> = {};
 
     for (const pairConfig of config.pairs) {
       if (pairConfig.enabled === false) continue;
       const chain = pairConfig.chain;
-      const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
+      const uniV3Venues = pairConfig.venues.uniswap_v3 as Record<string, PoolConfig[]> | undefined;
 
       if (!uniV3Venues || !uniV3Venues[chain]) continue;
 
@@ -207,7 +236,7 @@ async function main() {
         uniswapChains[chain].push({
           poolAddress: poolConfig.pool,
           canonical: `${pairConfig.base}/${pairConfig.quote}`,
-          feeTier: poolConfig.feeTier,
+          feeTier: poolConfig.feeTier ?? 0,
           isPrimary: poolConfig.primary === true,
         });
       }
@@ -247,13 +276,21 @@ async function main() {
   await orchestrator.start();
   logger.info('Collector orchestrator started');
 
-  const venueIdMapQuery = await pool.query('SELECT id, name FROM venues');
+  interface VenueRow {
+    id: number;
+    name: string;
+  }
+  const venueIdMapQuery = await pool.query<VenueRow>('SELECT id, name FROM venues');
   const venueIdMap = new Map<string, number>();
   for (const row of venueIdMapQuery.rows) {
     venueIdMap.set(row.name, row.id);
   }
 
-  const pairIdMapQuery = await pool.query('SELECT id, canonical FROM pairs');
+  interface PairRow {
+    id: number;
+    canonical: string;
+  }
+  const pairIdMapQuery = await pool.query<PairRow>('SELECT id, canonical FROM pairs');
   const pairIdMap = new Map<string, number>();
   for (const row of pairIdMapQuery.rows) {
     pairIdMap.set(row.canonical, row.id);
@@ -342,7 +379,7 @@ async function main() {
       const calibratorPools = config.pairs
         .filter((p) => p.enabled !== false && p.chain === chain)
         .flatMap((pairConfig) => {
-          const uniV3Venues = (pairConfig.venues as any).uniswap_v3;
+          const uniV3Venues = pairConfig.venues.uniswap_v3 as Record<string, PoolConfig[]> | undefined;
           if (!uniV3Venues || !uniV3Venues[chain]) return [];
 
           const baseToken = tokenMap.get(pairConfig.base);
@@ -353,9 +390,9 @@ async function main() {
           const quoteAddr = quoteToken.address.toLowerCase();
           const baseIsToken0 = baseAddr < quoteAddr;
 
-          return uniV3Venues[chain].map((poolCfg: any) => ({
+          return uniV3Venues[chain].map((poolCfg: PoolConfig) => ({
             address: poolCfg.pool as `0x${string}`,
-            feeTierBps: poolCfg.feeTier / 100,
+            feeTierBps: (poolCfg.feeTier ?? 0) / 100,
             token0: (baseIsToken0 ? baseToken.address : quoteToken.address) as `0x${string}`,
             token1: (baseIsToken0 ? quoteToken.address : baseToken.address) as `0x${string}`,
             token0Decimals: baseIsToken0 ? baseToken.decimals : quoteToken.decimals,
@@ -429,8 +466,18 @@ async function main() {
     process.exit(0);
   };
 
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => {
+    shutdown('SIGINT').catch((err) => {
+      logger.error({ error: (err as Error).message }, 'Error during SIGINT shutdown');
+      process.exit(1);
+    });
+  });
+  process.on('SIGTERM', () => {
+    shutdown('SIGTERM').catch((err) => {
+      logger.error({ error: (err as Error).message }, 'Error during SIGTERM shutdown');
+      process.exit(1);
+    });
+  });
 
   logger.info('Dislocation trader ready - all systems online');
 }

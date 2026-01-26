@@ -1,4 +1,5 @@
 import type { PublicClient, Address } from 'viem';
+import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain } from '../types/index.js';
 
@@ -152,16 +153,22 @@ export class UniswapQuoter {
     tokenOutDecimals: number,
     invertPrice: boolean
   ): number {
-    const amountInAdjusted = Number(amountIn) / 10 ** tokenInDecimals;
-    const amountOutAdjusted = Number(amountOut) / 10 ** tokenOutDecimals;
+    const amountInDecimal = new Decimal(amountIn.toString());
+    const amountOutDecimal = new Decimal(amountOut.toString());
+    const tokenInScale = new Decimal(10).pow(tokenInDecimals);
+    const tokenOutScale = new Decimal(10).pow(tokenOutDecimals);
+    const amountInAdjusted = amountInDecimal.dividedBy(tokenInScale);
+    const amountOutAdjusted = amountOutDecimal.dividedBy(tokenOutScale);
     // invertPrice=true for buy_dex (USDC->WETH), returns price in base/quote terms
     return invertPrice
-      ? amountInAdjusted / amountOutAdjusted
-      : amountOutAdjusted / amountInAdjusted;
+      ? amountInAdjusted.dividedBy(amountOutAdjusted).toNumber()
+      : amountOutAdjusted.dividedBy(amountInAdjusted).toNumber();
   }
 
   private calculateSlippage(expectedPrice: number, quotedPrice: number): number {
-    return ((expectedPrice - quotedPrice) / expectedPrice) * 10000;
+    const expected = new Decimal(expectedPrice);
+    const quoted = new Decimal(quotedPrice);
+    return expected.minus(quoted).dividedBy(expected).times(10000).toNumber();
   }
 }
 

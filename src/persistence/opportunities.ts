@@ -1,4 +1,5 @@
-import { getPool } from './client.js';
+import pg from 'pg';
+import { getPool, withTransaction } from './client.js';
 import type { Opportunity, Chain, TradeDirection, OpportunityStatus, Strategy } from '../types/index.js';
 import { createChildLogger } from '../utils/logger.js';
 
@@ -396,4 +397,81 @@ function mapRowToOpportunity(row: any): Opportunity {
     maxSpreadBps: row.max_spread_bps ? parseFloat(row.max_spread_bps) : undefined,
     strategy: (row.strategy as Strategy) || 'dislocation',
   };
+}
+
+export async function insertAndUpdateOpportunityStatus(
+  opportunity: Opportunity,
+  status: OpportunityStatus,
+  skipReason?: string,
+  estimatedProfitUsd?: number
+): Promise<bigint> {
+  return withTransaction(async (client: pg.PoolClient) => {
+    const insertQuery = `
+      INSERT INTO opportunities (
+        detected_at, pair_id, chain, anchor_venue_id, anchor_mid, confirm_venue_id,
+        confirm_mid, dex_venue_id, dex_pool_address, dex_mid, dex_block_number,
+        spread_bps, direction, estimated_slippage_bps, estimated_gas_usd,
+        estimated_pool_fee_bps, estimated_profit_usd, status, skip_reason,
+        volatility_regime, reason_codes, metadata, opened_at, closed_at,
+        last_seen_at, close_reason, opp_key, max_spread_bps, strategy
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
+      )
+      RETURNING id
+    `;
+
+    const insertParams = [
+      opportunity.detectedAt,
+      opportunity.pairId,
+      opportunity.chain,
+      opportunity.anchorVenueId,
+      opportunity.anchorMid,
+      opportunity.confirmVenueId ?? null,
+      opportunity.confirmMid ?? null,
+      opportunity.dexVenueId,
+      opportunity.dexPoolAddress,
+      opportunity.dexMid,
+      opportunity.dexBlockNumber ? opportunity.dexBlockNumber.toString() : null,
+      opportunity.spreadBps,
+      opportunity.direction,
+      opportunity.estimatedSlippageBps ?? null,
+      opportunity.estimatedGasUsd ?? null,
+      opportunity.estimatedPoolFeeBps ?? null,
+      opportunity.estimatedProfitUsd ?? null,
+      opportunity.status,
+      opportunity.skipReason ?? null,
+      opportunity.volatilityRegime ?? null,
+      opportunity.reasonCodes ?? null,
+      opportunity.metadata ? JSON.stringify(opportunity.metadata) : null,
+      opportunity.openedAt ?? null,
+      opportunity.closedAt ?? null,
+      opportunity.lastSeenAt ?? null,
+      opportunity.closeReason ?? null,
+      opportunity.oppKey ?? null,
+      opportunity.maxSpreadBps ?? null,
+      opportunity.strategy ?? 'dislocation',
+    ];
+
+    const insertResult = await client.query<{ id: string }>(insertQuery, insertParams);
+    const id = BigInt(insertResult.rows[0].id);
+
+    const updateQuery = `
+      UPDATE opportunities
+      SET status = $1, skip_reason = $2, estimated_profit_usd = COALESCE($4, estimated_profit_usd)
+      WHERE id = $3
+    `;
+    await client.query(updateQuery, [status, skipReason ?? null, id.toString(), estimatedProfitUsd ?? null]);
+
+    logger.debug(
+      {
+        opportunityId: id.toString(),
+        pairId: opportunity.pairId,
+        chain: opportunity.chain,
+        status,
+      },
+      'Opportunity inserted and status updated atomically'
+    );
+
+    return id;
+  });
 }

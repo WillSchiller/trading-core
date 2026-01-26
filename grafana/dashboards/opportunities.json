@@ -79,10 +79,20 @@
   },
   "panels": [
     {
+      "id": 100,
+      "type": "text",
+      "title": "Understanding Detection vs Execution Time",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "**TIMING NOTE**: This dashboard shows BOTH detection-time and execution-time metrics:\n\n- **DETECTION TIME** = When spread first exceeded threshold (`detected_at`, `spread_bps` from CEX/DEX delta)\n- **EXECUTION TIME** = When trade was evaluated/submitted (`estimated_profit_usd` from quoter with fresh prices)\n\nTypically 100-2000ms lag between detection and execution. See 'Prediction Accuracy' dashboard for detailed comparison."
+      }
+    },
+    {
       "id": 1,
       "type": "timeseries",
       "title": "Opportunities per Hour",
-      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 3, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -143,7 +153,7 @@
       "id": 2,
       "type": "piechart",
       "title": "Opportunities by Status",
-      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 3, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -183,7 +193,7 @@
       "id": 3,
       "type": "piechart",
       "title": "Skip Reasons",
-      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
+      "gridPos": {"x": 18, "y": 3, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -223,7 +233,7 @@
       "id": 4,
       "type": "barchart",
       "title": "Opportunities by Pair",
-      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 11, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -283,7 +293,7 @@
       "id": 5,
       "type": "barchart",
       "title": "Opportunities by Chain",
-      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 11, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -342,8 +352,8 @@
     {
       "id": 6,
       "type": "histogram",
-      "title": "Spread Distribution",
-      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "title": "DETECTION TIME: Spread Distribution (bps)",
+      "gridPos": {"x": 0, "y": 19, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -404,7 +414,7 @@
       "id": 7,
       "type": "table",
       "title": "Reason Codes Summary",
-      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 19, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -447,12 +457,12 @@
       "id": 8,
       "type": "table",
       "title": "Recent Opportunities",
-      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 27, "w": 24, "h": 10},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd, o.estimated_gas_usd FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND o.estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND o.estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND o.estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND o.estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND o.estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND o.estimated_profit_usd > 50)) ORDER BY o.detected_at DESC LIMIT 500",
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps as detect_spread_bps, o.direction, o.status, o.skip_reason, o.estimated_profit_usd as exec_est_profit, o.estimated_gas_usd as exec_est_gas FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND ('${pnl_filter}' = 'all' OR ('${pnl_filter}' = 'profitable' AND o.estimated_profit_usd > 0) OR ('${pnl_filter}' = 'unprofitable' AND o.estimated_profit_usd < 0) OR ('${pnl_filter}' = 'gt1' AND o.estimated_profit_usd > 1) OR ('${pnl_filter}' = 'gt5' AND o.estimated_profit_usd > 5) OR ('${pnl_filter}' = 'gt10' AND o.estimated_profit_usd > 10) OR ('${pnl_filter}' = 'gt50' AND o.estimated_profit_usd > 50)) ORDER BY o.detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -471,8 +481,12 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "spread_bps"},
+            "matcher": {"id": "byName", "options": "detect_spread_bps"},
             "properties": [
+              {
+                "id": "displayName",
+                "value": "Spread@Detect (bps)"
+              },
               {
                 "id": "custom.displayMode",
                 "value": "color-background"
@@ -517,8 +531,12 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "estimated_profit_usd"},
+            "matcher": {"id": "byName", "options": "exec_est_profit"},
             "properties": [
+              {
+                "id": "displayName",
+                "value": "Est Profit@Exec (USD)"
+              },
               {
                 "id": "unit",
                 "value": "currencyUSD"
@@ -545,8 +563,12 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "estimated_gas_usd"},
+            "matcher": {"id": "byName", "options": "exec_est_gas"},
             "properties": [
+              {
+                "id": "displayName",
+                "value": "Est Gas@Exec (USD)"
+              },
               {
                 "id": "unit",
                 "value": "currencyUSD"
@@ -564,7 +586,7 @@
       "id": 9,
       "type": "stat",
       "title": "Total Opportunities",
-      "gridPos": {"x": 0, "y": 34, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -598,8 +620,8 @@
     {
       "id": 10,
       "type": "stat",
-      "title": "Avg Spread (abs)",
-      "gridPos": {"x": 6, "y": 34, "w": 6, "h": 4},
+      "title": "DETECT TIME: Avg Spread (abs)",
+      "gridPos": {"x": 6, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -634,8 +656,8 @@
     {
       "id": 11,
       "type": "stat",
-      "title": "Avg Estimated Profit",
-      "gridPos": {"x": 12, "y": 34, "w": 6, "h": 4},
+      "title": "EXEC TIME: Avg Estimated Profit",
+      "gridPos": {"x": 12, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -671,7 +693,7 @@
       "id": 12,
       "type": "stat",
       "title": "Skip Rate",
-      "gridPos": {"x": 18, "y": 34, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",

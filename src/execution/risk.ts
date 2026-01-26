@@ -1,3 +1,4 @@
+import { Mutex } from 'async-mutex';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import { alertSystemHalt, alertConsecutiveReverts } from '../utils/alerts.js';
 import type { Chain } from '../types/index.js';
@@ -33,10 +34,13 @@ export class RiskManager {
   private config: RiskConfig;
   private state: RiskState;
   private tradeTimestamps: Date[];
+  private readonly mutex: Mutex;
+  private static readonly LOCK_TIMEOUT_MS = 5000;
 
   constructor(chain: Chain, config: RiskConfig) {
     this.logger = createChildLogger({ component: 'risk-manager', chain });
     this.config = config;
+    this.mutex = new Mutex();
     this.state = {
       chain,
       openExposureUsd: 0,
@@ -50,7 +54,16 @@ export class RiskManager {
     this.tradeTimestamps = [];
   }
 
-  checkTradeAllowed(params: TradeParams): RiskCheckResult {
+  async checkTradeAllowed(params: TradeParams): Promise<RiskCheckResult> {
+    const release = await this.acquireWithTimeout();
+    try {
+      return this.checkTradeAllowedUnsafe(params);
+    } finally {
+      release();
+    }
+  }
+
+  private checkTradeAllowedUnsafe(params: TradeParams): RiskCheckResult {
     if (this.state.isHalted) {
       return { allowed: false, reason: `System halted: ${this.state.haltReason}` };
     }
@@ -86,6 +99,21 @@ export class RiskManager {
     }
 
     return { allowed: true };
+  }
+
+  private async acquireWithTimeout(): Promise<() => void> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`RiskManager mutex timeout after ${RiskManager.LOCK_TIMEOUT_MS}ms`));
+      }, RiskManager.LOCK_TIMEOUT_MS);
+    });
+
+    const release = await Promise.race([
+      this.mutex.acquire(),
+      timeoutPromise,
+    ]);
+
+    return release;
   }
 
   private checkCooldown(): RiskCheckResult {
@@ -166,72 +194,101 @@ export class RiskManager {
     return { allowed: true };
   }
 
-  recordTradeSubmitted(tradeSizeUsd: number): void {
-    const now = new Date();
-    this.tradeTimestamps.push(now);
-    this.state.lastTradeAt = now;
-    this.state.openExposureUsd += tradeSizeUsd;
-    this.state.tradesLastHour = this.tradeTimestamps.length;
+  async recordTradeSubmitted(tradeSizeUsd: number): Promise<void> {
+    const release = await this.acquireWithTimeout();
+    try {
+      const now = new Date();
+      this.tradeTimestamps.push(now);
+      this.state.lastTradeAt = now;
+      this.state.openExposureUsd += tradeSizeUsd;
+      this.state.tradesLastHour = this.tradeTimestamps.length;
 
-    this.logger.info(
-      {
-        tradeSizeUsd,
-        openExposureUsd: this.state.openExposureUsd,
-        tradesLastHour: this.state.tradesLastHour,
-      },
-      'Trade submitted'
-    );
-  }
-
-  recordTradeCompleted(tradeSizeUsd: number, success: boolean): void {
-    this.state.openExposureUsd = Math.max(0, this.state.openExposureUsd - tradeSizeUsd);
-
-    if (success) {
-      this.state.consecutiveReverts = 0;
-    } else {
-      this.state.consecutiveReverts++;
-      this.logger.warn(
-        { consecutiveReverts: this.state.consecutiveReverts },
-        'Trade reverted'
+      this.logger.info(
+        {
+          tradeSizeUsd,
+          openExposureUsd: this.state.openExposureUsd,
+          tradesLastHour: this.state.tradesLastHour,
+        },
+        'Trade submitted'
       );
-
-      alertConsecutiveReverts(this.state.chain, this.state.consecutiveReverts).catch(() => {});
-
-      if (this.state.consecutiveReverts >= this.config.haltOnConsecutiveReverts) {
-        this.halt(`${this.state.consecutiveReverts} consecutive reverts`);
-      }
+    } finally {
+      release();
     }
-
-    this.startCooldown();
-
-    this.logger.info(
-      {
-        tradeSizeUsd,
-        success,
-        openExposureUsd: this.state.openExposureUsd,
-        consecutiveReverts: this.state.consecutiveReverts,
-      },
-      'Trade completed'
-    );
   }
 
-  halt(reason: string): void {
-    this.state.isHalted = true;
-    this.state.haltReason = reason;
-    this.logger.error({ reason }, 'System halted');
-    alertSystemHalt(reason).catch(() => {});
+  async recordTradeCompleted(tradeSizeUsd: number, success: boolean): Promise<void> {
+    const release = await this.acquireWithTimeout();
+    try {
+      this.state.openExposureUsd = Math.max(0, this.state.openExposureUsd - tradeSizeUsd);
+
+      if (success) {
+        this.state.consecutiveReverts = 0;
+      } else {
+        this.state.consecutiveReverts++;
+        this.logger.warn(
+          { consecutiveReverts: this.state.consecutiveReverts },
+          'Trade reverted'
+        );
+
+        alertConsecutiveReverts(this.state.chain, this.state.consecutiveReverts).catch((err) => {
+          this.logger.error({ error: (err as Error).message }, 'Failed to send consecutive reverts alert');
+        });
+
+        if (this.state.consecutiveReverts >= this.config.haltOnConsecutiveReverts) {
+          this.halt(`${this.state.consecutiveReverts} consecutive reverts`);
+        }
+      }
+
+      this.startCooldown();
+
+      this.logger.info(
+        {
+          tradeSizeUsd,
+          success,
+          openExposureUsd: this.state.openExposureUsd,
+          consecutiveReverts: this.state.consecutiveReverts,
+        },
+        'Trade completed'
+      );
+    } finally {
+      release();
+    }
   }
 
-  resume(): void {
-    this.state.isHalted = false;
-    this.state.haltReason = null;
-    this.state.consecutiveReverts = 0;
-    this.logger.info('System resumed');
+  async halt(reason: string): Promise<void> {
+    const release = await this.acquireWithTimeout();
+    try {
+      this.state.isHalted = true;
+      this.state.haltReason = reason;
+      this.logger.error({ reason }, 'System halted');
+      alertSystemHalt(reason).catch((err) => {
+        this.logger.error({ error: (err as Error).message }, 'Failed to send system halt alert');
+      });
+    } finally {
+      release();
+    }
   }
 
-  getState(): RiskState {
-    this.pruneOldTrades();
-    return { ...this.state, tradesLastHour: this.tradeTimestamps.length };
+  async resume(): Promise<void> {
+    const release = await this.acquireWithTimeout();
+    try {
+      this.state.isHalted = false;
+      this.state.haltReason = null;
+      this.state.consecutiveReverts = 0;
+      this.logger.info('System resumed');
+    } finally {
+      release();
+    }
+  }
+
+  async getState(): Promise<RiskState> {
+    const release = await this.acquireWithTimeout();
+    try {
+      this.pruneOldTrades();
+      return { ...this.state, tradesLastHour: this.tradeTimestamps.length };
+    } finally {
+      release();
+    }
   }
 
   isHalted(): boolean {

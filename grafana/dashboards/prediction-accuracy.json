@@ -1,0 +1,618 @@
+{
+  "id": null,
+  "uid": "prediction-accuracy",
+  "title": "Prediction Accuracy: Detection vs Execution",
+  "tags": ["dislocation-trader", "analytics", "prediction"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "pair",
+        "type": "query",
+        "label": "Pair",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "definition": "SELECT id as __value, canonical as __text FROM pairs WHERE is_enabled = true ORDER BY canonical",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": "0",
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "chain",
+        "type": "custom",
+        "label": "Chain",
+        "query": "all : All,base : base,mainnet : mainnet",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "base", "value": "base", "selected": false},
+          {"text": "mainnet", "value": "mainnet", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false
+      },
+      {
+        "name": "strategy",
+        "type": "custom",
+        "label": "Strategy",
+        "query": "all : All,dislocation : Dislocation,rank_space : Rank Space",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "Dislocation", "value": "dislocation", "selected": false},
+          {"text": "Rank Space", "value": "rank_space", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "KEY CONCEPT: Detection-time vs Execution-time",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "Understanding the Timeline",
+      "gridPos": {"x": 0, "y": 1, "w": 24, "h": 4},
+      "options": {
+        "mode": "markdown",
+        "content": "## Detection vs Execution Timeline\n\n**DETECTION TIME** (opportunities table):\n- `detected_at`: When spread first exceeded threshold\n- `spread_bps`: CEX-DEX price difference at detection\n- `anchor_mid`, `dex_mid`: Prices at detection time\n\n**EXECUTION TIME** (opportunities + executions tables):\n- `estimated_profit_usd`: Calculated by quoter at execution decision time (fresher prices)\n- `estimated_slippage_bps`, `estimated_gas_usd`: Quoter estimates\n- `created_at` (executions): When trade was submitted\n- `realized_pnl_usd`: Actual P&L after trade confirmed\n\n**Time lag**: Detection → Execution decision → Transaction confirmed (typically 100-2000ms lag)\n\n**Key insight**: `spread_bps` is from detection, but `estimated_profit_usd` uses fresher prices at execution time. This dashboard shows how predictions degrade over time."
+      }
+    },
+    {
+      "id": 3,
+      "type": "row",
+      "title": "Detection-time Metrics (from opportunities table)",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "DETECTION TIME: Spread (bps) - from raw CEX/DEX delta",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT o.detected_at as time, o.spread_bps, p.canonical || ' (' || o.chain::text || ')' as metric FROM opportunities o JOIN pairs p ON o.pair_id = p.id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND o.status IN ('submitted', 'filled') ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "axisLabel": "Spread (bps)",
+            "lineWidth": 1,
+            "fillOpacity": 0
+          },
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}]}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "EXECUTION TIME: Estimated Profit (USD) - from quoter at exec decision",
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT o.detected_at as time, o.estimated_profit_usd, p.canonical || ' (' || o.chain::text || ')' as metric FROM opportunities o JOIN pairs p ON o.pair_id = p.id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR o.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR o.chain::text = '${chain}') AND ('${strategy}' = 'all' OR o.strategy = '${strategy}') AND o.status IN ('submitted', 'filled') AND o.estimated_profit_usd IS NOT NULL ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "axisLabel": "Estimated Profit (USD)",
+            "lineWidth": 1,
+            "fillOpacity": 0
+          },
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Execution Actuals vs Estimates",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Estimated Profit vs Realized P&L (USD)",
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 10},
+      "targets": [
+        {
+          "refId": "Estimated",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT e.created_at as time, o.estimated_profit_usd as value, 'Estimated (at execution)' as metric FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND o.estimated_profit_usd IS NOT NULL ORDER BY time",
+          "format": "time_series"
+        },
+        {
+          "refId": "Realized",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT e.created_at as time, e.realized_pnl_usd as value, 'Realized (actual)' as metric FROM executions e WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 7,
+            "axisLabel": "P&L (USD)",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "always"
+          },
+          "unit": "currencyUSD",
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Estimated (at execution)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}},
+              {"id": "custom.pointSize", "value": 6}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Realized (actual)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}},
+              {"id": "custom.pointSize", "value": 8}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"]}
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Prediction Error Analysis",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Prediction Error: Realized minus Estimated (USD)",
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT e.created_at as time, (e.realized_pnl_usd - o.estimated_profit_usd) as error, p.canonical as metric FROM executions e JOIN opportunities o ON e.opportunity_id = o.id JOIN pairs p ON e.pair_id = p.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "axisLabel": "Error (USD)",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "axisColorMode": "series",
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "transparent"},
+              {"value": 0, "color": "yellow"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 10,
+      "type": "histogram",
+      "title": "Prediction Error Distribution",
+      "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT (e.realized_pnl_usd - o.estimated_profit_usd) as error FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "scheme"
+          },
+          "unit": "currencyUSD"
+        }
+      },
+      "options": {
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Mean Prediction Error",
+      "gridPos": {"x": 0, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT AVG(e.realized_pnl_usd - o.estimated_profit_usd) as value FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": -0.5, "color": "orange"},
+              {"value": 0, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Median Prediction Error",
+      "gridPos": {"x": 6, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY (e.realized_pnl_usd - o.estimated_profit_usd)) as value FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": -0.5, "color": "orange"},
+              {"value": 0, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Prediction Error StdDev",
+      "gridPos": {"x": 12, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT STDDEV(e.realized_pnl_usd - o.estimated_profit_usd) as value FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 2, "color": "yellow"},
+              {"value": 5, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Overestimation Rate (%)",
+      "gridPos": {"x": 18, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE e.realized_pnl_usd < o.estimated_profit_usd) / COUNT(*)::numeric, 1) ELSE 0 END as value FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 70, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Time Lag Analysis",
+      "gridPos": {"x": 0, "y": 38, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Detection to Execution Latency (ms)",
+      "gridPos": {"x": 0, "y": 39, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT e.created_at as time, EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000 as latency_ms, p.canonical as metric FROM executions e JOIN opportunities o ON e.opportunity_id = o.id JOIN pairs p ON e.pair_id = p.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND o.detected_at IS NOT NULL ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 5,
+            "axisLabel": "Latency (ms)",
+            "lineWidth": 1,
+            "fillOpacity": 0
+          },
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 500, "color": "yellow"},
+              {"value": 2000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}
+      }
+    },
+    {
+      "id": 17,
+      "type": "histogram",
+      "title": "Latency Distribution",
+      "gridPos": {"x": 12, "y": 39, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000 as latency_ms FROM executions e JOIN opportunities o ON e.opportunity_id = o.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND o.detected_at IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "hue"
+          },
+          "unit": "ms"
+        }
+      },
+      "options": {
+        "legend": {"showLegend": false}
+      }
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Detailed Comparison Table",
+      "gridPos": {"x": 0, "y": 47, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Detection vs Execution Metrics (Recent Trades)",
+      "gridPos": {"x": 0, "y": 48, "w": 24, "h": 12},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT e.created_at as exec_time, p.canonical as pair, o.detected_at as detect_time, ROUND(EXTRACT(EPOCH FROM (e.created_at - o.detected_at)) * 1000) as lag_ms, o.spread_bps as detect_spread_bps, o.estimated_profit_usd as est_profit_usd, e.realized_pnl_usd as real_pnl_usd, ROUND(e.realized_pnl_usd - o.estimated_profit_usd, 2) as prediction_error_usd, ROUND(((e.realized_pnl_usd - o.estimated_profit_usd) / NULLIF(o.estimated_profit_usd, 0)) * 100, 1) as error_pct, o.estimated_slippage_bps as est_slip_bps, e.realized_slippage_bps as real_slip_bps, o.estimated_gas_usd as est_gas_usd, e.gas_cost_usd as real_gas_usd FROM executions e JOIN opportunities o ON e.opportunity_id = o.id JOIN pairs p ON e.pair_id = p.id WHERE e.created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR e.pair_id::text = '${pair}') AND ('${chain}' = 'all' OR e.chain::text = '${chain}') AND ('${strategy}' = 'all' OR e.strategy = '${strategy}') AND e.realized_pnl_usd IS NOT NULL AND o.estimated_profit_usd IS NOT NULL ORDER BY e.created_at DESC LIMIT 100",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "displayMode": "auto"},
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "detect_spread_bps"},
+            "properties": [
+              {"id": "displayName", "value": "Detect Spread (bps)"},
+              {"id": "custom.width", "value": 150},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "decimals", "value": 2}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "est_profit_usd"},
+            "properties": [
+              {"id": "displayName", "value": "Est Profit (exec-time)"},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.width", "value": 150},
+              {"id": "decimals", "value": 2},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "real_pnl_usd"},
+            "properties": [
+              {"id": "displayName", "value": "Realized P&L"},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.width", "value": 130},
+              {"id": "decimals", "value": 2},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "prediction_error_usd"},
+            "properties": [
+              {"id": "displayName", "value": "Error ($)"},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.width", "value": 110},
+              {"id": "decimals", "value": 2},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": -1, "color": "orange"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "error_pct"},
+            "properties": [
+              {"id": "displayName", "value": "Error %"},
+              {"id": "unit", "value": "percent"},
+              {"id": "custom.width", "value": 100},
+              {"id": "decimals", "value": 1},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": -20, "color": "orange"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "lag_ms"},
+            "properties": [
+              {"id": "displayName", "value": "Lag (ms)"},
+              {"id": "unit", "value": "ms"},
+              {"id": "custom.width", "value": 90},
+              {"id": "decimals", "value": 0},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 500, "color": "yellow"}, {"value": 2000, "color": "red"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "est_slip_bps"},
+            "properties": [
+              {"id": "displayName", "value": "Est Slip"},
+              {"id": "custom.width", "value": 90},
+              {"id": "decimals", "value": 2}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "real_slip_bps"},
+            "properties": [
+              {"id": "displayName", "value": "Real Slip"},
+              {"id": "custom.width", "value": 90},
+              {"id": "decimals", "value": 2}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "est_gas_usd"},
+            "properties": [
+              {"id": "displayName", "value": "Est Gas"},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.width", "value": 90},
+              {"id": "decimals", "value": 2}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "real_gas_usd"},
+            "properties": [
+              {"id": "displayName", "value": "Real Gas"},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.width", "value": 90},
+              {"id": "decimals", "value": 2}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{"displayName": "exec_time", "desc": true}],
+        "footer": {"show": false}
+      }
+    }
+  ]
+}

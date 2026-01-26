@@ -1,9 +1,10 @@
 import { createChildLogger, type Logger } from '../../utils/logger.js';
 import type { QuoteCache } from '../../state/quote-cache.js';
 import type { AppConfig, PairConfig } from '../../config/types.js';
-import type { Chain, Opportunity, TradeDirection } from '../../types/index.js';
+import type { Chain, Opportunity, TradeDirection, NormalizedQuote } from '../../types/index.js';
 import { OpportunityEmitter } from '../emitter.js';
 import { insertOpportunity } from '../../persistence/opportunities.js';
+import { timeAlignmentFilter, getMaxTimeSkewMs } from '../filters.js';
 
 export interface RankSpaceDetectorConfig {
   quoteCache: QuoteCache;
@@ -22,11 +23,13 @@ interface VenueRank {
   chain?: Chain;
   poolAddress?: string;
   blockNumber?: bigint;
+  quote: NormalizedQuote;
 }
 
 interface GapTracking {
   firstSeenMs: number;
   direction: TradeDirection;
+  anchorQuote: NormalizedQuote;
 }
 
 export class RankSpaceDetector {
@@ -40,6 +43,7 @@ export class RankSpaceDetector {
   private gapFirstSeen: Map<string, GapTracking>;
   private intervalHandle: NodeJS.Timeout | null;
   private isRunning: boolean;
+  private cycleInProgress: boolean;
 
   constructor(config: RankSpaceDetectorConfig) {
     this.logger = createChildLogger({ component: 'rank-space-detector' });
@@ -52,6 +56,7 @@ export class RankSpaceDetector {
     this.gapFirstSeen = new Map();
     this.intervalHandle = null;
     this.isRunning = false;
+    this.cycleInProgress = false;
   }
 
   public start(): void {
@@ -89,20 +94,30 @@ export class RankSpaceDetector {
   }
 
   private async runDetectionCycle(): Promise<void> {
-    const startTime = Date.now();
-
-    const enabledPairs = this.pairsConfig.filter((p) => p.enabled !== false);
-
-    for (const pairConfig of enabledPairs) {
-      await this.detectForPair(pairConfig);
+    if (this.cycleInProgress) {
+      this.logger.warn('RankSpace detection cycle still in progress, skipping this tick');
+      return;
     }
 
-    const duration = Date.now() - startTime;
+    this.cycleInProgress = true;
+    const startTime = Date.now();
 
-    if (duration > 50) {
-      this.logger.warn({ duration }, 'RankSpace detection cycle took longer than 50ms');
-    } else {
-      this.logger.debug({ duration }, 'RankSpace detection cycle completed');
+    try {
+      const enabledPairs = this.pairsConfig.filter((p) => p.enabled !== false);
+
+      for (const pairConfig of enabledPairs) {
+        await this.detectForPair(pairConfig);
+      }
+
+      const duration = Date.now() - startTime;
+
+      if (duration > 50) {
+        this.logger.warn({ duration }, 'RankSpace detection cycle took longer than 50ms');
+      } else {
+        this.logger.debug({ duration }, 'RankSpace detection cycle completed');
+      }
+    } finally {
+      this.cycleInProgress = false;
     }
   }
 
@@ -130,6 +145,7 @@ export class RankSpaceDetector {
           mid: quote.quote.mid,
           rank: 0,
           isDex: false,
+          quote: quote.quote,
         });
       }
     }
@@ -151,11 +167,39 @@ export class RankSpaceDetector {
           chain,
           poolAddress: primaryPool,
           blockNumber: dexQuote.quote.blockNumber,
+          quote: dexQuote.quote,
         });
       }
     }
 
     if (venueRanks.length < this.appConfig.rankSpace.minVenues) {
+      this.clearGapTracking(pair, chain);
+      return;
+    }
+
+    const dexRankEntry = venueRanks.find((r) => r.isDex);
+    if (!dexRankEntry) {
+      this.clearGapTracking(pair, chain);
+      return;
+    }
+
+    const anchorRankEntry = venueRanks.find((r) => r.venue === 'binance');
+    if (!anchorRankEntry) {
+      this.clearGapTracking(pair, chain);
+      return;
+    }
+
+    const timeAlignmentResult = timeAlignmentFilter({
+      anchorQuote: anchorRankEntry.quote,
+      dexQuote: dexRankEntry.quote,
+      maxTimeSkewMs: getMaxTimeSkewMs(chain),
+    });
+
+    if (!timeAlignmentResult.passed) {
+      this.logger.debug(
+        { pair, chain, reason: timeAlignmentResult.reason },
+        'RankSpace time alignment check failed'
+      );
       this.clearGapTracking(pair, chain);
       return;
     }
@@ -166,18 +210,12 @@ export class RankSpaceDetector {
       venueRanks[i].rank = i + 1;
     }
 
-    const dexRank = venueRanks.find((r) => r.isDex);
-    if (!dexRank) {
-      this.clearGapTracking(pair, chain);
-      return;
-    }
-
     const totalVenues = venueRanks.length;
     const topThresholdRank = Math.ceil(totalVenues * this.appConfig.rankSpace.triggerPercentile);
     const bottomThresholdRank = totalVenues - topThresholdRank + 1;
 
-    const isTopPercentile = dexRank.rank <= topThresholdRank;
-    const isBottomPercentile = dexRank.rank >= bottomThresholdRank;
+    const isTopPercentile = dexRankEntry.rank <= topThresholdRank;
+    const isBottomPercentile = dexRankEntry.rank >= bottomThresholdRank;
 
     if (!isTopPercentile && !isBottomPercentile) {
       this.clearGapTracking(pair, chain);
@@ -186,12 +224,7 @@ export class RankSpaceDetector {
 
     const direction: TradeDirection = isTopPercentile ? 'buy_dex' : 'sell_dex';
 
-    const anchorVenue = venueRanks.find((r) => r.venue === 'binance');
-    if (!anchorVenue) {
-      return;
-    }
-
-    const spreadBps = ((dexRank.mid - anchorVenue.mid) / anchorVenue.mid) * 10000;
+    const spreadBps = ((dexRankEntry.mid - anchorRankEntry.mid) / anchorRankEntry.mid) * 10000;
 
     if (Math.abs(spreadBps) < this.appConfig.rankSpace.minSpreadBps) {
       this.clearGapTracking(pair, chain);
@@ -199,13 +232,14 @@ export class RankSpaceDetector {
     }
 
     const gapKey = `${pair}:${chain}:${direction}`;
-    const nowMs = Date.now();
+    const anchorExchangeTsMs = anchorRankEntry.quote.exchangeTsMs ?? anchorRankEntry.quote.receivedTsMs;
     let gapTracking = this.gapFirstSeen.get(gapKey);
 
     if (!gapTracking) {
       gapTracking = {
-        firstSeenMs: nowMs,
+        firstSeenMs: anchorExchangeTsMs,
         direction,
+        anchorQuote: anchorRankEntry.quote,
       };
       this.gapFirstSeen.set(gapKey, gapTracking);
 
@@ -214,7 +248,7 @@ export class RankSpaceDetector {
           pair,
           chain,
           direction,
-          dexRank: dexRank.rank,
+          dexRank: dexRankEntry.rank,
           totalVenues,
           spreadBps,
         },
@@ -223,7 +257,7 @@ export class RankSpaceDetector {
       return;
     }
 
-    const durationMs = nowMs - gapTracking.firstSeenMs;
+    const durationMs = anchorExchangeTsMs - gapTracking.firstSeenMs;
 
     if (durationMs < this.appConfig.rankSpace.minDurationMs) {
       this.logger.debug(
@@ -242,34 +276,34 @@ export class RankSpaceDetector {
     const anchorVenueId = this.venueIdMap.get('binance');
     const dexVenueId = this.venueIdMap.get('uniswap_v3');
 
-    if (!anchorVenueId || !dexVenueId || !dexRank.poolAddress) {
+    if (!anchorVenueId || !dexVenueId || !dexRankEntry.poolAddress) {
       return;
     }
 
-    const dexPct = (dexRank.rank - 1) / (totalVenues - 1);
+    const dexPct = (dexRankEntry.rank - 1) / (totalVenues - 1);
 
     const opportunity: Opportunity = {
       detectedAt: new Date(),
       pairId,
       chain,
       anchorVenueId,
-      anchorMid: anchorVenue.mid,
+      anchorMid: anchorRankEntry.mid,
       dexVenueId,
-      dexPoolAddress: dexRank.poolAddress,
-      dexMid: dexRank.mid,
-      dexBlockNumber: dexRank.blockNumber,
+      dexPoolAddress: dexRankEntry.poolAddress,
+      dexMid: dexRankEntry.mid,
+      dexBlockNumber: dexRankEntry.blockNumber,
       spreadBps,
       direction,
       status: 'detected',
       strategy: 'rank_space',
       reasonCodes: [
         `rank_space_triggered`,
-        `dex_rank_${dexRank.rank}_of_${totalVenues}`,
+        `dex_rank_${dexRankEntry.rank}_of_${totalVenues}`,
         `spread_${spreadBps.toFixed(1)}bps`,
         `duration_${durationMs}ms`,
       ],
       metadata: {
-        dex_rank: dexRank.rank,
+        dex_rank: dexRankEntry.rank,
         dex_pct: dexPct,
         venue_count: totalVenues,
         ranked_venues: venueRanks.map((v) => ({
@@ -278,7 +312,7 @@ export class RankSpaceDetector {
           rank: v.rank,
         })),
         anchors_used: ['binance'],
-        triggered_at: Date.now(),
+        triggered_at: anchorExchangeTsMs,
       },
     };
 
@@ -290,7 +324,7 @@ export class RankSpaceDetector {
           opportunityId: id.toString(),
           pair,
           chain,
-          dexRank: dexRank.rank,
+          dexRank: dexRankEntry.rank,
           totalVenues,
           spreadBps,
           direction,

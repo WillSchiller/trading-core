@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import WebSocket from 'ws';
+import { Decimal } from 'decimal.js';
 import { CexConnector, type CexConnectorConfig } from './base.js';
 import type { NormalizedQuote } from '../../types/index.js';
 
@@ -109,9 +110,9 @@ export class CoinbaseConnector extends CexConnector {
     try {
       const validated = CoinbaseTickerSchema.parse(raw);
 
-      const bid = parseFloat(validated.best_bid);
-      const ask = parseFloat(validated.best_ask);
-      const mid = (bid + ask) / 2;
+      const bid = new Decimal(validated.best_bid).toNumber();
+      const ask = new Decimal(validated.best_ask).toNumber();
+      const mid = new Decimal(validated.best_bid).plus(validated.best_ask).dividedBy(2).toNumber();
       const ts = new Date(validated.time);
       const exchangeTsMs = ts.getTime();
       const receivedTsMs = receivedAt.getTime();

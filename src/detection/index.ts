@@ -2,6 +2,7 @@ import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { QuoteCache } from '../state/quote-cache.js';
 import type { AppConfig, PairConfig } from '../config/types.js';
 import type { Chain, Opportunity, TradeDirection } from '../types/index.js';
+import type { PoolConfig } from '../config/types.js';
 import { calculateSpread } from './spread-calculator.js';
 import {
   thresholdFilter,
@@ -64,6 +65,8 @@ interface OpenOpportunity {
 const HYSTERESIS_BPS = 2;
 const CONSECUTIVE_TICKS_REQUIRED = 2;
 const UPDATE_THROTTLE_MS = 250;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 30000;
 
 export class OpportunityDetector {
   private logger: Logger;
@@ -76,8 +79,12 @@ export class OpportunityDetector {
   private gapFirstSeen: Map<string, number>;
   private intervalHandle: NodeJS.Timeout | null;
   private isRunning: boolean;
+  private cycleInProgress: boolean;
   private openOpportunities: Map<string, OpenOpportunity>;
   private onSpreadUpdate?: (chain: Chain, pair: string, spreadBps: number, thresholdBps: number) => void;
+  private consecutiveFailures: number;
+  private circuitBreakerOpen: boolean;
+  private circuitBreakerOpenedAt: number;
 
   constructor(config: OpportunityDetectorConfig) {
     this.logger = createChildLogger({ component: 'opportunity-detector' });
@@ -90,8 +97,12 @@ export class OpportunityDetector {
     this.gapFirstSeen = new Map();
     this.intervalHandle = null;
     this.isRunning = false;
+    this.cycleInProgress = false;
     this.openOpportunities = new Map();
     this.onSpreadUpdate = config.onSpreadUpdate;
+    this.consecutiveFailures = 0;
+    this.circuitBreakerOpen = false;
+    this.circuitBreakerOpenedAt = 0;
   }
 
   public start(): void {
@@ -133,21 +144,75 @@ export class OpportunityDetector {
   }
 
   private async runDetectionCycle(): Promise<void> {
+    if (this.cycleInProgress) {
+      this.logger.warn('Detection cycle still in progress, skipping this tick');
+      return;
+    }
+
+    if (this.circuitBreakerOpen) {
+      const elapsed = Date.now() - this.circuitBreakerOpenedAt;
+      if (elapsed < CIRCUIT_BREAKER_COOLDOWN_MS) {
+        this.logger.debug(
+          { elapsedMs: elapsed, cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS },
+          'Circuit breaker open, skipping detection cycle'
+        );
+        return;
+      }
+      this.logger.info('Circuit breaker cooldown elapsed, resuming detection');
+      this.circuitBreakerOpen = false;
+      this.consecutiveFailures = 0;
+    }
+
+    this.cycleInProgress = true;
     const startTime = Date.now();
 
-    const enabledPairs = this.pairsConfig.filter((p) => p.enabled !== false);
+    try {
+      const enabledPairs = this.pairsConfig.filter((p) => p.enabled !== false);
 
-    for (const pairConfig of enabledPairs) {
-      await this.detectForPair(pairConfig);
+      for (const pairConfig of enabledPairs) {
+        await this.detectForPair(pairConfig);
+      }
+
+      const duration = Date.now() - startTime;
+      this.consecutiveFailures = 0;
+
+      if (duration > 50) {
+        this.logger.warn({ duration }, 'Detection cycle took longer than 50ms');
+      } else {
+        this.logger.debug({ duration }, 'Detection cycle completed');
+      }
+    } catch (err) {
+      this.consecutiveFailures++;
+      this.logger.error(
+        { err, consecutiveFailures: this.consecutiveFailures },
+        'Detection cycle failed'
+      );
+
+      if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        this.circuitBreakerOpen = true;
+        this.circuitBreakerOpenedAt = Date.now();
+        this.logger.error(
+          {
+            consecutiveFailures: this.consecutiveFailures,
+            threshold: CIRCUIT_BREAKER_THRESHOLD,
+            cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
+          },
+          'Circuit breaker triggered - detection paused'
+        );
+      }
+    } finally {
+      this.cycleInProgress = false;
     }
+  }
 
-    const duration = Date.now() - startTime;
+  public isCircuitBreakerOpen(): boolean {
+    return this.circuitBreakerOpen;
+  }
 
-    if (duration > 50) {
-      this.logger.warn({ duration }, 'Detection cycle took longer than 50ms');
-    } else {
-      this.logger.debug({ duration }, 'Detection cycle completed');
-    }
+  public resetCircuitBreaker(): void {
+    this.circuitBreakerOpen = false;
+    this.consecutiveFailures = 0;
+    this.logger.info('Circuit breaker manually reset');
   }
 
   private async detectForPair(pairConfig: PairConfig): Promise<void> {
@@ -437,8 +502,7 @@ export class OpportunityDetector {
   }
 
   private getPrimaryPool(pairConfig: PairConfig, chain: Chain): string | null {
-    const venues = pairConfig.venues as Record<string, any>;
-    const uniswapV3Venues = venues.uniswap_v3;
+    const uniswapV3Venues = pairConfig.venues.uniswap_v3 as Record<string, PoolConfig[]> | undefined;
 
     if (!uniswapV3Venues) {
       return null;
@@ -449,7 +513,7 @@ export class OpportunityDetector {
       return null;
     }
 
-    const primaryPool = chainPools.find((p: any) => p.primary === true);
+    const primaryPool = chainPools.find((p: PoolConfig) => p.primary === true);
     return primaryPool?.pool ?? chainPools[0]?.pool ?? null;
   }
 

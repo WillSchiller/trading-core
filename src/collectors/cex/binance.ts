@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import WebSocket from 'ws';
+import { Decimal } from 'decimal.js';
 import { CexConnector, type CexConnectorConfig } from './base.js';
 import type { NormalizedQuote } from '../../types/index.js';
 
@@ -60,9 +61,9 @@ export class BinanceConnector extends CexConnector {
     try {
       const validated = BinanceBookTickerSchema.parse(raw);
 
-      const bid = parseFloat(validated.b);
-      const ask = parseFloat(validated.a);
-      const mid = (bid + ask) / 2;
+      const bid = new Decimal(validated.b).toNumber();
+      const ask = new Decimal(validated.a).toNumber();
+      const mid = new Decimal(validated.b).plus(validated.a).dividedBy(2).toNumber();
 
       const canonical = this.symbolMap.get(validated.s) || this.normalizeSymbol(validated.s);
 

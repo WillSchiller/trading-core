@@ -1,4 +1,5 @@
 import type { PublicClient, Address } from 'viem';
+import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain, Opportunity } from '../types/index.js';
 import type { AppConfig, PairConfig } from '../config/types.js';
@@ -301,8 +302,14 @@ export class ExecutionManager {
     const freshAnchorMid = freshAnchorQuote.quote.mid;
     const freshDexPrice = quote.quotedPrice;
 
-    // Calculate fresh spread
-    const freshSpreadBps = ((freshAnchorMid - freshDexPrice) / freshAnchorMid) * 10000;
+    // Calculate fresh spread using Decimal.js for precision
+    const freshAnchorMidDecimal = new Decimal(freshAnchorMid);
+    const freshDexPriceDecimal = new Decimal(freshDexPrice);
+    const freshSpreadBps = freshDexPriceDecimal
+      .minus(freshAnchorMidDecimal)
+      .dividedBy(freshAnchorMidDecimal)
+      .times(10000)
+      .toNumber();
     const spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
 
     this.logger.info(
@@ -319,9 +326,12 @@ export class ExecutionManager {
       'Spread re-validation'
     );
 
-    // Dynamic break-even check using FRESH prices
-    const feeTierBps = fee / 100;
-    const gasBps = (gasEstimate.estimatedGasUsd / tradeSizeUsd) * 10000;
+    // Dynamic break-even check using FRESH prices (Decimal.js for precision)
+    const feeTierBps = new Decimal(fee).dividedBy(100).toNumber();
+    const gasBps = new Decimal(gasEstimate.estimatedGasUsd)
+      .dividedBy(tradeSizeUsd)
+      .times(10000)
+      .toNumber();
     const breakEvenBps = feeTierBps + Math.abs(quote.slippageBps) + gasBps;
     const edgeBufferBps = 10;
     const requiredSpreadBps = breakEvenBps + edgeBufferBps;
@@ -353,23 +363,28 @@ export class ExecutionManager {
       return;
     }
 
-    const inputAmountHuman = Number(amountIn) / 10 ** tokenInConfig.decimals;
-    const outputAmountHuman = Number(quote.amountOut) / 10 ** tokenOutConfig.decimals;
+    // Convert amounts using Decimal.js for precision
+    const tokenInScale = new Decimal(10).pow(tokenInConfig.decimals);
+    const tokenOutScale = new Decimal(10).pow(tokenOutConfig.decimals);
+    const inputAmountHuman = new Decimal(amountIn.toString()).dividedBy(tokenInScale).toNumber();
+    const outputAmountHuman = new Decimal(quote.amountOut.toString()).dividedBy(tokenOutScale).toNumber();
 
-    // Use FRESH anchor price for P&L calculation
-    let inputValueUsd: number;
-    let outputValueUsd: number;
+    // Use FRESH anchor price for P&L calculation (Decimal.js for precision)
+    const inputAmountDecimal = new Decimal(inputAmountHuman);
+    const outputAmountDecimal = new Decimal(outputAmountHuman);
+    let inputValueUsd: Decimal;
+    let outputValueUsd: Decimal;
     if (opportunity.direction === 'buy_dex') {
-      inputValueUsd = inputAmountHuman;
-      outputValueUsd = outputAmountHuman * freshAnchorMid;
+      inputValueUsd = inputAmountDecimal;
+      outputValueUsd = outputAmountDecimal.times(freshAnchorMid);
     } else {
-      inputValueUsd = inputAmountHuman * freshAnchorMid;
-      outputValueUsd = outputAmountHuman;
+      inputValueUsd = inputAmountDecimal.times(freshAnchorMid);
+      outputValueUsd = outputAmountDecimal;
     }
-    const grossPnlUsd = outputValueUsd - inputValueUsd;
-    const estimatedProfitUsd = grossPnlUsd - gasEstimate.estimatedGasUsd;
+    const grossPnlUsd = outputValueUsd.minus(inputValueUsd);
+    const estimatedProfitUsd = grossPnlUsd.minus(gasEstimate.estimatedGasUsd).toNumber();
 
-    const riskCheck = this.riskManager.checkTradeAllowed({
+    const riskCheck = await this.riskManager.checkTradeAllowed({
       tradeSizeUsd,
       gasPriceGwei,
       estimatedProfitUsd,
@@ -443,11 +458,12 @@ export class ExecutionManager {
   ): bigint {
     const tokenPriceUsd =
       opportunity.direction === 'buy_dex'
-        ? 1
-        : opportunity.anchorMid;
+        ? new Decimal(1)
+        : new Decimal(opportunity.anchorMid);
 
-    const amountHuman = tradeSizeUsd / tokenPriceUsd;
-    return BigInt(Math.floor(amountHuman * 10 ** tokenDecimals));
+    const amountHuman = new Decimal(tradeSizeUsd).dividedBy(tokenPriceUsd);
+    const scale = new Decimal(10).pow(tokenDecimals);
+    return BigInt(amountHuman.times(scale).floor().toString());
   }
 
   private getPoolFee(pairConfig: PairConfig, chain: Chain): number {

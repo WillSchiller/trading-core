@@ -37,6 +37,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "async-mutex": "^0.5.0",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.2.3",
     "pg": "^8.11.3",
