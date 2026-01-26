@@ -232,8 +232,9 @@ describe('SQL Query Anti-Pattern Detection', () => {
             const hasLimit = /LIMIT\s+\d+/i.test(query);
             const hasOrderByDesc = /ORDER BY.*DESC/i.test(query);
             const isLatestQuery = hasLimit && hasOrderByDesc;
+            const isFreshnessCheck = /\(\s*SELECT\s+(MAX|MIN)\s*\(\s*ts\s*\)\s*FROM/i.test(query);
 
-            if (!hasProperTimeFilter && !hasFixedTimeRange && !isSubqueryOrWindow && !isSelectOnly && !isLatestQuery) {
+            if (!hasProperTimeFilter && !hasFixedTimeRange && !isSubqueryOrWindow && !isSelectOnly && !isLatestQuery && !isFreshnessCheck) {
               errors.push(
                 `${file}: "${panelTitle}" - uses ${col} but missing time macros`
               );

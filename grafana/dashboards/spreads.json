@@ -51,7 +51,8 @@
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "fillOpacity": 0,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": 60000
           },
           "unit": "short",
           "decimals": 6

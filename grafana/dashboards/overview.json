@@ -36,7 +36,7 @@
       "id": 9,
       "type": "stat",
       "title": "Last Quote",
-      "description": "Seconds since last quote received. RED means data may be stale.",
+      "description": "Seconds since last quote received. Up to 25s is normal during adaptive polling. YELLOW (25-60s) = conserve mode (quiet market). ORANGE/RED = actual staleness issue.",
       "gridPos": {"x": 10, "y": 0, "w": 4, "h": 3},
       "targets": [
         {
@@ -63,8 +63,9 @@
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 30, "color": "yellow"},
-              {"value": 60, "color": "red"}
+              {"value": 25, "color": "yellow"},
+              {"value": 60, "color": "orange"},
+              {"value": 120, "color": "red"}
             ]
           }
         }
@@ -218,6 +219,130 @@
       }
     },
     {
+      "id": 13,
+      "type": "stat",
+      "title": "SYSTEM STATUS",
+      "description": "Overall system health. GREEN=Active. YELLOW=Conserving (quiet market). ORANGE=Stale data. RED=Offline.",
+      "gridPos": {"x": 14, "y": 0, "w": 4, "h": 3},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "WITH status_check AS (SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM connector_health WHERE is_connected = true) THEN 'OFFLINE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw))) > 60 THEN 'STALE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw WHERE venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex')))) > 25 THEN 'CONSERVING' ELSE 'ACTIVE' END as status) SELECT status FROM status_check",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "ACTIVE": {
+                  "text": "ACTIVE",
+                  "color": "green",
+                  "index": 0
+                },
+                "CONSERVING": {
+                  "text": "CONSERVING",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "STALE": {
+                  "text": "STALE",
+                  "color": "orange",
+                  "index": 2
+                },
+                "OFFLINE": {
+                  "text": "OFFLINE",
+                  "color": "red",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "MARKET ACTIVITY",
+      "description": "Current spread activity level. BUSY=Near threshold. QUIET=Well below threshold (adaptive polling conserving RPC).",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 3},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "WITH latest_spread AS (WITH cex AS (SELECT DISTINCT ON (pair_id) pair_id, close_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'cex' AND v.is_anchor = true AND r.interval_type = '10s' AND r.interval_start > now() - interval '5 minutes' ORDER BY pair_id, r.interval_start DESC), dex AS (SELECT DISTINCT ON (pair_id) pair_id, close_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'dex' AND r.interval_type = '10s' AND r.interval_start > now() - interval '5 minutes' ORDER BY pair_id, r.interval_start DESC) SELECT COALESCE(MAX(ABS((dex.close_mid - cex.close_mid) / NULLIF(cex.close_mid, 0) * 10000)), 0) as max_spread_bps FROM cex JOIN dex ON cex.pair_id = dex.pair_id), thresholds AS (SELECT COALESCE(MIN(min_spread_bps), 15) as threshold FROM pair_venue_config) SELECT CASE WHEN ls.max_spread_bps >= t.threshold * 0.9 THEN 'BUSY' WHEN ls.max_spread_bps >= t.threshold * 0.5 THEN 'MODERATE' WHEN ls.max_spread_bps >= t.threshold * 0.3 THEN 'QUIET' ELSE 'VERY QUIET' END as activity FROM latest_spread ls, thresholds t",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "BUSY": {
+                  "text": "BUSY",
+                  "color": "green",
+                  "index": 0
+                },
+                "MODERATE": {
+                  "text": "MODERATE",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "QUIET": {
+                  "text": "QUIET",
+                  "color": "blue",
+                  "index": 2
+                },
+                "VERY QUIET": {
+                  "text": "VERY QUIET",
+                  "color": "purple",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 1,
       "type": "timeseries",
       "title": "Live Quote Prices (All Venues)",
@@ -239,7 +364,7 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "gradientMode": "none",
-            "spanNulls": true,
+            "spanNulls": 60000,
             "showPoints": "never",
             "pointSize": 5,
             "stacking": {
@@ -332,7 +457,7 @@
             "lineWidth": 2,
             "fillOpacity": 20,
             "gradientMode": "scheme",
-            "spanNulls": true,
+            "spanNulls": 60000,
             "showPoints": "never",
             "pointSize": 5,
             "stacking": {
