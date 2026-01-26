@@ -501,9 +501,11 @@
                   "mode": "absolute",
                   "steps": [
                     {"value": -50, "color": "red"},
-                    {"value": -10, "color": "yellow"},
-                    {"value": 10, "color": "green"},
-                    {"value": 50, "color": "blue"}
+                    {"value": -30, "color": "orange"},
+                    {"value": -15, "color": "yellow"},
+                    {"value": 15, "color": "green"},
+                    {"value": 30, "color": "orange"},
+                    {"value": 50, "color": "red"}
                   ]
                 }
               }
@@ -586,6 +588,7 @@
       "id": 9,
       "type": "stat",
       "title": "Total Opportunities",
+      "description": "Number of opportunities detected in the selected time range",
       "gridPos": {"x": 0, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
@@ -621,6 +624,7 @@
       "id": 10,
       "type": "stat",
       "title": "DETECT TIME: Avg Spread (abs)",
+      "description": "Average absolute spread in bps at the moment of opportunity detection",
       "gridPos": {"x": 6, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
@@ -642,12 +646,15 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "suffix: bps",
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "text"}
+              {"value": 0, "color": "green"},
+              {"value": 15, "color": "yellow"},
+              {"value": 30, "color": "orange"},
+              {"value": 50, "color": "red"}
             ]
           }
         }
@@ -657,6 +664,7 @@
       "id": 11,
       "type": "stat",
       "title": "EXEC TIME: Avg Estimated Profit",
+      "description": "Average estimated profit from quoter evaluation at execution time",
       "gridPos": {"x": 12, "y": 37, "w": 6, "h": 4},
       "targets": [
         {
@@ -693,6 +701,7 @@
       "id": 12,
       "type": "stat",
       "title": "Skip Rate",
+      "description": "Percentage of opportunities skipped due to filters or unprofitability",
       "gridPos": {"x": 18, "y": 37, "w": 6, "h": 4},
       "targets": [
         {

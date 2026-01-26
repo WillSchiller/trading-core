@@ -75,6 +75,7 @@
       "id": 1,
       "type": "stat",
       "title": "Total Realized P&L",
+      "description": "Sum of all realized P&L in the selected time range",
       "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
@@ -113,6 +114,7 @@
       "id": 2,
       "type": "stat",
       "title": "Win Rate",
+      "description": "Percentage of trades with positive realized P&L",
       "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
@@ -151,6 +153,7 @@
       "id": 3,
       "type": "stat",
       "title": "Avg Trade Size",
+      "description": "Average trade size in USD",
       "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
@@ -187,6 +190,7 @@
       "id": 4,
       "type": "stat",
       "title": "Total Executions",
+      "description": "Number of executed trades in the selected time range",
       "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
       "targets": [
         {
@@ -414,6 +418,7 @@
       "id": 8,
       "type": "stat",
       "title": "Avg Win",
+      "description": "Average P&L for winning trades",
       "gridPos": {"x": 0, "y": 20, "w": 6, "h": 4},
       "targets": [
         {
@@ -450,6 +455,7 @@
       "id": 9,
       "type": "stat",
       "title": "Avg Loss",
+      "description": "Average P&L for losing trades",
       "gridPos": {"x": 6, "y": 20, "w": 6, "h": 4},
       "targets": [
         {

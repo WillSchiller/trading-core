@@ -53,7 +53,8 @@
       "id": 1,
       "type": "stat",
       "title": "Total P&L",
-      "gridPos": {"x": 0, "y": 1, "w": 3, "h": 3},
+      "description": "Sum of all realized P&L in the selected time range",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -72,7 +73,8 @@
       "id": 2,
       "type": "stat",
       "title": "Total Trades",
-      "gridPos": {"x": 3, "y": 1, "w": 3, "h": 3},
+      "description": "Number of executed trades in the selected time range",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -85,7 +87,8 @@
       "id": 3,
       "type": "stat",
       "title": "Win Rate",
-      "gridPos": {"x": 6, "y": 1, "w": 3, "h": 3},
+      "description": "Percentage of trades with positive P&L",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -98,7 +101,8 @@
       "id": 4,
       "type": "stat",
       "title": "Avg P&L/Trade",
-      "gridPos": {"x": 9, "y": 1, "w": 3, "h": 3},
+      "description": "Average realized P&L per trade",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -111,7 +115,8 @@
       "id": 5,
       "type": "stat",
       "title": "Total Volume",
-      "gridPos": {"x": 12, "y": 1, "w": 3, "h": 3},
+      "description": "Total USD volume traded",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -124,20 +129,22 @@
       "id": 6,
       "type": "stat",
       "title": "Avg Slippage",
-      "gridPos": {"x": 15, "y": 1, "w": 3, "h": 3},
+      "description": "Average realized slippage in basis points",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
         "rawSql": "SELECT COALESCE(AVG(realized_slippage_bps), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (COALESCE(NULLIF('${pair}', ''), '0') = '0' OR pair_id::text = '${pair}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_slippage_bps IS NOT NULL",
         "format": "table"
       }],
-      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "red"}]}}}
+      "fieldConfig": {"defaults": {"unit": "suffix: bps", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}}
     },
     {
       "id": 7,
       "type": "stat",
       "title": "Total Gas",
-      "gridPos": {"x": 18, "y": 1, "w": 3, "h": 3},
+      "description": "Total gas cost in USD across all trades",
+      "gridPos": {"x": 0, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -150,8 +157,8 @@
       "id": 8,
       "type": "stat",
       "title": "Profit Factor",
-      "description": "Gross Profit / Gross Loss",
-      "gridPos": {"x": 21, "y": 1, "w": 3, "h": 3},
+      "description": "Gross Profit / Gross Loss - values above 1 indicate profitability",
+      "gridPos": {"x": 4, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -164,7 +171,8 @@
       "id": 9,
       "type": "stat",
       "title": "Buy DEX",
-      "gridPos": {"x": 0, "y": 4, "w": 3, "h": 3},
+      "description": "Count of trades buying on DEX (when DEX is cheaper)",
+      "gridPos": {"x": 8, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -177,7 +185,8 @@
       "id": 10,
       "type": "stat",
       "title": "Sell DEX",
-      "gridPos": {"x": 3, "y": 4, "w": 3, "h": 3},
+      "description": "Count of trades selling on DEX (when DEX is more expensive)",
+      "gridPos": {"x": 12, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -190,7 +199,8 @@
       "id": 11,
       "type": "stat",
       "title": "Best Trade",
-      "gridPos": {"x": 6, "y": 4, "w": 3, "h": 3},
+      "description": "Maximum single trade P&L",
+      "gridPos": {"x": 16, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -203,7 +213,8 @@
       "id": 12,
       "type": "stat",
       "title": "Worst Trade",
-      "gridPos": {"x": 9, "y": 4, "w": 3, "h": 3},
+      "description": "Minimum single trade P&L",
+      "gridPos": {"x": 20, "y": 4, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -216,7 +227,8 @@
       "id": 13,
       "type": "stat",
       "title": "Std Dev P&L",
-      "gridPos": {"x": 12, "y": 4, "w": 3, "h": 3},
+      "description": "Standard deviation of P&L - measures consistency",
+      "gridPos": {"x": 0, "y": 7, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -229,7 +241,8 @@
       "id": 14,
       "type": "stat",
       "title": "Avg Trade Size",
-      "gridPos": {"x": 15, "y": 4, "w": 3, "h": 3},
+      "description": "Average trade size in USD",
+      "gridPos": {"x": 4, "y": 7, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -241,9 +254,9 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "Avg Detect→Exec",
-      "description": "Avg time from opportunity detection to execution (ms)",
-      "gridPos": {"x": 18, "y": 4, "w": 3, "h": 3},
+      "title": "Avg Detect to Exec",
+      "description": "Average time from opportunity detection to execution (ms)",
+      "gridPos": {"x": 8, "y": 7, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -257,7 +270,7 @@
       "type": "stat",
       "title": "Avg Time Between",
       "description": "Average seconds between consecutive trades",
-      "gridPos": {"x": 21, "y": 4, "w": 3, "h": 3},
+      "gridPos": {"x": 12, "y": 7, "w": 4, "h": 3},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -270,7 +283,7 @@
       "id": 101,
       "type": "row",
       "title": "Execution Detail Table",
-      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 1},
       "collapsed": false
     },
     {
@@ -278,7 +291,7 @@
       "type": "table",
       "title": "Execution Log",
       "description": "Detailed execution data with all metrics",
-      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 12},
+      "gridPos": {"x": 0, "y": 11, "w": 24, "h": 12},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -290,8 +303,8 @@
         "defaults": {"custom": {"align": "auto", "displayMode": "auto"}},
         "overrides": [
           {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [{"id": "custom.displayMode", "value": "color-background-solid"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}]},
-          {"matcher": {"id": "byName", "options": "Spread (bps)"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 40, "color": "red"}]}}]},
-          {"matcher": {"id": "byName", "options": "Slippage (bps)"}, "properties": [{"id": "custom.displayMode", "value": "color-text"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 25, "color": "red"}]}}]},
+          {"matcher": {"id": "byName", "options": "Spread (bps)"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}]},
+          {"matcher": {"id": "byName", "options": "Slippage (bps)"}, "properties": [{"id": "custom.displayMode", "value": "color-text"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}]},
           {"matcher": {"id": "byName", "options": "Direction"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "mappings", "value": [{"type": "value", "options": {"buy_dex": {"text": "BUY DEX", "color": "green"}}}, {"type": "value", "options": {"sell_dex": {"text": "SELL DEX", "color": "red"}}}]}]},
           {"matcher": {"id": "byName", "options": "Strategy"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "mappings", "value": [{"type": "value", "options": {"dislocation": {"text": "Dislocation", "color": "blue"}}}, {"type": "value", "options": {"rank_space": {"text": "Rank Space", "color": "purple"}}}]}]},
           {"matcher": {"id": "byName", "options": "Latency (ms)"}, "properties": [{"id": "custom.displayMode", "value": "color-text"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 500, "color": "yellow"}, {"value": 1000, "color": "red"}]}}]}
@@ -302,14 +315,14 @@
       "id": 102,
       "type": "row",
       "title": "Time Analysis",
-      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 21,
       "type": "timeseries",
       "title": "Cumulative P&L Over Time",
-      "gridPos": {"x": 0, "y": 21, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -322,7 +335,7 @@
       "id": 22,
       "type": "timeseries",
       "title": "P&L Per Trade",
-      "gridPos": {"x": 12, "y": 21, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -335,7 +348,7 @@
       "id": 23,
       "type": "timeseries",
       "title": "Detection to Execution Latency",
-      "gridPos": {"x": 0, "y": 29, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -348,7 +361,7 @@
       "id": 24,
       "type": "timeseries",
       "title": "Slippage Over Time",
-      "gridPos": {"x": 12, "y": 29, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -361,14 +374,14 @@
       "id": 103,
       "type": "row",
       "title": "Distributions",
-      "gridPos": {"x": 0, "y": 37, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 40, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 25,
       "type": "histogram",
       "title": "P&L Distribution",
-      "gridPos": {"x": 0, "y": 38, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -381,7 +394,7 @@
       "id": 26,
       "type": "histogram",
       "title": "Slippage Distribution",
-      "gridPos": {"x": 8, "y": 38, "w": 8, "h": 8},
+      "gridPos": {"x": 8, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -394,7 +407,7 @@
       "id": 27,
       "type": "histogram",
       "title": "Spread Distribution",
-      "gridPos": {"x": 16, "y": 38, "w": 8, "h": 8},
+      "gridPos": {"x": 16, "y": 41, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -407,14 +420,14 @@
       "id": 104,
       "type": "row",
       "title": "Breakdown Analysis",
-      "gridPos": {"x": 0, "y": 46, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 49, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 28,
       "type": "piechart",
       "title": "P&L by Direction",
-      "gridPos": {"x": 0, "y": 47, "w": 6, "h": 8},
+      "gridPos": {"x": 0, "y": 50, "w": 6, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -427,7 +440,7 @@
       "id": 29,
       "type": "piechart",
       "title": "Trades by Direction",
-      "gridPos": {"x": 6, "y": 47, "w": 6, "h": 8},
+      "gridPos": {"x": 6, "y": 50, "w": 6, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -440,7 +453,7 @@
       "id": 30,
       "type": "piechart",
       "title": "P&L by Strategy",
-      "gridPos": {"x": 12, "y": 47, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 50, "w": 6, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -453,7 +466,7 @@
       "id": 31,
       "type": "barchart",
       "title": "P&L by Pair",
-      "gridPos": {"x": 18, "y": 47, "w": 6, "h": 8},
+      "gridPos": {"x": 18, "y": 50, "w": 6, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -467,14 +480,14 @@
       "id": 105,
       "type": "row",
       "title": "Hourly Breakdown",
-      "gridPos": {"x": 0, "y": 55, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 58, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 32,
       "type": "barchart",
       "title": "Trades by Hour of Day",
-      "gridPos": {"x": 0, "y": 56, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 59, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -488,7 +501,7 @@
       "id": 33,
       "type": "barchart",
       "title": "P&L by Hour of Day",
-      "gridPos": {"x": 12, "y": 56, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 59, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},

@@ -119,6 +119,7 @@
       "id": 3,
       "type": "stat",
       "title": "Total Reconnects",
+      "description": "Total number of WebSocket reconnection attempts across all venues",
       "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
@@ -156,6 +157,7 @@
       "id": 4,
       "type": "stat",
       "title": "Total Errors",
+      "description": "Total number of errors across all venues",
       "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4},
       "targets": [
         {
@@ -193,6 +195,7 @@
       "id": 5,
       "type": "stat",
       "title": "DEX Block Lag",
+      "description": "Difference between latest quote block and connector last block - should be near zero",
       "gridPos": {"x": 12, "y": 12, "w": 6, "h": 4},
       "targets": [
         {
@@ -230,6 +233,7 @@
       "id": 6,
       "type": "stat",
       "title": "Connected Venues",
+      "description": "Number of venues with active WebSocket connections",
       "gridPos": {"x": 18, "y": 12, "w": 6, "h": 4},
       "targets": [
         {

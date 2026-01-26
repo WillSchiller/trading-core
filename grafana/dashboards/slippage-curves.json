@@ -117,6 +117,7 @@
       "id": 3,
       "type": "stat",
       "title": "Min Spread @ $500 (Buy)",
+      "description": "Recommended minimum spread for profitable buy trades at $500 size",
       "gridPos": {"x": 0, "y": 10, "w": 6, "h": 4},
       "targets": [
         {
@@ -134,13 +135,14 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "suffix: bps",
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 30, "color": "yellow"},
+              {"value": 15, "color": "yellow"},
+              {"value": 30, "color": "orange"},
               {"value": 50, "color": "red"}
             ]
           }
@@ -151,6 +153,7 @@
       "id": 4,
       "type": "stat",
       "title": "Min Spread @ $500 (Sell)",
+      "description": "Recommended minimum spread for profitable sell trades at $500 size",
       "gridPos": {"x": 6, "y": 10, "w": 6, "h": 4},
       "targets": [
         {
@@ -168,13 +171,14 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "suffix: bps",
           "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {"value": null, "color": "green"},
-              {"value": 30, "color": "yellow"},
+              {"value": 15, "color": "yellow"},
+              {"value": 30, "color": "orange"},
               {"value": 50, "color": "red"}
             ]
           }
@@ -185,6 +189,7 @@
       "id": 5,
       "type": "stat",
       "title": "Last Calibration",
+      "description": "When slippage curves were last calibrated",
       "gridPos": {"x": 12, "y": 10, "w": 6, "h": 4},
       "targets": [
         {
@@ -210,6 +215,7 @@
       "id": 6,
       "type": "stat",
       "title": "Calibration Points",
+      "description": "Number of data points in the latest calibration curve",
       "gridPos": {"x": 18, "y": 10, "w": 6, "h": 4},
       "targets": [
         {
@@ -291,7 +297,7 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "min_spread"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 50, "color": "red"}]}}]}
+          {"matcher": {"id": "byName", "options": "min_spread"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 15, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}]}
         ]
       }
     },

@@ -13,6 +13,7 @@
       "id": 1,
       "type": "stat",
       "title": "Opportunities Found",
+      "description": "Number of trading opportunities detected in the selected time range",
       "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
@@ -32,6 +33,7 @@
       "id": 2,
       "type": "stat",
       "title": "Skipped (Unprofitable)",
+      "description": "Opportunities skipped due to estimated negative profit after costs",
       "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
@@ -51,6 +53,7 @@
       "id": 3,
       "type": "stat",
       "title": "Executed (Paper)",
+      "description": "Number of confirmed paper trade executions",
       "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
