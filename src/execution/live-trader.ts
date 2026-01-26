@@ -9,6 +9,7 @@ import { SwapRouter, type SwapParams } from './router.js';
 import { TransactionSigner, NonceError, SimulationError, ReceiptTimeoutError } from './signer.js';
 import { insertExecution, updateExecutionStatus, type Execution } from '../persistence/executions.js';
 import { updateOpportunityStatus } from '../persistence/opportunities.js';
+import { alertTradeProfit } from '../utils/alerts.js';
 
 export interface LiveTradeParams {
   opportunity: Opportunity;
@@ -304,6 +305,13 @@ export class LiveTrader {
       },
       'Trade confirmed'
     );
+
+    alertTradeProfit(
+      params.opportunity.pairCanonical || `pair:${params.opportunity.pairId}`,
+      params.opportunity.direction,
+      realizedPnlUsd,
+      Math.abs(params.opportunity.spreadBps)
+    ).catch((err) => this.logger.error({ error: (err as Error).message }, 'Failed to send trade alert'));
 
     return {
       executionId,

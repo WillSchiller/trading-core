@@ -8,6 +8,7 @@ import type { RiskCheckResult } from './risk.js';
 import { insertExecution, updateExecutionStatus, type Execution } from '../persistence/executions.js';
 import { updateOpportunityStatus } from '../persistence/opportunities.js';
 import type { InventoryManager } from './inventory.js';
+import { alertTradeProfit } from '../utils/alerts.js';
 
 export interface PaperTradeParams {
   opportunity: Opportunity;
@@ -207,6 +208,13 @@ export class PaperTrader {
       },
       'Paper trade completed'
     );
+
+    alertTradeProfit(
+      opportunity.pairCanonical || `pair:${opportunity.pairId}`,
+      opportunity.direction,
+      simulatedPnlUsd,
+      Math.abs(opportunity.spreadBps)
+    ).catch((err) => this.logger.error({ error: (err as Error).message }, 'Failed to send trade alert'));
 
     return {
       executionId,
