@@ -34,8 +34,8 @@
     "minProfitUsd": 0.50
   },
   "risk": {
-    "maxTradeSizeUsd": 4000,
-    "maxOpenExposureUsd": 8000,
+    "maxTradeSizeUsd": 50,
+    "maxOpenExposureUsd": 200,
     "maxTradesPerHour": 20,
     "cooldownSeconds": 30,
     "maxGasGwei": 10,
@@ -44,8 +44,8 @@
   "inventory": {
     "trackingEnabled": true,
     "initialBalances": {
-      "USDC": 5000,
-      "WETH": 1.75
+      "USDC": 100,
+      "WETH": 0.031
     }
   },
   "venues": {
