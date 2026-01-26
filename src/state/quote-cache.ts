@@ -47,6 +47,7 @@ export class QuoteCache {
   private blockTimestamps: Map<string, number>;
   private thinMarketMap: Map<string, number>;
   private readonly mutex: Mutex;
+  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
 
   constructor(config: QuoteCacheConfig) {
     this.logger = createChildLogger({ component: 'quote-cache' });
@@ -65,8 +66,24 @@ export class QuoteCache {
     );
   }
 
+  private async runWithMutexTiming<T>(operation: string, fn: () => T): Promise<T> {
+    const startTime = Date.now();
+    return this.mutex.runExclusive(() => {
+      const waitMs = Date.now() - startTime;
+      if (waitMs > QuoteCache.MUTEX_WARN_THRESHOLD_MS) {
+        this.logger.warn(
+          { component: 'QuoteCache', operation, waitMs, threshold: QuoteCache.MUTEX_WARN_THRESHOLD_MS },
+          'Mutex wait exceeded threshold'
+        );
+      } else {
+        this.logger.debug({ component: 'QuoteCache', operation, waitMs }, 'Mutex acquired');
+      }
+      return fn();
+    });
+  }
+
   public async addThinMarketPair(pair: string, maxQuoteAgeMs: number): Promise<void> {
-    await this.mutex.runExclusive(() => {
+    await this.runWithMutexTiming('addThinMarketPair', () => {
       this.thinMarketMap.set(pair, maxQuoteAgeMs);
       this.logger.info({ pair, maxQuoteAgeMs }, 'Added thin market pair');
     });
@@ -143,7 +160,7 @@ export class QuoteCache {
       quality,
     };
 
-    await this.mutex.runExclusive(() => {
+    await this.runWithMutexTiming('updateQuote', () => {
       this.cache.set(key, entry);
     });
 
@@ -163,7 +180,7 @@ export class QuoteCache {
   }
 
   public async updateCurrentBlock(chain: Chain, blockNumber: bigint, timestamp?: number): Promise<void> {
-    await this.mutex.runExclusive(() => {
+    await this.runWithMutexTiming('updateCurrentBlock', () => {
       this.currentBlocks.set(chain, blockNumber);
       if (timestamp !== undefined) {
         const key = `${chain}:${blockNumber.toString()}`;
@@ -293,7 +310,7 @@ export class QuoteCache {
   }
 
   public async clear(): Promise<void> {
-    await this.mutex.runExclusive(() => {
+    await this.runWithMutexTiming('clear', () => {
       this.cache.clear();
     });
     this.logger.info('Cache cleared');

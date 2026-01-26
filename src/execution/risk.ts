@@ -101,7 +101,11 @@ export class RiskManager {
     return { allowed: true };
   }
 
+  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
+
   private async acquireWithTimeout(): Promise<() => void> {
+    const startTime = Date.now();
+
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         reject(new Error(`RiskManager mutex timeout after ${RiskManager.LOCK_TIMEOUT_MS}ms`));
@@ -112,6 +116,16 @@ export class RiskManager {
       this.mutex.acquire(),
       timeoutPromise,
     ]);
+
+    const waitMs = Date.now() - startTime;
+    if (waitMs > RiskManager.MUTEX_WARN_THRESHOLD_MS) {
+      this.logger.warn(
+        { component: 'RiskManager', waitMs, threshold: RiskManager.MUTEX_WARN_THRESHOLD_MS },
+        'Mutex wait exceeded threshold'
+      );
+    } else {
+      this.logger.debug({ component: 'RiskManager', waitMs }, 'Mutex acquired');
+    }
 
     return release;
   }

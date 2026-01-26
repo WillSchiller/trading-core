@@ -15,15 +15,16 @@ import type { Chain } from '../types/index.js';
 
 class Mutex {
   private locked = false;
-  private queue: (() => void)[] = [];
+  private queue: { resolve: () => void; startTime: number }[] = [];
 
-  async acquire(): Promise<void> {
+  async acquire(): Promise<{ waitMs: number }> {
+    const startTime = Date.now();
     return new Promise((resolve) => {
       if (!this.locked) {
         this.locked = true;
-        resolve();
+        resolve({ waitMs: Date.now() - startTime });
       } else {
-        this.queue.push(resolve);
+        this.queue.push({ resolve: () => resolve({ waitMs: Date.now() - startTime }), startTime });
       }
     });
   }
@@ -31,7 +32,7 @@ class Mutex {
   release(): void {
     const next = this.queue.shift();
     if (next) {
-      next();
+      next.resolve();
     } else {
       this.locked = false;
     }
@@ -53,6 +54,7 @@ export class TransactionSigner {
   private currentNonce: number | null;
   private pendingNonces: Set<number>;
   private nonceMutex: Mutex;
+  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
 
   constructor(publicClient: PublicClient, config: SignerConfig) {
     this.logger = createChildLogger({ component: 'signer', chain: config.chain });
@@ -109,7 +111,15 @@ export class TransactionSigner {
   }
 
   async reserveNonce(): Promise<number> {
-    await this.nonceMutex.acquire();
+    const { waitMs } = await this.nonceMutex.acquire();
+    if (waitMs > TransactionSigner.MUTEX_WARN_THRESHOLD_MS) {
+      this.logger.warn(
+        { component: 'TransactionSigner', waitMs, threshold: TransactionSigner.MUTEX_WARN_THRESHOLD_MS },
+        'Mutex wait exceeded threshold'
+      );
+    } else {
+      this.logger.debug({ component: 'TransactionSigner', waitMs }, 'Mutex acquired');
+    }
     try {
       const nonce = await this.getNonce();
       this.pendingNonces.add(nonce);

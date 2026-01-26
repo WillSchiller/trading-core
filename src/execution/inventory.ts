@@ -24,6 +24,7 @@ export class InventoryManager {
   private totalTradesSkipped: number = 0;
   private skippedByInsufficientFunds: number = 0;
   private readonly mutex: Mutex;
+  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
 
   constructor(chain: Chain, config: InventoryConfig) {
     this.logger = createChildLogger({ component: 'inventory', chain });
@@ -115,13 +116,29 @@ export class InventoryManager {
     this.balances.set(token, newBalance);
   }
 
+  private async runWithMutexTiming<T>(operation: string, fn: () => T): Promise<T> {
+    const startTime = Date.now();
+    return this.mutex.runExclusive(() => {
+      const waitMs = Date.now() - startTime;
+      if (waitMs > InventoryManager.MUTEX_WARN_THRESHOLD_MS) {
+        this.logger.warn(
+          { component: 'InventoryManager', operation, waitMs, threshold: InventoryManager.MUTEX_WARN_THRESHOLD_MS },
+          'Mutex wait exceeded threshold'
+        );
+      } else {
+        this.logger.debug({ component: 'InventoryManager', operation, waitMs }, 'Mutex acquired');
+      }
+      return fn();
+    });
+  }
+
   async executeTrade(
     tokenIn: string,
     amountIn: number,
     tokenOut: string,
     amountOut: number
   ): Promise<{ success: boolean; reason?: string }> {
-    return this.mutex.runExclusive(() => {
+    return this.runWithMutexTiming('executeTrade', () => {
       if (!this.trackingEnabled) {
         this.totalTradesExecuted++;
         return { success: true };
@@ -173,7 +190,7 @@ export class InventoryManager {
   }
 
   async getState(): Promise<InventoryState> {
-    return this.mutex.runExclusive(() => ({
+    return this.runWithMutexTiming('getState', () => ({
       balances: new Map(this.balances),
       totalTradesExecuted: this.totalTradesExecuted,
       totalTradesSkipped: this.totalTradesSkipped,
@@ -182,7 +199,7 @@ export class InventoryManager {
   }
 
   async getBalanceSummary(): Promise<Record<string, { initial: number; current: number; change: number }>> {
-    return this.mutex.runExclusive(() => {
+    return this.runWithMutexTiming('getBalanceSummary', () => {
       const summary: Record<string, { initial: number; current: number; change: number }> = {};
 
       for (const [token, current] of this.balances) {
@@ -200,7 +217,7 @@ export class InventoryManager {
   }
 
   async reset(): Promise<void> {
-    await this.mutex.runExclusive(() => {
+    await this.runWithMutexTiming('reset', () => {
       this.balances = new Map(this.initialBalances);
       this.totalTradesExecuted = 0;
       this.totalTradesSkipped = 0;

@@ -8,7 +8,7 @@
   "version": 6,
   "refresh": "5s",
   "time": {
-    "from": "now-15m",
+    "from": "now-1h",
     "to": "now"
   },
   "templating": {
@@ -22,7 +22,8 @@
         "query": "SELECT id as __value, canonical as __text FROM pairs WHERE is_enabled = true ORDER BY canonical",
         "refresh": 1,
         "multi": false,
-        "includeAll": false,
+        "includeAll": true,
+        "allValue": "0",
         "current": {},
         "options": []
       },
@@ -85,7 +86,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Detected Spreads Over Time (bps)",
-      "description": "Spread values from detected opportunities - the source of truth for actual trading spreads.",
+      "description": "Spread values from detected opportunities - the source of truth for actual trading spreads. If no data appears, try selecting 'All' for both Pair and Strategy, or expand the time range.",
       "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
       "targets": [
         {
