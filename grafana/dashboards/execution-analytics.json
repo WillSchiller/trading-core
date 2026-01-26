@@ -120,7 +120,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(SUM(CASE WHEN direction = 'buy_dex' THEN input_amount_human ELSE input_amount_human * quoted_price END), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
@@ -246,7 +246,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(AVG(input_amount_human * quoted_price), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
+        "rawSql": "SELECT COALESCE(AVG(CASE WHEN direction = 'buy_dex' THEN input_amount_human ELSE input_amount_human * quoted_price END), 0) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}')",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}}
