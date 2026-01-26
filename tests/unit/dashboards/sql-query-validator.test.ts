@@ -467,7 +467,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
             const hasColumn = pattern.test(query);
 
             if (hasColumn) {
-              const isQualified = new RegExp(`\\b[a-z]\\d?\\.${col}\\b`, 'i').test(query);
+              const isQualified = new RegExp(`\\b[a-z]+\\d?\\.${col}\\b`, 'i').test(query);
               if (!isQualified) {
                 errors.push(
                   `${file}: "${panelTitle}" - ambiguous column '${col}' in JOIN (should be qualified with table alias)`
