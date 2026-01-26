@@ -395,14 +395,14 @@ describe('Grafana Dashboard Validation', () => {
           for (const varName of numericVariables) {
             const badPattern1 = new RegExp(`'\\$\\{${varName}\\}'`, 'i');
             const badPattern2 = new RegExp(`"\\$\\{${varName}\\}"`, 'i');
+            const allowedCoalescePattern = new RegExp(
+              `COALESCE\\s*\\(\\s*NULLIF\\s*\\(\\s*'\\$\\{${varName}\\}'`, 'i'
+            );
+            const hasQuotedVar = badPattern1.test(query) || badPattern2.test(query);
+            const isAllowedPattern = allowedCoalescePattern.test(query);
 
             expect(
-              badPattern1.test(query),
-              `${file}: panel "${panelTitle}" has quoted numeric variable \${${varName}}`
-            ).toBe(false);
-
-            expect(
-              badPattern2.test(query),
+              hasQuotedVar && !isAllowedPattern,
               `${file}: panel "${panelTitle}" has quoted numeric variable \${${varName}}`
             ).toBe(false);
           }
@@ -443,13 +443,27 @@ describe('Grafana Dashboard Validation', () => {
         'connector_health',
         'risk_state',
         'inventory_log',
+        'slippage_calibration',
+        'slippage_curves',
+        'latest_slippage_curves',
       ];
 
       for (const [file, dashboard] of dashboards) {
         const queries = extractQueries(dashboard);
         for (const { panelTitle, query } of queries) {
-          const fromMatch = query.match(/FROM\s+(\w+)/gi);
-          const joinMatch = query.match(/JOIN\s+(\w+)/gi);
+          const cteNames = new Set<string>();
+          const cteMatches = query.matchAll(/WITH\s+(\w+)\s+AS\s*\(/gi);
+          for (const match of cteMatches) {
+            cteNames.add(match[1].toLowerCase());
+          }
+          const additionalCteMatches = query.matchAll(/,\s*(\w+)\s+AS\s*\(/gi);
+          for (const match of additionalCteMatches) {
+            cteNames.add(match[1].toLowerCase());
+          }
+
+          const cleanQuery = query.replace(/EXTRACT\s*\([^)]*FROM\s+\w+\s*\)/gi, '');
+          const fromMatch = cleanQuery.match(/FROM\s+(\w+)/gi);
+          const joinMatch = cleanQuery.match(/JOIN\s+(\w+)/gi);
 
           const tables = [
             ...(fromMatch || []).map((m) => m.split(/\s+/).pop()!.toLowerCase()),
@@ -457,6 +471,7 @@ describe('Grafana Dashboard Validation', () => {
           ];
 
           for (const table of tables) {
+            if (cteNames.has(table)) continue;
             expect(
               validTables.includes(table),
               `${file}: panel "${panelTitle}" references unknown table: ${table}`

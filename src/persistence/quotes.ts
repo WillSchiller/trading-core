@@ -41,12 +41,39 @@ export class QuotePersistence {
 
     const shouldSample = this.sampleCounter % this.config.sampleRate === 0;
 
+    this.logger.info(
+      {
+        venue: quote.venue,
+        pair: quote.pair,
+        venueId,
+        pairId,
+        sampleCounter: this.sampleCounter,
+        sampleRate: this.config.sampleRate,
+        shouldSample,
+      },
+      'Processing quote for persistence'
+    );
+
     if (!shouldSample) {
+      this.logger.debug(
+        { venue: quote.venue, pair: quote.pair, sampleCounter: this.sampleCounter },
+        'Skipping sample, buffering for rollup only'
+      );
       this.bufferForRollup(quote, venueId, pairId);
       return;
     }
 
     try {
+      this.logger.info(
+        {
+          venue: quote.venue,
+          pair: quote.pair,
+          mid: quote.mid,
+          blockNumber: quote.blockNumber?.toString(),
+        },
+        'Inserting raw quote into database'
+      );
+
       await this.pool.query(
         `INSERT INTO quotes_raw (
           ts, received_at, venue_id, pair_id, chain,
@@ -75,20 +102,25 @@ export class QuotePersistence {
 
       this.bufferForRollup(quote, venueId, pairId);
 
-      this.logger.debug(
+      this.logger.info(
         {
           venue: quote.venue,
           pair: quote.pair,
           mid: quote.mid,
+          venueId,
+          pairId,
         },
-        'Raw quote inserted'
+        'Raw quote inserted successfully'
       );
     } catch (error) {
       this.logger.error(
         {
           error: (error as Error).message,
+          stack: (error as Error).stack,
           venue: quote.venue,
           pair: quote.pair,
+          venueId,
+          pairId,
         },
         'Failed to insert raw quote'
       );

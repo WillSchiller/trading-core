@@ -302,15 +302,34 @@ export class CollectorOrchestrator extends EventEmitter {
   }
 
   private handleDexQuote(quote: NormalizedQuote, venue: string): void {
+    this.logger.info(
+      { venue, pair: quote.pair, mid: quote.mid, blockNumber: quote.blockNumber?.toString() },
+      'Received DEX quote in orchestrator'
+    );
+
     this.quoteCache.updateQuote(quote);
     this.emit('quote', quote);
 
     const venueId = this.venueIdMap.get(venue);
     const pairId = this.pairIdMap.get(quote.pair);
 
+    this.logger.info(
+      { venue, venueId, pair: quote.pair, pairId, hasChain: !!quote.chain },
+      'Looking up venue and pair IDs'
+    );
+
     if (venueId && pairId && quote.chain) {
+      this.logger.info(
+        { venue, venueId, pair: quote.pair, pairId, chain: quote.chain },
+        'Persisting DEX quote'
+      );
       this.quotePersistence.insertRawQuote(quote, venueId, pairId);
       this.healthPersistence.updateLastQuote(venueId, quote.chain, quote.blockNumber);
+    } else {
+      this.logger.warn(
+        { venue, venueId, pair: quote.pair, pairId, chain: quote.chain },
+        'Skipping DEX quote persistence due to missing venueId, pairId, or chain'
+      );
     }
   }
 }

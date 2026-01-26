@@ -68,7 +68,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Executed\" FROM executions WHERE status = 'confirmed' AND executed_at BETWEEN $__timeFrom() AND $__timeTo()",
+        "rawSql": "SELECT COUNT(*) as \"Executed\" FROM executions WHERE status = 'confirmed' AND created_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {
@@ -88,7 +88,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(ROUND(SUM(realized_pnl_usd)::numeric, 2), 0) as \"P&L\" FROM executions WHERE status = 'confirmed' AND executed_at BETWEEN $__timeFrom() AND $__timeTo()",
+        "rawSql": "SELECT COALESCE(ROUND(SUM(realized_pnl_usd)::numeric, 2), 0) as \"P&L\" FROM executions WHERE status = 'confirmed' AND created_at BETWEEN $__timeFrom() AND $__timeTo()",
         "format": "table"
       }],
       "fieldConfig": {

@@ -243,13 +243,29 @@ export class UniswapV3Connector extends EventEmitter {
 
     try {
       const quotes = await this.fetchAllPoolsMulticall(blockInfo);
+      this.logger.info(
+        { blockNumber: blockInfo.blockNumber.toString(), quotesReturned: quotes.length, nonNullQuotes: quotes.filter(q => q !== null).length },
+        'Fetched quotes via multicall'
+      );
+
+      let emittedCount = 0;
       for (const quote of quotes) {
         if (quote) {
+          this.logger.info(
+            { blockNumber: blockInfo.blockNumber.toString(), pair: quote.pair, mid: quote.mid, venue: quote.venue },
+            'Emitting Uniswap quote'
+          );
           this.emit('quote', quote);
+          emittedCount++;
         }
       }
+
+      this.logger.info(
+        { blockNumber: blockInfo.blockNumber.toString(), emittedCount },
+        'Completed emitting quotes'
+      );
     } catch (error) {
-      this.logger.error({ error: (error as Error).message }, 'Multicall failed, falling back to individual calls');
+      this.logger.error({ error: (error as Error).message, stack: (error as Error).stack }, 'Multicall failed, falling back to individual calls');
       const promises = this.config.pools.map((pool) =>
         this.fetchPoolQuote(pool, blockInfo).catch((err) => {
           this.logger.error({ pool: pool.address, error: err.message }, 'Failed to fetch pool quote');
@@ -302,6 +318,11 @@ export class UniswapV3Connector extends EventEmitter {
     const startTime = Date.now();
     const client = this.provider.getPublicClient();
 
+    this.logger.info(
+      { blockNumber: blockInfo.blockNumber.toString(), poolCount: this.config.pools.length },
+      'Starting multicall for all pools'
+    );
+
     const slot0Calls = this.config.pools.map((pool) => ({
       address: pool.address,
       abi: UNISWAP_V3_POOL_ABI,
@@ -314,10 +335,14 @@ export class UniswapV3Connector extends EventEmitter {
       functionName: 'liquidity' as const,
     }));
 
+    this.logger.info({ totalCalls: slot0Calls.length + liquidityCalls.length }, 'Executing multicall');
+
     const results = await client.multicall({
       contracts: [...slot0Calls, ...liquidityCalls],
       allowFailure: true,
     });
+
+    this.logger.info({ resultsCount: results.length }, 'Multicall completed');
 
     const slot0Results = results.slice(0, this.config.pools.length);
     const liquidityResults = results.slice(this.config.pools.length);
@@ -330,8 +355,27 @@ export class UniswapV3Connector extends EventEmitter {
       const slot0Result = slot0Results[i];
       const liquidityResult = liquidityResults[i];
 
+      this.logger.info(
+        {
+          poolIndex: i,
+          pool: pool.address,
+          canonical: pool.canonical,
+          slot0Status: slot0Result.status,
+          liquidityStatus: liquidityResult.status,
+        },
+        'Processing pool result'
+      );
+
       if (slot0Result.status === 'failure' || liquidityResult.status === 'failure') {
-        this.logger.warn({ pool: pool.address, canonical: pool.canonical }, 'Multicall failed for pool');
+        this.logger.warn(
+          {
+            pool: pool.address,
+            canonical: pool.canonical,
+            slot0Error: slot0Result.status === 'failure' ? slot0Result.error : undefined,
+            liquidityError: liquidityResult.status === 'failure' ? liquidityResult.error : undefined,
+          },
+          'Multicall failed for pool'
+        );
         quotes.push(null);
         continue;
       }
@@ -340,6 +384,16 @@ export class UniswapV3Connector extends EventEmitter {
       const sqrtPriceX96 = slot0[0];
       const liquidity = liquidityResult.result as bigint;
 
+      this.logger.info(
+        {
+          pool: pool.address,
+          canonical: pool.canonical,
+          sqrtPriceX96: sqrtPriceX96.toString(),
+          liquidity: liquidity.toString(),
+        },
+        'Pool data received'
+      );
+
       const price = this.sqrtPriceX96ToPrice(
         sqrtPriceX96,
         pool.token0Decimals,
@@ -347,7 +401,7 @@ export class UniswapV3Connector extends EventEmitter {
         pool.invertPrice
       );
 
-      quotes.push({
+      const quote = {
         ts: new Date(blockInfo.timestamp),
         receivedTsMs: Date.now(),
         venue: 'uniswap_v3',
@@ -359,11 +413,23 @@ export class UniswapV3Connector extends EventEmitter {
         sqrtPriceX96,
         liquidity,
         latencyMs,
-      });
+      };
+
+      this.logger.info(
+        {
+          pool: pool.address,
+          canonical: pool.canonical,
+          price,
+          blockNumber: blockInfo.blockNumber.toString(),
+        },
+        'Created quote object'
+      );
+
+      quotes.push(quote);
     }
 
-    this.logger.debug(
-      { blockNumber: blockInfo.blockNumber.toString(), poolCount: this.config.pools.length, latencyMs },
+    this.logger.info(
+      { blockNumber: blockInfo.blockNumber.toString(), poolCount: this.config.pools.length, quotesCreated: quotes.filter(q => q !== null).length, latencyMs },
       'Multicall fetched all pools'
     );
 
