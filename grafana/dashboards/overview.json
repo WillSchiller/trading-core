@@ -88,7 +88,8 @@
       "options": {
         "reduceOptions": {
           "values": false,
-          "calcs": ["lastNotNull"]
+          "calcs": ["lastNotNull"],
+          "fields": "/^status$/"
         },
         "colorMode": "background",
         "graphMode": "none",
@@ -235,7 +236,8 @@
       "options": {
         "reduceOptions": {
           "values": false,
-          "calcs": ["lastNotNull"]
+          "calcs": ["lastNotNull"],
+          "fields": "/^status$/"
         },
         "colorMode": "background",
         "graphMode": "none",
@@ -297,7 +299,8 @@
       "options": {
         "reduceOptions": {
           "values": false,
-          "calcs": ["lastNotNull"]
+          "calcs": ["lastNotNull"],
+          "fields": "/^activity$/"
         },
         "colorMode": "background",
         "graphMode": "none",

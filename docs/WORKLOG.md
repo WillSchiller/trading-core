@@ -441,6 +441,35 @@ Updated `/Users/will/dev/blockhelix/src/collectors/dex/uniswap-v3.ts` to properl
 
 ---
 
+## 2026-01-26 (afternoon)
+
+### DevOps/Platform Agent
+
+**DONE** - Dashboard deployment documentation update
+
+Verified and documented the existing dashboard auto-deployment setup.
+
+**Existing Infrastructure:**
+- `.github/workflows/sync-dashboards.yml` - Auto-triggers on push to main when `grafana/**` files change
+- `scripts/sync-dashboards.sh` - Local script for manual dashboard sync
+
+**Deployment Flow:**
+1. Developer pushes dashboard changes to `main` branch
+2. GitHub Actions workflow triggers (if `grafana/dashboards/**` or `grafana/provisioning/**` changed)
+3. Dashboards uploaded to S3 (`s3://blockhelixasia/deploy/grafana/`)
+4. SSM runs commands on EC2 to sync from S3 and restart Grafana
+5. Health check verifies Grafana is running
+6. **Total time:** ~1-2 minutes
+
+**Manual Options:**
+1. GitHub Actions: Actions > "Sync Grafana Dashboards" > Run workflow
+2. Local: `./scripts/sync-dashboards.sh`
+
+**Documentation Updated:**
+- `/Users/will/dev/blockhelix/docs/DEPLOYMENT.md` - Added "Dashboard Deployment" section
+
+---
+
 ## 2026-01-26 (continued)
 
 ### Opportunity Detector Agent

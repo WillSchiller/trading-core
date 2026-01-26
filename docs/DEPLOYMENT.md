@@ -455,6 +455,57 @@ docker exec -it dislocation-postgres psql -U trader -d dislocation_trader -c "SE
 
 ---
 
+## Dashboard Deployment
+
+Grafana dashboards can be deployed independently of the application, enabling fast iteration on visualization changes.
+
+### Automatic Dashboard Sync
+
+Dashboards are automatically deployed when changes are pushed to `main` branch:
+
+**Trigger paths:**
+- `grafana/dashboards/**`
+- `grafana/provisioning/**`
+
+**What happens:**
+1. GitHub Actions workflow detects dashboard file changes
+2. Uploads dashboards to S3 (`s3://blockhelixasia/deploy/grafana/`)
+3. SSM syncs files to EC2 (`/home/ubuntu/app/grafana/`)
+4. Grafana container is restarted to pick up changes
+5. Health check verifies Grafana is running
+
+**Time to deploy:** ~1-2 minutes after push
+
+### Manual Dashboard Sync
+
+**Option 1: GitHub Actions**
+1. Go to Actions > "Sync Grafana Dashboards"
+2. Click "Run workflow"
+3. Optionally check "Force sync" to sync even without changes
+
+**Option 2: Local script**
+```bash
+./scripts/sync-dashboards.sh
+```
+
+**Requirements:**
+- AWS CLI configured with appropriate credentials
+- EC2 instance must be running
+
+### Dashboard Workflow Details
+
+The sync workflow (`.github/workflows/sync-dashboards.yml`) uses AWS SSM to avoid SSH key management:
+
+1. Finds EC2 instance by tag name (`dislocation-trader-production`)
+2. Uses SSM `AWS-RunShellScript` to execute commands on instance
+3. Does not require SSH access or exposed ports
+
+**Required GitHub Secrets:**
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+---
+
 ## CI/CD Setup
 
 ### 1. Configure GitHub Secrets
