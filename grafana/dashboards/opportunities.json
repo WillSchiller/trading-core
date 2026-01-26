@@ -102,7 +102,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Opportunities per Hour",
-      "gridPos": {"x": 0, "y": 3, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -163,7 +163,7 @@
       "id": 2,
       "type": "piechart",
       "title": "Opportunities by Status",
-      "gridPos": {"x": 12, "y": 3, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 6, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -203,7 +203,7 @@
       "id": 3,
       "type": "piechart",
       "title": "Skip Reasons",
-      "gridPos": {"x": 18, "y": 3, "w": 6, "h": 8},
+      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -243,7 +243,7 @@
       "id": 4,
       "type": "barchart",
       "title": "Opportunities by Pair",
-      "gridPos": {"x": 0, "y": 11, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -303,7 +303,7 @@
       "id": 5,
       "type": "barchart",
       "title": "Opportunities by Chain",
-      "gridPos": {"x": 12, "y": 11, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -363,7 +363,7 @@
       "id": 6,
       "type": "histogram",
       "title": "DETECTION TIME: Spread Distribution (bps)",
-      "gridPos": {"x": 0, "y": 19, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -424,7 +424,7 @@
       "id": 7,
       "type": "table",
       "title": "Reason Codes Summary",
-      "gridPos": {"x": 12, "y": 19, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -467,7 +467,7 @@
       "id": 8,
       "type": "table",
       "title": "Recent Opportunities",
-      "gridPos": {"x": 0, "y": 27, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 10},
       "targets": [
         {
           "refId": "A",
@@ -599,7 +599,7 @@
       "type": "stat",
       "title": "Total Opportunities",
       "description": "Number of opportunities detected in the selected time range",
-      "gridPos": {"x": 0, "y": 37, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 40, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -635,7 +635,7 @@
       "type": "stat",
       "title": "DETECT TIME: Avg Spread (abs)",
       "description": "Average absolute spread in bps at the moment of opportunity detection",
-      "gridPos": {"x": 6, "y": 37, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 40, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -675,7 +675,7 @@
       "type": "stat",
       "title": "EXEC TIME: Avg Estimated Profit",
       "description": "Average estimated profit from quoter evaluation at execution time",
-      "gridPos": {"x": 12, "y": 37, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 40, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -712,7 +712,7 @@
       "type": "stat",
       "title": "Skip Rate",
       "description": "Percentage of opportunities skipped due to filters or unprofitability",
-      "gridPos": {"x": 18, "y": 37, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 40, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",

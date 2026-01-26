@@ -103,7 +103,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Cumulative PnL (Realized)",
-      "gridPos": {"x": 0, "y": 3, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -171,7 +171,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "PnL per Trade (Realized)",
-      "gridPos": {"x": 12, "y": 3, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -239,7 +239,7 @@
       "type": "stat",
       "title": "Win Rate",
       "description": "Percentage of trades with positive realized P&L",
-      "gridPos": {"x": 0, "y": 11, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 14, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -277,7 +277,7 @@
       "id": 4,
       "type": "stat",
       "title": "Avg Win",
-      "gridPos": {"x": 6, "y": 11, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 14, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -313,7 +313,7 @@
       "id": 5,
       "type": "stat",
       "title": "Avg Loss",
-      "gridPos": {"x": 12, "y": 11, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 14, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -351,7 +351,7 @@
       "id": 6,
       "type": "stat",
       "title": "Total Gas Spent",
-      "gridPos": {"x": 18, "y": 11, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 14, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -388,7 +388,7 @@
       "type": "stat",
       "title": "Fill Rate",
       "description": "Percentage of executions that were confirmed or filled",
-      "gridPos": {"x": 0, "y": 15, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 18, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -426,7 +426,7 @@
       "id": 8,
       "type": "stat",
       "title": "Total Executions",
-      "gridPos": {"x": 6, "y": 15, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 18, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -462,7 +462,7 @@
       "type": "stat",
       "title": "Avg Slippage (Realized)",
       "description": "Average realized slippage in basis points",
-      "gridPos": {"x": 12, "y": 15, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 18, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -501,7 +501,7 @@
       "id": 10,
       "type": "stat",
       "title": "Revert Rate",
-      "gridPos": {"x": 18, "y": 15, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 18, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -539,7 +539,7 @@
       "id": 11,
       "type": "histogram",
       "title": "Slippage Distribution (Realized)",
-      "gridPos": {"x": 0, "y": 19, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -601,7 +601,7 @@
       "id": 12,
       "type": "table",
       "title": "Expected vs Actual Output",
-      "gridPos": {"x": 12, "y": 19, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -640,7 +640,7 @@
       "id": 13,
       "type": "piechart",
       "title": "Executions by Status",
-      "gridPos": {"x": 0, "y": 27, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 30, "w": 8, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -680,7 +680,7 @@
       "id": 14,
       "type": "table",
       "title": "Revert Reasons",
-      "gridPos": {"x": 8, "y": 27, "w": 16, "h": 8},
+      "gridPos": {"x": 8, "y": 30, "w": 16, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -723,7 +723,7 @@
       "id": 15,
       "type": "table",
       "title": "Recent Executions",
-      "gridPos": {"x": 0, "y": 35, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 38, "w": 24, "h": 10},
       "targets": [
         {
           "refId": "A",
@@ -874,7 +874,7 @@
       "id": 16,
       "type": "timeseries",
       "title": "Gas Cost Over Time (Realized)",
-      "gridPos": {"x": 0, "y": 45, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 48, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -938,7 +938,7 @@
       "id": 17,
       "type": "barchart",
       "title": "Executions by Pair",
-      "gridPos": {"x": 12, "y": 45, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 48, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",

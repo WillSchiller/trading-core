@@ -89,7 +89,7 @@
       "id": 2,
       "type": "stat",
       "title": "Buy DEX Signals",
-      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 4, "y": 3, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -118,7 +118,7 @@
       "id": 3,
       "type": "stat",
       "title": "Sell DEX Signals",
-      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 8, "y": 3, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -148,7 +148,7 @@
       "type": "stat",
       "title": "Avg Spread (bps)",
       "description": "Average absolute spread in basis points for rank space opportunities",
-      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 12, "y": 3, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -184,7 +184,7 @@
       "type": "stat",
       "title": "Avg DEX Rank",
       "description": "Average DEX rank when signal triggered (1 = cheapest)",
-      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 16, "y": 3, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -215,7 +215,7 @@
       "type": "stat",
       "title": "Avg DEX Percentile",
       "description": "Average DEX percentile position (0 = cheapest, 1 = most expensive)",
-      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 20, "y": 3, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -249,7 +249,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Rank Space Opportunities per Hour",
-      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 7, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -290,7 +290,7 @@
       "id": 8,
       "type": "piechart",
       "title": "Opportunities by Status",
-      "gridPos": {"x": 12, "y": 4, "w": 6, "h": 8},
+      "gridPos": {"x": 12, "y": 7, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -318,7 +318,7 @@
       "id": 9,
       "type": "piechart",
       "title": "Direction Split",
-      "gridPos": {"x": 18, "y": 4, "w": 6, "h": 8},
+      "gridPos": {"x": 18, "y": 7, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -347,7 +347,7 @@
       "type": "histogram",
       "title": "DEX Rank Distribution",
       "description": "Distribution of DEX rank when signals triggered",
-      "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 15, "w": 8, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -377,7 +377,7 @@
       "id": 11,
       "type": "histogram",
       "title": "Spread Distribution (bps)",
-      "gridPos": {"x": 8, "y": 12, "w": 8, "h": 8},
+      "gridPos": {"x": 8, "y": 15, "w": 8, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -403,7 +403,7 @@
       "type": "histogram",
       "title": "DEX Percentile Distribution",
       "description": "Distribution of DEX percentile when signals triggered",
-      "gridPos": {"x": 16, "y": 12, "w": 8, "h": 8},
+      "gridPos": {"x": 16, "y": 15, "w": 8, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -430,7 +430,7 @@
       "id": 13,
       "type": "barchart",
       "title": "Opportunities by Pair",
-      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 23, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -461,7 +461,7 @@
       "type": "barchart",
       "title": "Venue Count Distribution",
       "description": "How many venues had fresh quotes when signal triggered",
-      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 23, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -491,7 +491,7 @@
       "id": 15,
       "type": "table",
       "title": "Recent Rank Space Opportunities",
-      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 12},
+      "gridPos": {"x": 0, "y": 31, "w": 24, "h": 12},
       "targets": [
         {
           "refId": "A",
@@ -629,7 +629,7 @@
       "id": 16,
       "type": "timeseries",
       "title": "Spread Over Time",
-      "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 43, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -660,7 +660,7 @@
       "type": "timeseries",
       "title": "DEX Rank Over Time",
       "description": "DEX rank position when signals triggered",
-      "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 43, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -690,7 +690,7 @@
       "id": 18,
       "type": "stat",
       "title": "Avg Estimated Profit",
-      "gridPos": {"x": 0, "y": 48, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 51, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -723,7 +723,7 @@
       "id": 19,
       "type": "stat",
       "title": "Skip Rate",
-      "gridPos": {"x": 6, "y": 48, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 51, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -757,7 +757,7 @@
       "id": 20,
       "type": "stat",
       "title": "Executed (Paper)",
-      "gridPos": {"x": 12, "y": 48, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 51, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -787,7 +787,7 @@
       "type": "stat",
       "title": "Simulated P&L",
       "description": "Total profit/loss from rank space paper trades",
-      "gridPos": {"x": 18, "y": 48, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 51, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",

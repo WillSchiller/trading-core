@@ -44,7 +44,7 @@
       "type": "stat",
       "title": "Skipped (Unprofitable)",
       "description": "Opportunities skipped due to estimated negative profit after costs",
-      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 4, "y": 3, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -64,7 +64,7 @@
       "type": "stat",
       "title": "Executed (Paper)",
       "description": "Number of confirmed paper trade executions",
-      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 8, "y": 3, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -84,7 +84,7 @@
       "type": "stat",
       "title": "Simulated P&L",
       "description": "Total profit/loss from paper trades",
-      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 3, "w": 6, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -107,7 +107,7 @@
       "type": "stat",
       "title": "Avg Estimated Profit",
       "description": "Average estimated profit BEFORE execution",
-      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 3, "w": 6, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -129,7 +129,7 @@
       "id": 6,
       "type": "table",
       "title": "Recent Activity",
-      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -148,7 +148,7 @@
       "id": 7,
       "type": "piechart",
       "title": "Outcome Breakdown",
-      "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 15, "w": 8, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -161,7 +161,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Cumulative P&L Over Time",
-      "gridPos": {"x": 8, "y": 12, "w": 16, "h": 8},
+      "gridPos": {"x": 8, "y": 15, "w": 16, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},

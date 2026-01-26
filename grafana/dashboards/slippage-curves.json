@@ -71,7 +71,7 @@
       "id": 2,
       "type": "xychart",
       "title": "Break-Even Threshold by Trade Size",
-      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 10},
+      "gridPos": {"x": 12, "y": 3, "w": 12, "h": 10},
       "targets": [
         {
           "refId": "A",
@@ -128,7 +128,7 @@
       "type": "stat",
       "title": "Min Spread @ $500 (Buy)",
       "description": "Recommended minimum spread for profitable buy trades at $500 size",
-      "gridPos": {"x": 0, "y": 10, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 13, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -164,7 +164,7 @@
       "type": "stat",
       "title": "Min Spread @ $500 (Sell)",
       "description": "Recommended minimum spread for profitable sell trades at $500 size",
-      "gridPos": {"x": 6, "y": 10, "w": 6, "h": 4},
+      "gridPos": {"x": 6, "y": 13, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -200,7 +200,7 @@
       "type": "stat",
       "title": "Last Calibration",
       "description": "When slippage curves were last calibrated",
-      "gridPos": {"x": 12, "y": 10, "w": 6, "h": 4},
+      "gridPos": {"x": 12, "y": 13, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -226,7 +226,7 @@
       "type": "stat",
       "title": "Calibration Points",
       "description": "Number of data points in the latest calibration curve",
-      "gridPos": {"x": 18, "y": 10, "w": 6, "h": 4},
+      "gridPos": {"x": 18, "y": 13, "w": 6, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -259,7 +259,7 @@
       "id": 7,
       "type": "barchart",
       "title": "Cost Breakdown by Trade Size ($500)",
-      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -291,7 +291,7 @@
       "id": 8,
       "type": "table",
       "title": "Calibration Data - All Sizes",
-      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 17, "w": 12, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -315,7 +315,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Slippage Over Time (Historical)",
-      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
