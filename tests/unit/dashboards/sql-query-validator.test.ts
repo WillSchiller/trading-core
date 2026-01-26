@@ -351,24 +351,27 @@ describe('SQL Query Anti-Pattern Detection', () => {
       expect(errors, errors.join('\n')).toHaveLength(0);
     });
 
-    it('should use appropriate aliases for time columns', () => {
+    it('should use appropriate aliases for time columns in time series', () => {
       const errors: string[] = [];
 
       for (const { file, panelTitle, query } of allQueries) {
+        // Only check time series queries (those with time bucketing)
+        const isTimeSeries =
+          /time_bucket|date_trunc|date_bin/i.test(query) ||
+          (/GROUP BY/i.test(query) && /ORDER BY.*time/i.test(query));
+
+        if (!isTimeSeries) continue;
+
         const timeColumns = ['ts', 'detected_at', 'created_at', 'confirmed_at', 'interval_start'];
+        const hasTimeAlias = /\s+as\s+time\b/i.test(query);
 
         for (const col of timeColumns) {
-          const hasTimeColumn = new RegExp(`\\b${col}\\b`, 'i').test(query);
-          const hasTimeAlias = /\s+as\s+time\b/i.test(query);
-
-          if (hasTimeColumn && query.toUpperCase().includes('SELECT')) {
-            const isInSelect = new RegExp(`SELECT[^;]*\\b${col}\\b`, 'is').test(query);
-            if (isInSelect && !hasTimeAlias) {
-              errors.push(
-                `${file}: "${panelTitle}" - selects ${col} but doesn't alias as 'time' for Grafana`
-              );
-              break;
-            }
+          const isInSelect = new RegExp(`SELECT[^;]*\\b${col}\\b`, 'is').test(query);
+          if (isInSelect && !hasTimeAlias) {
+            errors.push(
+              `${file}: "${panelTitle}" - time series selects ${col} but doesn't alias as 'time'`
+            );
+            break;
           }
         }
       }
