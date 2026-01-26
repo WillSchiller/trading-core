@@ -439,7 +439,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
 
-    detector.stop();
+    await detector.stop();
     logger.info('Opportunity detector stopped');
 
     rankSpaceDetector.stop();

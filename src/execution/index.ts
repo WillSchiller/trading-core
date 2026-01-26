@@ -15,6 +15,7 @@ import { LiveTrader } from './live-trader.js';
 import { InventoryManager } from './inventory.js';
 import { BreakEvenCache } from './break-even-cache.js';
 import { StatusQueue } from './status-queue.js';
+import { ExecutionQueue } from './execution-queue.js';
 
 export interface TokenConfig {
   address: Address;
@@ -57,10 +58,10 @@ export class ExecutionManager {
   private inventory: InventoryManager;
   private breakEvenCache: BreakEvenCache;
   private statusQueue: StatusQueue;
+  private executionQueue: ExecutionQueue;
 
   private isRunning: boolean = false;
   private cachedGasPrice: { gwei: number; timestamp: number } | null = null;
-  private readonly gasPriceCacheTtlMs = 10000;
   private readonly gasPriceRefreshIntervalMs = 8000;
   private gasPriceRefreshInterval: NodeJS.Timeout | null = null;
   private gasCacheStats = { hitCount: 0, missCount: 0 };
@@ -98,8 +99,9 @@ export class ExecutionManager {
     this.inventory = new InventoryManager(config.chain, config.appConfig.inventory);
     this.breakEvenCache = new BreakEvenCache({ ttlMs: 30000 });
     this.statusQueue = new StatusQueue();
+    this.executionQueue = new ExecutionQueue();
 
-    this.paperTrader = new PaperTrader(config.chain, this.inventory);
+    this.paperTrader = new PaperTrader(config.chain, this.inventory, this.executionQueue);
 
     if (config.privateKey && !config.paperMode) {
       this.signer = new TransactionSigner(config.publicClient, {
@@ -163,6 +165,7 @@ export class ExecutionManager {
 
     this.isRunning = true;
     this.statusQueue.start();
+    this.executionQueue.start();
 
     this.refreshGasPrice();
     this.gasPriceRefreshInterval = setInterval(() => {
@@ -186,7 +189,10 @@ export class ExecutionManager {
       this.gasPriceRefreshInterval = null;
     }
 
-    await this.statusQueue.stop();
+    await Promise.all([
+      this.statusQueue.stop(),
+      this.executionQueue.stop(),
+    ]);
     this.isRunning = false;
     this.logger.info('Execution manager stopped');
   }
@@ -318,7 +324,6 @@ export class ExecutionManager {
     };
     const invertPrice = opportunity.direction === 'buy_dex';
 
-    const gasPricePromise = this.getCachedGasPrice();
     const feeDataPromise = this.gasEstimator.fetchFeeData();
 
     let quote;
@@ -346,7 +351,8 @@ export class ExecutionManager {
     }
 
     const gasEstimateStartTime = Date.now();
-    const [feeData, gasPriceGwei] = await Promise.all([feeDataPromise, gasPricePromise]);
+    const feeData = await feeDataPromise;
+    const gasPriceGwei = Number(feeData.maxFeePerGas ?? 0n) / 1e9;
     const gasEstimate = this.gasEstimator.estimateSwapGasWithFeeData(quote.gasEstimate, feeData);
     gasEstimateLatencyMs = Date.now() - gasEstimateStartTime;
 
@@ -371,20 +377,11 @@ export class ExecutionManager {
     const freshAnchorMid = freshAnchorQuote.quote.mid;
     const freshDexPrice = quote.quotedPrice;
 
-    const freshAnchorMidDecimal = new Decimal(freshAnchorMid);
-    const freshDexPriceDecimal = new Decimal(freshDexPrice);
-    const freshSpreadBps = freshDexPriceDecimal
-      .minus(freshAnchorMidDecimal)
-      .dividedBy(freshAnchorMidDecimal)
-      .times(10000)
-      .toNumber();
+    const freshSpreadBps = ((freshDexPrice - freshAnchorMid) / freshAnchorMid) * 10000;
     const spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
 
-    const feeTierBps = new Decimal(fee).dividedBy(100).toNumber();
-    const gasBps = new Decimal(gasEstimate.estimatedGasUsd)
-      .dividedBy(tradeSizeUsd)
-      .times(10000)
-      .toNumber();
+    const feeTierBps = fee / 100;
+    const gasBps = (gasEstimate.estimatedGasUsd / tradeSizeUsd) * 10000;
 
     let breakEvenBps: number;
     let cacheHit = false;
@@ -460,7 +457,7 @@ export class ExecutionManager {
     const estimatedProfitUsd = grossPnlUsd.minus(gasEstimate.estimatedGasUsd).toNumber();
 
     const riskCheckStartTime = Date.now();
-    const riskCheck = await this.riskManager.checkTradeAllowed({
+    const riskCheck = this.riskManager.checkTradeAllowed({
       tradeSizeUsd,
       gasPriceGwei,
       estimatedProfitUsd,
@@ -563,19 +560,6 @@ export class ExecutionManager {
   private getPairIdFromConfig(canonical: string): number {
     return this.pairIdMap.get(canonical) ?? 0;
   }
-
-  private async getCachedGasPrice(): Promise<number> {
-    const now = Date.now();
-    if (this.cachedGasPrice && now - this.cachedGasPrice.timestamp < this.gasPriceCacheTtlMs) {
-      this.gasCacheStats.hitCount++;
-      return this.cachedGasPrice.gwei;
-    }
-
-    this.gasCacheStats.missCount++;
-    const { gasPriceGwei } = await this.gasEstimator.getCurrentGasPrice();
-    this.cachedGasPrice = { gwei: gasPriceGwei, timestamp: now };
-    return gasPriceGwei;
-  }
 }
 
 export { UniswapQuoter, type QuoteParams, type QuoteResult, QuoterError } from './quoter.js';
@@ -589,3 +573,4 @@ export { SlippageCalibrator, type CalibrationConfig, type SlippagePoint } from '
 export { InventoryManager, type InventoryConfig, type InventoryState } from './inventory.js';
 export { BreakEvenCache, type BreakEvenEntry, type SizeBucket } from './break-even-cache.js';
 export { StatusQueue } from './status-queue.js';
+export { ExecutionQueue, type ExecutionStatusPayload } from './execution-queue.js';

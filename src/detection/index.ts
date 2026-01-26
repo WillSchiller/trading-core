@@ -17,11 +17,8 @@ import {
   type FilterResult,
 } from './filters.js';
 import { OpportunityEmitter } from './emitter.js';
-import {
-  insertOpportunity,
-  updateOpportunityLastSeen,
-  closeOpportunity,
-} from '../persistence/opportunities.js';
+import { DetectionQueue } from './detection-queue.js';
+import { insertOpportunity } from '../persistence/opportunities.js';
 
 export interface OpportunityDetectorConfig {
   quoteCache: QuoteCache;
@@ -76,6 +73,7 @@ export class OpportunityDetector {
   private venueIdMap: Map<string, number>;
   private pairIdMap: Map<string, number>;
   private emitter: OpportunityEmitter;
+  private detectionQueue: DetectionQueue;
   private gapFirstSeen: Map<string, number>;
   private intervalHandle: NodeJS.Timeout | null;
   private isRunning: boolean;
@@ -94,6 +92,7 @@ export class OpportunityDetector {
     this.venueIdMap = config.venueIdMap;
     this.pairIdMap = config.pairIdMap;
     this.emitter = new OpportunityEmitter();
+    this.detectionQueue = new DetectionQueue();
     this.gapFirstSeen = new Map();
     this.intervalHandle = null;
     this.isRunning = false;
@@ -116,6 +115,8 @@ export class OpportunityDetector {
 
     this.logger.info({ tickInterval }, 'Starting opportunity detector');
 
+    this.detectionQueue.start();
+
     this.intervalHandle = setInterval(() => {
       this.runDetectionCycle().catch((err) => {
         this.logger.error({ err }, 'Error in detection cycle');
@@ -123,7 +124,7 @@ export class OpportunityDetector {
     }, tickInterval);
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (!this.isRunning) {
       this.logger.warn('Opportunity detector not running');
       return;
@@ -135,6 +136,8 @@ export class OpportunityDetector {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
     }
+
+    await this.detectionQueue.stop();
 
     this.logger.info('Opportunity detector stopped');
   }
@@ -169,9 +172,7 @@ export class OpportunityDetector {
     try {
       const enabledPairs = this.pairsConfig.filter((p) => p.enabled !== false);
 
-      for (const pairConfig of enabledPairs) {
-        await this.detectForPair(pairConfig);
-      }
+      await Promise.all(enabledPairs.map((pairConfig) => this.detectForPair(pairConfig)));
 
       const duration = Date.now() - startTime;
       this.consecutiveFailures = 0;
@@ -254,7 +255,7 @@ export class OpportunityDetector {
 
     const stalenessResult = stalenessFilter({ quotes });
     if (!stalenessResult.passed) {
-      await this.closeStaleOpportunities(pair, chain, pairId);
+      this.closeStaleOpportunities(pair, chain, pairId);
       return;
     }
 
@@ -543,11 +544,11 @@ export class OpportunityDetector {
     return `${chain}:${pairId}:${anchorVenueId}:${dexVenueId}:${direction}:${poolAddress}`;
   }
 
-  private async closeStaleOpportunities(
+  private closeStaleOpportunities(
     pair: string,
     chain: Chain,
     pairId: number
-  ): Promise<void> {
+  ): void {
     const now = new Date();
     const keysToClose: string[] = [];
 
@@ -560,21 +561,17 @@ export class OpportunityDetector {
     for (const oppKey of keysToClose) {
       const openOpp = this.openOpportunities.get(oppKey);
       if (openOpp && openOpp.id) {
-        try {
-          await closeOpportunity(openOpp.id, now, 'quote_stale');
-          this.logger.info(
-            {
-              opportunityId: openOpp.id.toString(),
-              oppKey,
-              pair,
-              chain,
-            },
-            'Opportunity closed due to stale quotes'
-          );
-          this.openOpportunities.delete(oppKey);
-        } catch (err) {
-          this.logger.error({ err, oppKey }, 'Failed to close stale opportunity');
-        }
+        this.detectionQueue.enqueueClose(openOpp.id, now, 'quote_stale');
+        this.logger.info(
+          {
+            opportunityId: openOpp.id.toString(),
+            oppKey,
+            pair,
+            chain,
+          },
+          'Opportunity close enqueued due to stale quotes'
+        );
+        this.openOpportunities.delete(oppKey);
       }
     }
   }
@@ -608,7 +605,7 @@ export class OpportunityDetector {
 
         if (existingOpp.id && existingOpp.id > BigInt(0)) {
           if (nowMs - existingOpp.lastUpdateAt >= UPDATE_THROTTLE_MS) {
-            await updateOpportunityLastSeen(existingOpp.id, now, existingOpp.maxSpreadBps);
+            this.detectionQueue.enqueueLastSeen(existingOpp.id, now, existingOpp.maxSpreadBps);
             existingOpp.lastUpdateAt = nowMs;
           }
         } else if (existingOpp.consecutiveAbove >= CONSECUTIVE_TICKS_REQUIRED) {
@@ -669,7 +666,7 @@ export class OpportunityDetector {
         existingOpp.consecutiveAbove = 0;
 
         if (existingOpp.consecutiveBelow >= CONSECUTIVE_TICKS_REQUIRED) {
-          await closeOpportunity(existingOpp.id, now, 'spread_below_threshold');
+          this.detectionQueue.enqueueClose(existingOpp.id, now, 'spread_below_threshold');
 
           this.logger.info(
             {
@@ -678,7 +675,7 @@ export class OpportunityDetector {
               durationMs: nowMs - existingOpp.openedAt.getTime(),
               maxSpreadBps: existingOpp.maxSpreadBps,
             },
-            'Opportunity closed'
+            'Opportunity close enqueued'
           );
 
           this.openOpportunities.delete(oppKey);

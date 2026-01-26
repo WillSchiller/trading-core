@@ -5,9 +5,9 @@ import type { Chain, Opportunity } from '../types/index.js';
 import type { QuoteResult } from './quoter.js';
 import type { GasEstimate } from './gas.js';
 import type { RiskCheckResult } from './risk.js';
-import { insertExecution, updateExecutionStatus, type Execution } from '../persistence/executions.js';
-import { updateOpportunityStatus } from '../persistence/opportunities.js';
+import type { Execution } from '../persistence/executions.js';
 import type { InventoryManager } from './inventory.js';
+import type { ExecutionQueue } from './execution-queue.js';
 import { alertTradeProfit } from '../utils/alerts.js';
 
 export interface PaperTradeParams {
@@ -29,7 +29,7 @@ export interface PaperTradeParams {
 }
 
 export interface PaperTradeResult {
-  executionId: bigint;
+  executionClientId: string;
   status: 'simulated' | 'skipped';
   skipReason?: string;
   simulatedOutput: bigint;
@@ -44,11 +44,13 @@ export class PaperTrader {
   private logger: Logger;
   private chain: Chain;
   private inventory?: InventoryManager;
+  private executionQueue?: ExecutionQueue;
 
-  constructor(chain: Chain, inventory?: InventoryManager) {
+  constructor(chain: Chain, inventory?: InventoryManager, executionQueue?: ExecutionQueue) {
     this.logger = createChildLogger({ component: 'paper-trader', chain });
     this.chain = chain;
     this.inventory = inventory;
+    this.executionQueue = executionQueue;
   }
 
   async executePaperTrade(params: PaperTradeParams): Promise<PaperTradeResult> {
@@ -76,10 +78,10 @@ export class PaperTrader {
 
     if (!riskCheck.allowed) {
       const skipReason = riskCheck.reason ?? 'Risk check failed';
-      await this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
+      this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
 
       return {
-        executionId: 0n,
+        executionClientId: '',
         status: 'skipped',
         skipReason,
         simulatedOutput: 0n,
@@ -107,10 +109,10 @@ export class PaperTrader {
           'Trade skipped - insufficient inventory'
         );
 
-        await this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
+        this.recordSkippedTrade(opportunity, skipReason, params.estimatedProfitUsd);
 
         return {
-          executionId: 0n,
+          executionClientId: '',
           status: 'skipped',
           skipReason,
           simulatedOutput: 0n,
@@ -142,6 +144,8 @@ export class PaperTrader {
       simulatedGasUsd
     );
 
+    const executionClientId = this.executionQueue?.generateClientId() ?? '';
+
     const execution: Execution = {
       opportunityId: opportunity.id!,
       createdAt: new Date(),
@@ -166,21 +170,21 @@ export class PaperTrader {
       status: 'pending',
     };
 
-    const executionId = await insertExecution(execution);
-
-    await updateExecutionStatus(executionId, {
-      status: 'confirmed',
-      confirmedAt: new Date(),
-      gasUsed: Number(quote.gasEstimate),
-      gasCostUsd: simulatedGasUsd,
-      actualOutput: simulatedOutput,
-      actualOutputHuman: simulatedOutputHuman,
-      realizedPrice: simulatedPrice,
-      realizedSlippageBps: simulatedSlippageBps,
-      realizedPnlUsd: simulatedPnlUsd,
-    });
-
-    await updateOpportunityStatus(opportunity.id!, 'filled', undefined, params.estimatedProfitUsd);
+    if (this.executionQueue) {
+      this.executionQueue.enqueueExecution(executionClientId, execution);
+      this.executionQueue.enqueueExecutionStatus(executionClientId, {
+        status: 'confirmed',
+        confirmedAt: new Date(),
+        gasUsed: Number(quote.gasEstimate),
+        gasCostUsd: simulatedGasUsd,
+        actualOutput: simulatedOutput,
+        actualOutputHuman: simulatedOutputHuman,
+        realizedPrice: simulatedPrice,
+        realizedSlippageBps: simulatedSlippageBps,
+        realizedPnlUsd: simulatedPnlUsd,
+      });
+      this.executionQueue.enqueueOpportunityStatus(opportunity.id!, 'filled', undefined, params.estimatedProfitUsd);
+    }
 
     if (this.inventory) {
       this.inventory.executeTrade(
@@ -193,7 +197,7 @@ export class PaperTrader {
 
     this.logger.info(
       {
-        executionId: executionId.toString(),
+        executionClientId,
         opportunityId: opportunity.id?.toString(),
         simulatedOutputHuman,
         simulatedPrice,
@@ -217,7 +221,7 @@ export class PaperTrader {
     ).catch((err) => this.logger.error({ error: (err as Error).message }, 'Failed to send trade alert'));
 
     return {
-      executionId,
+      executionClientId,
       status: 'simulated',
       simulatedOutput,
       simulatedOutputHuman,
@@ -228,8 +232,10 @@ export class PaperTrader {
     };
   }
 
-  private async recordSkippedTrade(opportunity: Opportunity, reason: string, estimatedProfitUsd?: number): Promise<void> {
-    await updateOpportunityStatus(opportunity.id!, 'skipped', reason, estimatedProfitUsd);
+  private recordSkippedTrade(opportunity: Opportunity, reason: string, estimatedProfitUsd?: number): void {
+    if (this.executionQueue) {
+      this.executionQueue.enqueueOpportunityStatus(opportunity.id!, 'skipped', reason, estimatedProfitUsd);
+    }
 
     this.logger.info(
       {

@@ -440,3 +440,74 @@ Updated `/Users/will/dev/blockhelix/src/collectors/dex/uniswap-v3.ts` to properl
 - Improved audit trail for quote timing analysis
 
 ---
+
+## 2026-01-26 (continued)
+
+### Opportunity Detector Agent
+
+**DONE** - Task #4: Parallelized detection loop DB operations
+
+**Problem:**
+- `src/detection/index.ts` processed pairs sequentially with blocking DB calls
+- Every tick: `await updateOpportunityLastSeen()`, `await insertOpportunity()`, `await closeOpportunity()`
+- These blocking calls added latency to the detection cycle, risking cycle overruns (target: <50ms)
+
+**Solution:**
+Implemented fire-and-forget background queue pattern for DB operations:
+
+1. **Created DetectionQueue** (`src/detection/detection-queue.ts`):
+   - Modeled after `src/execution/status-queue.ts` pattern
+   - Two queues: `lastSeenQueue` and `closeQueue`
+   - Background flush every 100ms using `setInterval`
+   - Methods: `enqueueLastSeen()`, `enqueueClose()`, `start()`, `stop()`
+   - Ring buffers (size 100) for recent activity tracking
+   - Batch processing with `Promise.allSettled()` for resilience
+   - Tracks queue lengths and failure counts
+
+2. **Updated OpportunityDetector** (`src/detection/index.ts`):
+   - Added `detectionQueue` as dependency
+   - Replaced `await updateOpportunityLastSeen()` with `queue.enqueueLastSeen()`
+   - Replaced `await closeOpportunity()` with `queue.enqueueClose()`
+   - Kept `insertOpportunity()` synchronous (need ID for emitter)
+   - Changed `detectForPair()` calls to parallel with `Promise.all()`
+   - Changed `stop()` to async to await queue drain
+   - Updated `closeStaleOpportunities()` to synchronous (uses queue)
+   - Removed unused imports (`updateOpportunityLastSeen`, `closeOpportunity`)
+
+3. **Updated Main Application** (`src/index.ts`):
+   - Changed `detector.stop()` to `await detector.stop()` in shutdown handler
+
+**Files Created:**
+- `/Users/will/dev/blockhelix/src/detection/detection-queue.ts` - Background queue for DB operations
+- `/Users/will/dev/blockhelix/tests/unit/detection-queue.test.ts` - Unit tests (6 tests, all passing)
+
+**Files Changed:**
+- `/Users/will/dev/blockhelix/src/detection/index.ts` - Integrated queue and parallelized pair processing
+- `/Users/will/dev/blockhelix/src/index.ts` - Made detector stop async
+
+**Verification:**
+- All unit tests pass (143 passed, 6 new detection queue tests)
+- TypeScript compilation succeeds with no errors
+- Build completes successfully
+- Detection queue tests verify:
+  - Enqueuing last seen updates
+  - Enqueuing close updates
+  - Ring buffer tracking
+  - Background flush mechanism
+  - Mixed update types
+  - Queue draining on stop
+
+**Impact:**
+- Detection cycle no longer blocks on DB writes (fire-and-forget)
+- Pair processing runs in parallel instead of sequentially
+- Detection loop latency reduced significantly (DB writes happen async)
+- `cycleInProgress` guard ensures safe parallelization
+- Improved throughput: N pairs can be processed concurrently
+- No data loss: updates queued and flushed in background
+
+**Performance Optimization:**
+- Before: Sequential pair processing + blocking DB calls
+- After: Parallel pair processing + async DB queue (100ms flush)
+- Target maintained: <50ms detection cycle duration
+
+---

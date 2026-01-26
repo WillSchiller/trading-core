@@ -36,6 +36,7 @@ export class RiskManager {
   private tradeTimestamps: Date[];
   private readonly mutex: Mutex;
   private static readonly LOCK_TIMEOUT_MS = 5000;
+  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
 
   constructor(chain: Chain, config: RiskConfig) {
     this.logger = createChildLogger({ component: 'risk-manager', chain });
@@ -54,16 +55,7 @@ export class RiskManager {
     this.tradeTimestamps = [];
   }
 
-  async checkTradeAllowed(params: TradeParams): Promise<RiskCheckResult> {
-    const release = await this.acquireWithTimeout();
-    try {
-      return this.checkTradeAllowedUnsafe(params);
-    } finally {
-      release();
-    }
-  }
-
-  private checkTradeAllowedUnsafe(params: TradeParams): RiskCheckResult {
+  checkTradeAllowed(params: TradeParams): RiskCheckResult {
     if (this.state.isHalted) {
       return { allowed: false, reason: `System halted: ${this.state.haltReason}` };
     }
@@ -101,8 +93,6 @@ export class RiskManager {
     return { allowed: true };
   }
 
-  private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
-
   private async acquireWithTimeout(): Promise<() => void> {
     const startTime = Date.now();
 
@@ -131,20 +121,21 @@ export class RiskManager {
   }
 
   private checkCooldown(): RiskCheckResult {
-    if (!this.state.cooldownUntil) {
+    const cooldownUntil = this.state.cooldownUntil;
+    if (!cooldownUntil) {
       return { allowed: true };
     }
 
-    const now = new Date();
-    if (now < this.state.cooldownUntil) {
-      const remainingMs = this.state.cooldownUntil.getTime() - now.getTime();
+    const now = Date.now();
+    const cooldownTime = cooldownUntil.getTime();
+    if (now < cooldownTime) {
+      const remainingMs = cooldownTime - now;
       return {
         allowed: false,
         reason: `Cooldown active, ${Math.ceil(remainingMs / 1000)}s remaining`,
       };
     }
 
-    this.state.cooldownUntil = null;
     return { allowed: true };
   }
 
@@ -170,15 +161,25 @@ export class RiskManager {
   }
 
   private checkTradeRate(): RiskCheckResult {
-    this.pruneOldTrades();
-
-    if (this.tradeTimestamps.length >= this.config.maxTradesPerHour) {
+    const count = this.getRecentTradeCount();
+    if (count >= this.config.maxTradesPerHour) {
       return {
         allowed: false,
-        reason: `Rate limit: ${this.tradeTimestamps.length}/${this.config.maxTradesPerHour} trades in last hour`,
+        reason: `Rate limit: ${count}/${this.config.maxTradesPerHour} trades in last hour`,
       };
     }
     return { allowed: true };
+  }
+
+  private getRecentTradeCount(): number {
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    let count = 0;
+    for (const ts of this.tradeTimestamps) {
+      if (ts.getTime() > oneHourAgo) {
+        count++;
+      }
+    }
+    return count;
   }
 
   private checkGasPrice(gasPriceGwei: number): RiskCheckResult {
@@ -211,6 +212,9 @@ export class RiskManager {
   async recordTradeSubmitted(tradeSizeUsd: number): Promise<void> {
     const release = await this.acquireWithTimeout();
     try {
+      this.pruneOldTrades();
+      this.clearExpiredCooldown();
+
       const now = new Date();
       this.tradeTimestamps.push(now);
       this.state.lastTradeAt = now;
@@ -295,14 +299,11 @@ export class RiskManager {
     }
   }
 
-  async getState(): Promise<RiskState> {
-    const release = await this.acquireWithTimeout();
-    try {
-      this.pruneOldTrades();
-      return { ...this.state, tradesLastHour: this.tradeTimestamps.length };
-    } finally {
-      release();
-    }
+  getState(): RiskState {
+    return {
+      ...this.state,
+      tradesLastHour: this.getRecentTradeCount(),
+    };
   }
 
   isHalted(): boolean {
@@ -319,7 +320,14 @@ export class RiskManager {
   }
 
   private pruneOldTrades(): void {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    this.tradeTimestamps = this.tradeTimestamps.filter((ts) => ts > oneHourAgo);
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    this.tradeTimestamps = this.tradeTimestamps.filter((ts) => ts.getTime() > oneHourAgo);
+  }
+
+  private clearExpiredCooldown(): void {
+    const cooldownUntil = this.state.cooldownUntil;
+    if (cooldownUntil && Date.now() >= cooldownUntil.getTime()) {
+      this.state.cooldownUntil = null;
+    }
   }
 }

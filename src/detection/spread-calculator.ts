@@ -1,4 +1,3 @@
-import { Decimal } from 'decimal.js';
 import type { NormalizedQuote } from '../types/index.js';
 
 export interface SpreadResult {
@@ -22,10 +21,10 @@ const ANCHOR_DIVERGENCE_THRESHOLD_BPS = 10;
 export function calculateSpread(input: SpreadCalculationInput): SpreadResult {
   const { anchorQuote, confirmQuote, dexQuote } = input;
 
-  const anchorMid = new Decimal(anchorQuote.mid);
-  const dexMid = new Decimal(dexQuote.mid);
+  const anchorMid = anchorQuote.mid;
+  const dexMid = dexQuote.mid;
 
-  const spreadBps = dexMid.minus(anchorMid).dividedBy(anchorMid).times(10000).toNumber();
+  const spreadBps = ((dexMid - anchorMid) / anchorMid) * 10000;
 
   const direction: 'buy_dex' | 'sell_dex' = spreadBps < 0 ? 'buy_dex' : 'sell_dex';
 
@@ -35,13 +34,7 @@ export function calculateSpread(input: SpreadCalculationInput): SpreadResult {
 
   if (confirmQuote) {
     confirmMid = confirmQuote.mid;
-    const confirmMidDecimal = new Decimal(confirmMid);
-    const divergence = confirmMidDecimal
-      .minus(anchorMid)
-      .dividedBy(anchorMid)
-      .times(10000)
-      .abs()
-      .toNumber();
+    const divergence = Math.abs(((confirmMid - anchorMid) / anchorMid) * 10000);
 
     anchorDivergenceBps = divergence;
 
@@ -55,9 +48,9 @@ export function calculateSpread(input: SpreadCalculationInput): SpreadResult {
   return {
     spreadBps,
     direction,
-    anchorMid: anchorMid.toNumber(),
+    anchorMid,
     confirmMid,
-    dexMid: dexMid.toNumber(),
+    dexMid,
     confidence,
     anchorDivergenceBps,
   };
@@ -65,9 +58,7 @@ export function calculateSpread(input: SpreadCalculationInput): SpreadResult {
 
 export function calculateSpreadBps(params: { cexMid: number; dexMid: number }): number {
   const { cexMid, dexMid } = params;
-  const cex = new Decimal(cexMid);
-  const dex = new Decimal(dexMid);
-  return dex.minus(cex).dividedBy(cex).times(10000).toNumber();
+  return ((dexMid - cexMid) / cexMid) * 10000;
 }
 
 export function determineDirection(spreadBps: number): 'buy_dex' | 'sell_dex' {
