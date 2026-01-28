@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createChildLogger, type Logger } from '../utils/logger.js';
-import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
+import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState, PnLAttribution } from './pca-stat-arb.js';
 
 export class PCAPersistence {
   private pool: Pool;
@@ -69,10 +69,13 @@ export class PCAPersistence {
       ? (event.positionSizeUsd * event.pnlBps) / 10000
       : null;
 
+    const attr = event.attribution;
+
     await this.pool.query(
       `UPDATE pca_signals
        SET resolved = true, exit_timestamp = $1, exit_z_score = $2, hold_time_ms = $3,
-           exit_price = $5, pnl_bps = $6, exit_reason = $7, peak_pnl_bps = $8, trough_pnl_bps = $9, pnl_usd = $10
+           exit_price = $5, pnl_bps = $6, exit_reason = $7, peak_pnl_bps = $8, trough_pnl_bps = $9, pnl_usd = $10,
+           pc1_pnl_bps = $11, residual_pnl_bps = $12, pc1_pct_of_total = $13
        WHERE asset = $4 AND resolved = false
        ORDER BY timestamp DESC LIMIT 1`,
       [
@@ -86,10 +89,21 @@ export class PCAPersistence {
         event.peakPnlBps ?? null,
         event.troughPnlBps ?? null,
         pnlUsd,
+        attr?.pc1PnlBps ?? null,
+        attr?.residualPnlBps ?? null,
+        attr?.pc1PctOfTotal ?? null,
       ]
     );
 
-    this.logger.debug({ asset: event.asset, holdTimeMs: event.holdTimeMs, exitReason: event.exitReason, pnlUsd }, 'Signal resolved');
+    this.logger.debug({
+      asset: event.asset,
+      holdTimeMs: event.holdTimeMs,
+      exitReason: event.exitReason,
+      pnlUsd,
+      pc1PnlBps: attr?.pc1PnlBps,
+      residualPnlBps: attr?.residualPnlBps,
+      pc1PctOfTotal: attr?.pc1PctOfTotal,
+    }, 'Signal resolved');
   }
 
   async saveResiduals(signals: AssetSignal[]): Promise<void> {

@@ -5,6 +5,15 @@ import { createChildLogger, type Logger } from '../utils/logger.js';
 export type RegimeState = 'bullish' | 'bearish' | 'neutral';
 export type ExitReason = 'zscore' | 'time_stop' | 'trailing_stop';
 
+export interface PnLAttribution {
+  totalPnlBps: number;
+  pc1PnlBps: number;
+  residualPnlBps: number;
+  pc1PctOfTotal: number;
+  cumulativePC1Return: number;
+  pc1Loading: number;
+}
+
 export interface RegimeGatingConfig {
   enabled: boolean;
   ewmaSpan: number;
@@ -165,6 +174,7 @@ export interface PCAExitEvent extends PCASignalEvent {
   peakPnlBps: number;
   troughPnlBps: number;
   regimeState: RegimeState;
+  attribution: PnLAttribution;
 }
 
 export interface ActivePosition extends PCASignalEvent {
@@ -172,6 +182,8 @@ export interface ActivePosition extends PCASignalEvent {
   troughPnlBps: number;
   lastPnlBps: number;
   trailingActivated: boolean;
+  cumulativePC1Return: number;
+  entryPC1Loading: number;
 }
 
 export class PCAStatArbMonitor extends EventEmitter {
@@ -620,6 +632,8 @@ export class PCAStatArbMonitor extends EventEmitter {
             troughPnlBps: 0,
             lastPnlBps: 0,
             trailingActivated: false,
+            cumulativePC1Return: 0,
+            entryPC1Loading: this.getPC1Loading(signal.asset),
           };
 
           this.activePositions.set(signal.asset, position);
@@ -646,6 +660,8 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
 
       if (existingPosition) {
+        existingPosition.cumulativePC1Return += signal.factorReturns[0] ?? 0;
+
         const currentPrice = this.getCurrentPrice(signal.asset);
         const { shouldExit, reason } = this.checkExitConditions(
           existingPosition,
@@ -656,6 +672,7 @@ export class PCAStatArbMonitor extends EventEmitter {
 
         if (shouldExit) {
           const holdTime = now - existingPosition.timestamp;
+          const attribution = this.computeAttribution(existingPosition);
 
           this.logger.info(
             {
@@ -668,6 +685,9 @@ export class PCAStatArbMonitor extends EventEmitter {
               pnlBps: existingPosition.lastPnlBps.toFixed(1),
               peakPnlBps: existingPosition.peakPnlBps.toFixed(1),
               troughPnlBps: existingPosition.troughPnlBps.toFixed(1),
+              pc1PnlBps: attribution.pc1PnlBps.toFixed(1),
+              residualPnlBps: attribution.residualPnlBps.toFixed(1),
+              pc1PctOfTotal: (attribution.pc1PctOfTotal * 100).toFixed(0) + '%',
             },
             'PCA signal closed'
           );
@@ -683,6 +703,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             peakPnlBps: existingPosition.peakPnlBps,
             troughPnlBps: existingPosition.troughPnlBps,
             regimeState: this.regimeState,
+            attribution,
           };
 
           this.emit('exit', exitEvent);
@@ -822,6 +843,25 @@ export class PCAStatArbMonitor extends EventEmitter {
       exposure += sign * loading * pos.positionSizeUsd;
     }
     return exposure;
+  }
+
+  private computeAttribution(position: ActivePosition): PnLAttribution {
+    const totalPnlBps = position.lastPnlBps;
+    const pc1Loading = position.entryPC1Loading;
+    const cumulativePC1Return = position.cumulativePC1Return;
+    const sign = position.direction === 'long' ? 1 : -1;
+    const pc1PnlBps = sign * pc1Loading * cumulativePC1Return * 10000;
+    const residualPnlBps = totalPnlBps - pc1PnlBps;
+    const pc1PctOfTotal = totalPnlBps !== 0 ? pc1PnlBps / totalPnlBps : 0;
+
+    return {
+      totalPnlBps,
+      pc1PnlBps,
+      residualPnlBps,
+      pc1PctOfTotal,
+      cumulativePC1Return,
+      pc1Loading,
+    };
   }
 
   private wouldBreachPC1Exposure(asset: string, direction: 'long' | 'short'): boolean {
