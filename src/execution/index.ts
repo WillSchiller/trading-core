@@ -72,6 +72,12 @@ export class ExecutionManager {
     this.appConfig = config.appConfig;
     this.pairsConfig = config.pairsConfig;
     this.paperMode = config.paperMode;
+
+    this.logger.info({
+      chain: config.chain,
+      pairCount: config.pairsConfig.length,
+      pairs: config.pairsConfig.map(p => `${p.base}/${p.quote}`),
+    }, 'Execution manager initialized');
     this.tokenMap = config.tokenMap;
     this.pairIdMap = config.pairIdMap;
     this.quoteCache = config.quoteCache;
@@ -276,7 +282,16 @@ export class ExecutionManager {
     });
 
     if (!pairConfig) {
-      this.logger.warn({ opportunityId: opportunity.id?.toString() }, 'Pair config not found');
+      this.logger.warn({
+        opportunityId: opportunity.id?.toString(),
+        pairId: opportunity.pairId,
+        chain: opportunity.chain,
+        availablePairs: this.pairsConfig.map(p => ({
+          canonical: `${p.base}/${p.quote}`,
+          chain: p.chain,
+          pairId: this.getPairIdFromConfig(`${p.base}/${p.quote}`),
+        })),
+      }, 'Pair config not found');
       this.statusQueue.enqueue(opportunity.id!, 'skipped', 'Pair config not found');
       return;
     }

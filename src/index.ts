@@ -347,7 +347,11 @@ async function main() {
 
   if (config.env.enableExecution) {
     for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
-      if (!chainConfig.enabled) continue;
+      const envEnabled = chainName === 'mainnet' ? config.env.enableMainnet
+        : chainName === 'base' ? config.env.enableBase
+        : false;
+      const isEnabled = chainConfig.enabled || envEnabled;
+      if (!isEnabled) continue;
 
       const chain = chainName as Chain;
       const endpoints = buildRpcEndpoints(chain, config.env);
