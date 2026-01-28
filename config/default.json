@@ -35,7 +35,7 @@
     "deadlineSeconds": 60,
     "gasBufferPercent": 20,
     "simulateBeforeSend": true,
-    "minProfitUsd": 0.50
+    "minProfitUsd": 0.05
   },
   "risk": {
     "maxTradeSizeUsd": 200,
@@ -46,9 +46,9 @@
     "haltOnConsecutiveReverts": 3,
     "chainOverrides": {
       "mainnet": {
-        "maxTradeSizeUsd": 100,
-        "maxOpenExposureUsd": 400,
-        "maxTradesPerHour": 10
+        "maxTradeSizeUsd": 500,
+        "maxOpenExposureUsd": 2000,
+        "maxTradesPerHour": 15
       }
     }
   },
