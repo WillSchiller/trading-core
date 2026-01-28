@@ -15,7 +15,7 @@
         "label": "Asset",
         "type": "query",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "query": "SELECT DISTINCT asset FROM pca_signals ORDER BY asset",
+        "query": "SELECT DISTINCT asset FROM pca_residuals ORDER BY asset",
         "multi": true,
         "includeAll": true,
         "allValue": "all",
