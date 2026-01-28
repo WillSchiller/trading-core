@@ -26,6 +26,8 @@ export interface SizingConfig {
   minPositionUsd: number;
   maxPositionUsd: number;
   targetVolBps?: number;
+  loadingSmoothingSpan?: number;
+  maxPortfolioPC1ExposureUsd?: number;
 }
 
 export interface LongConfig {
@@ -96,6 +98,8 @@ const DEFAULT_CONFIG: PCAConfig = {
     minPositionUsd: 25,
     maxPositionUsd: 200,
     targetVolBps: 100,
+    loadingSmoothingSpan: 20,
+    maxPortfolioPC1ExposureUsd: 150,
   },
   long: {
     entryZScore: 2.5,
@@ -189,6 +193,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private ewmaVar: number = 0;
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
+  private smoothedPC1Loadings: Map<string, number> = new Map();
 
   constructor(config: Partial<PCAConfig>) {
     super();
@@ -418,9 +423,23 @@ export class PCAStatArbMonitor extends EventEmitter {
         'Factor model updated'
       );
 
+      this.updateSmoothedLoadings();
       this.emit('factorModel', this.factorModel);
     } catch (err) {
       this.logger.error({ error: (err as Error).message }, 'Failed to compute factor model');
+    }
+  }
+
+  private updateSmoothedLoadings(): void {
+    if (!this.factorModel) return;
+    const span = this.config.sizing?.loadingSmoothingSpan ?? 20;
+    const alpha = 2 / (span + 1);
+
+    for (const [asset, betas] of this.factorModel.assetBetas) {
+      const rawLoading = betas[0] ?? 0;
+      const prevSmoothed = this.smoothedPC1Loadings.get(asset) ?? rawLoading;
+      const newSmoothed = alpha * rawLoading + (1 - alpha) * prevSmoothed;
+      this.smoothedPC1Loadings.set(asset, newSmoothed);
     }
   }
 
@@ -567,10 +586,10 @@ export class PCAStatArbMonitor extends EventEmitter {
         let shouldEnter = false;
         let direction: 'long' | 'short' | null = null;
 
-        if (this.shouldEnterLong(signal.residualZScore)) {
+        if (this.shouldEnterLong(signal.residualZScore, signal.asset)) {
           shouldEnter = true;
           direction = 'long';
-        } else if (this.shouldEnterShort(signal.residualZScore)) {
+        } else if (this.shouldEnterShort(signal.residualZScore, signal.asset)) {
           shouldEnter = true;
           direction = 'short';
         }
@@ -741,7 +760,10 @@ export class PCAStatArbMonitor extends EventEmitter {
     return Math.sqrt(variance) || 0.01;
   }
 
-  private getPC1Loading(asset: string): number {
+  private getPC1Loading(asset: string, useSmoothed: boolean = true): number {
+    if (useSmoothed && this.smoothedPC1Loadings.has(asset)) {
+      return this.smoothedPC1Loadings.get(asset)!;
+    }
     if (!this.factorModel) return 1;
     const betas = this.factorModel.assetBetas.get(asset);
     return betas?.[0] ?? 1;
@@ -802,7 +824,28 @@ export class PCAStatArbMonitor extends EventEmitter {
     return exposure;
   }
 
-  private shouldEnterLong(zScore: number): boolean {
+  private wouldBreachPC1Exposure(asset: string, direction: 'long' | 'short'): boolean {
+    const maxExposure = this.config.sizing?.maxPortfolioPC1ExposureUsd;
+    if (!maxExposure) return false;
+
+    const currentExposure = this.computePortfolioPC1Exposure();
+    const loading = this.getPC1Loading(asset);
+    const positionSize = this.computePositionSize(asset, direction);
+    const sign = direction === 'long' ? 1 : -1;
+    const additionalExposure = sign * loading * positionSize;
+    const projectedExposure = Math.abs(currentExposure + additionalExposure);
+
+    if (projectedExposure > maxExposure) {
+      this.logger.debug(
+        { asset, direction, currentExposure: currentExposure.toFixed(2), projectedExposure: projectedExposure.toFixed(2), maxExposure },
+        'Entry blocked by PC1 exposure cap'
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private shouldEnterLong(zScore: number, asset: string): boolean {
     const longConfig = this.config.long;
     const threshold = longConfig?.entryZScore ?? this.config.entryZScore;
     if (zScore > -threshold) return false;
@@ -820,10 +863,12 @@ export class PCAStatArbMonitor extends EventEmitter {
       if (counts.total >= limits.maxPositionsTotal) return false;
     }
 
+    if (this.wouldBreachPC1Exposure(asset, 'long')) return false;
+
     return true;
   }
 
-  private shouldEnterShort(zScore: number): boolean {
+  private shouldEnterShort(zScore: number, asset: string): boolean {
     const shortConfig = this.config.short;
     const threshold = shortConfig?.entryZScore ?? this.config.entryZScore;
     if (zScore < threshold) return false;
@@ -834,6 +879,8 @@ export class PCAStatArbMonitor extends EventEmitter {
       if (counts.short >= limits.maxPositionsShort) return false;
       if (counts.total >= limits.maxPositionsTotal) return false;
     }
+
+    if (this.wouldBreachPC1Exposure(asset, 'short')) return false;
 
     return true;
   }

@@ -103,7 +103,9 @@
         "baseNotionalUsd": 100,
         "minPositionUsd": 25,
         "maxPositionUsd": 200,
-        "targetVolBps": 100
+        "targetVolBps": 100,
+        "loadingSmoothingSpan": 20,
+        "maxPortfolioPC1ExposureUsd": 150
       },
       "long": {
         "entryZScore": 2.5,
