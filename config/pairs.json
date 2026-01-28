@@ -215,7 +215,7 @@
       "venues": {
         "binance": { "symbol": "SOLUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "AVAX",
@@ -227,7 +227,7 @@
       "venues": {
         "binance": { "symbol": "AVAXUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "ARB",
@@ -239,7 +239,7 @@
       "venues": {
         "binance": { "symbol": "ARBUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "OP",
@@ -251,7 +251,7 @@
       "venues": {
         "binance": { "symbol": "OPUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "LINK",
@@ -263,7 +263,7 @@
       "venues": {
         "binance": { "symbol": "LINKUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "UNI",
@@ -275,7 +275,7 @@
       "venues": {
         "binance": { "symbol": "UNIUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "AAVE",
@@ -287,7 +287,7 @@
       "venues": {
         "binance": { "symbol": "AAVEUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "ATOM",
@@ -299,7 +299,7 @@
       "venues": {
         "binance": { "symbol": "ATOMUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "SUI",
@@ -311,7 +311,7 @@
       "venues": {
         "binance": { "symbol": "SUIUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
       "base": "DOT",
@@ -323,7 +323,7 @@
       "venues": {
         "binance": { "symbol": "DOTUSDC" }
       },
-      "thresholds": {}
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     }
   ]
 }
