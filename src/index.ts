@@ -560,6 +560,15 @@ async function main() {
       }
     });
 
+    // Load price history from database for faster warmup
+    try {
+      const lookbackMs = pcaConfig.returnWindowMs * pcaConfig.pcaLookbackPeriods * 2;
+      const priceHistory = await pcaPersistence.loadPriceHistory(pcaConfig.assets, lookbackMs);
+      pcaMonitor.loadPriceHistory(priceHistory);
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, 'Failed to load price history');
+    }
+
     // Load existing open positions from database before starting
     try {
       const activePositions = await pcaPersistence.getActiveSignals();
@@ -572,6 +581,19 @@ async function main() {
     }
 
     pcaMonitor.start();
+
+    // Save price history on each tick (for faster warmup on restart)
+    pcaMonitor.on('residuals', async () => {
+      if (!pcaMonitor || !pcaPersistence) return;
+      try {
+        const prices = pcaMonitor.getCurrentPricesSnapshot();
+        if (Object.keys(prices).length > 0) {
+          await pcaPersistence.savePriceHistory(prices, Date.now());
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to save price history');
+      }
+    });
 
     // Update open signal prices every 30 seconds
     setInterval(async () => {

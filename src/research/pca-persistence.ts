@@ -301,4 +301,49 @@ export class PCAPersistence {
       unrealizedPnlUsd: parseFloat(row?.unrealized_pnl_usd ?? '0'),
     };
   }
+
+  async savePriceHistory(prices: Record<string, number>, timestamp: number): Promise<void> {
+    const assets = Object.keys(prices);
+    if (assets.length === 0) return;
+
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
+    let idx = 1;
+
+    for (const asset of assets) {
+      placeholders.push(`($${idx++}, $${idx++}, $${idx++})`);
+      values.push(timestamp, asset, prices[asset]);
+    }
+
+    await this.pool.query(
+      `INSERT INTO pca_price_history (timestamp, asset, price) VALUES ${placeholders.join(', ')}`,
+      values
+    );
+  }
+
+  async loadPriceHistory(assets: string[], lookbackMs: number): Promise<Map<string, Array<{ price: number; ts: number }>>> {
+    const cutoff = Date.now() - lookbackMs;
+
+    const result = await this.pool.query(
+      `SELECT asset, price, timestamp
+       FROM pca_price_history
+       WHERE asset = ANY($1) AND timestamp >= $2
+       ORDER BY asset, timestamp ASC`,
+      [assets, cutoff]
+    );
+
+    const history = new Map<string, Array<{ price: number; ts: number }>>();
+    for (const asset of assets) {
+      history.set(asset, []);
+    }
+
+    for (const row of result.rows) {
+      const arr = history.get(row.asset);
+      if (arr) {
+        arr.push({ price: parseFloat(row.price), ts: parseInt(row.timestamp) });
+      }
+    }
+
+    return history;
+  }
 }

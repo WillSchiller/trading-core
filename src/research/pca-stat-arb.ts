@@ -285,6 +285,27 @@ export class PCAStatArbMonitor extends EventEmitter {
     this.logger.info({ count: positions.length }, 'Loaded active positions from database');
   }
 
+  loadPriceHistory(history: Map<string, Array<{ price: number; ts: number }>>): void {
+    let totalLoaded = 0;
+    for (const [asset, prices] of history) {
+      const assetHistory = this.priceHistory.get(asset);
+      if (assetHistory && prices.length > 0) {
+        assetHistory.push(...prices);
+        totalLoaded += prices.length;
+      }
+    }
+    this.logger.info({ totalLoaded, assets: history.size }, 'Loaded price history from database');
+  }
+
+  getCurrentPricesSnapshot(): Record<string, number> {
+    const prices: Record<string, number> = {};
+    for (const asset of this.config.assets) {
+      const price = this.getCurrentPrice(asset);
+      if (price > 0) prices[asset] = price;
+    }
+    return prices;
+  }
+
   updatePrice(asset: string, price: number): void {
     if (!this.config.assets.includes(asset)) return;
 
