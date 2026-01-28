@@ -752,3 +752,104 @@ Runs after `thinMarketBufferFilter` and before `durationFilter`. This ensures:
 - Graceful error handling for gas fetch
 
 ---
+
+## 2026-01-28 (evening)
+
+### Trading Parameter Tuning & Diagnostics
+
+**DONE** — Config tuning and reversal diagnostic logging
+
+**Issues Analyzed from Live Data:**
+
+| Time | Chain | Spread | Issue |
+|------|-------|--------|-------|
+| 07:37:37 | mainnet | 18.4 bps | Config blocked: $200 size > max $100 |
+| 07:37:01 | mainnet | 17.4 bps | Direction reversed: 17.4 → -3.8 bps (21 bps swing) |
+| 07:30:32 | base | 5.79 bps | Unprofitable at current thresholds |
+| 07:30:22 | base | 6.46 bps | Profit $0.025 vs min required $0.50 |
+
+**Config Changes Made:**
+
+1. **Mainnet trade size** (for research/paper mode):
+   - `maxTradeSizeUsd`: $100 → $500
+   - `maxOpenExposureUsd`: $400 → $2000
+   - `maxTradesPerHour`: 10 → 15
+   - Note: At $500 size, 18 bps = $0.92 gross, but mainnet gas ($2-5) still kills profit
+   - Need $2000+ size to break even on mainnet
+
+2. **Global minProfitUsd**:
+   - $0.50 → $0.05
+   - Allows capturing micro-profits on Base where gas is $0.01
+
+**Reversal Diagnostic Logging Added:**
+
+When direction reverses during validation, now logs comprehensive data:
+```json
+{
+  "originalSpreadBps": 17.4,
+  "freshSpreadBps": -3.8,
+  "spreadSwingBps": 21.2,
+  "originalAnchorMid": 3245.50,
+  "freshAnchorMid": 3246.20,
+  "anchorPriceChangeBps": "2.16",
+  "originalDexMid": 3251.14,
+  "freshDexPrice": 3245.96,
+  "dexPriceChangeBps": "-15.93",
+  "anchorAgeMs": 450,
+  "detectionToValidationMs": 850,
+  "quoteLatencyMs": 320
+}
+```
+
+Look for log messages:
+- `DIRECTION REVERSED - spread flipped sign`
+- `Direction validation failed (rank_space) - REVERSAL DIAGNOSTIC`
+
+**Interpretation Guide:**
+- Large `dexPriceChangeBps` but small `anchorPriceChangeBps` → DEX quote was stale at detection
+- Both moved similarly → Real market movement
+- Large `detectionToValidationMs` → Opportunity decayed before execution
+
+**Files Changed:**
+- `config/default.json` - Trade sizes and minProfitUsd
+- `src/config/types.ts` - Added ProtocolVenueConfig type
+- `src/execution/index.ts` - Enhanced reversal logging
+- `src/index.ts` - Pass protocol config to orchestrator
+
+**Also Fixed:**
+- Protocol config (`venues.protocol`) was not being passed to orchestrator
+- LST oracle (wstETH/WETH, weETH/WETH, rETH/WETH pairs) now starts properly
+- Dashboard pair dropdown shows "(no data)" suffix for pairs without recent quotes
+
+**Flashbots Protect Status:**
+- Already integrated for mainnet live trades (uses `rpc.flashbots.net`)
+- Paper mode doesn't use Flashbots (just validates quotes)
+- Reversals in paper mode are NOT frontrunning - likely stale quote or market movement
+
+---
+
+### ⏰ REMINDER: Check Back in 24-48 Hours
+
+**Date to review:** 2026-01-30
+
+**Questions to answer:**
+
+1. **Base (live candidate):**
+   - Are $0.05+ profits achievable?
+   - Do rank-space signals persist through validation?
+   - What % of opportunities pass all filters?
+
+2. **Mainnet (research mode):**
+   - How often do 15+ bps spreads appear?
+   - What does reversal diagnostic logging show?
+   - Is the reversal due to stale DEX quotes or real market movement?
+
+3. **Economics decision:**
+   - If Base works: transition to live
+   - If mainnet shows persistent 15+ bps: consider $2000+ size or gas gating
+
+**Dashboard to monitor:**
+- Paper Trading Summary: http://3.1.140.199:3000/d/trading-summary
+- Spreads & Opportunities: http://3.1.140.199:3000/d/spreads
+
+---
