@@ -131,6 +131,7 @@ export const pairConfigSchema = z.object({
   tier: z.number().int().min(1).max(3),
   aliases: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
+  researchOnly: z.boolean().optional(),
   venues: z.record(z.unknown()),
   thresholds: pairThresholdsSchema,
 });

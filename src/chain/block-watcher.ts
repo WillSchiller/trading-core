@@ -71,10 +71,14 @@ export class BlockWatcher extends EventEmitter {
           this.wsUnsubscribe = wsClient.watchBlocks({
             onBlock: async (block) => {
               try {
+                if (!block || block.number === undefined || block.number === null) {
+                  this.logger.warn({ block }, 'Received invalid block from WebSocket');
+                  return;
+                }
                 await this.handleNewBlock(block.number, Number(block.timestamp) * 1000);
               } catch (error) {
                 this.logger.error(
-                  { error: (error as Error).message, blockNumber: block.number.toString() },
+                  { error: (error as Error).message, blockNumber: block?.number?.toString() },
                   'Error handling block in WebSocket callback'
                 );
               }
