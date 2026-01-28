@@ -171,6 +171,10 @@ export class PCAStatArbMonitor extends EventEmitter {
     const signals = this.computeSignals(returns, now);
     this.processSignals(signals, now);
     this.logSummary(returns, signals);
+
+    if (signals.length > 0) {
+      this.emit('residuals', signals);
+    }
   }
 
   private computeReturns(now: number): Record<string, number> {
@@ -298,6 +302,8 @@ export class PCAStatArbMonitor extends EventEmitter {
         },
         'Factor model updated'
       );
+
+      this.emit('factorModel', this.factorModel);
     } catch (err) {
       this.logger.error({ error: (err as Error).message }, 'Failed to compute factor model');
     }

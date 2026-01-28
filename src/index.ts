@@ -514,6 +514,26 @@ async function main() {
       }
     });
 
+    pcaMonitor.on('factorModel', async (model) => {
+      try {
+        if (pcaPersistence) {
+          await pcaPersistence.saveFactorModel(model);
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to save PCA factor model');
+      }
+    });
+
+    pcaMonitor.on('residuals', async (signals) => {
+      try {
+        if (pcaPersistence) {
+          await pcaPersistence.saveResiduals(signals);
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to save PCA residuals');
+      }
+    });
+
     pcaMonitor.start();
     logger.info(
       {
