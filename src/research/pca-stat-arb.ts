@@ -375,14 +375,23 @@ export class PCAStatArbMonitor extends EventEmitter {
       const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
 
       if (holdTimeMs >= maxHoldTimeMs) {
+        // Calculate P&L from prices (don't rely on tracked lastPnlBps which may be stale)
+        const entryPrice = position.entryPrice;
+        let pnlBps = 0;
+        if (entryPrice > 0) {
+          const priceChange = (currentPrice - entryPrice) / entryPrice;
+          pnlBps = position.direction === 'long' ? priceChange * 10000 : -priceChange * 10000;
+        }
+
         this.logger.info(
           {
             asset,
             direction: position.direction,
             holdTimeMin: (holdTimeMs / 60000).toFixed(1),
             maxHoldTimeMin: (maxHoldTimeMs / 60000).toFixed(1),
-            entryTs: position.timestamp,
-            nowMs: now,
+            entryPrice,
+            exitPrice: currentPrice,
+            pnlBps: pnlBps.toFixed(1),
           },
           'Time-stop triggered'
         );
@@ -394,7 +403,7 @@ export class PCAStatArbMonitor extends EventEmitter {
           exitZScore: 0,
           holdTimeMs,
           exitPrice: currentPrice,
-          pnlBps: position.lastPnlBps,
+          pnlBps,
           exitReason: 'time_stop',
           peakPnlBps: position.peakPnlBps,
           troughPnlBps: position.troughPnlBps,
@@ -772,6 +781,15 @@ export class PCAStatArbMonitor extends EventEmitter {
 
         if (shouldExit) {
           const holdTime = now - existingPosition.timestamp;
+
+          // Calculate P&L from prices directly
+          const entryPrice = existingPosition.entryPrice;
+          let pnlBps = 0;
+          if (entryPrice > 0 && currentPrice > 0) {
+            const priceChange = (currentPrice - entryPrice) / entryPrice;
+            pnlBps = existingPosition.direction === 'long' ? priceChange * 10000 : -priceChange * 10000;
+          }
+
           const attribution = this.computeAttribution(existingPosition);
 
           this.logger.info(
@@ -782,7 +800,9 @@ export class PCAStatArbMonitor extends EventEmitter {
               entryZScore: existingPosition.zScore.toFixed(2),
               exitZScore: signal.residualZScore.toFixed(2),
               holdTimeMin: (holdTime / 60000).toFixed(1),
-              pnlBps: existingPosition.lastPnlBps.toFixed(1),
+              entryPrice,
+              exitPrice: currentPrice,
+              pnlBps: pnlBps.toFixed(1),
               peakPnlBps: existingPosition.peakPnlBps.toFixed(1),
               troughPnlBps: existingPosition.troughPnlBps.toFixed(1),
               pc1PnlBps: attribution.pc1PnlBps.toFixed(1),
@@ -798,7 +818,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             exitZScore: signal.residualZScore,
             holdTimeMs: holdTime,
             exitPrice: currentPrice,
-            pnlBps: existingPosition.lastPnlBps,
+            pnlBps,
             exitReason: reason,
             peakPnlBps: existingPosition.peakPnlBps,
             troughPnlBps: existingPosition.troughPnlBps,
