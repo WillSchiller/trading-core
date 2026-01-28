@@ -10,6 +10,7 @@ import { CollectorOrchestrator } from './collectors/orchestrator.js';
 import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
+import { PCAStatArbMonitor, PCAPersistence } from './research/index.js';
 import type { Chain } from './types/index.js';
 import type { RpcEndpoint } from './chain/provider-pool.js';
 import type { PoolConfig } from './config/types.js';
@@ -461,6 +462,69 @@ async function main() {
     });
   }
 
+  // PCA Statistical Arbitrage Monitor
+  let pcaMonitor: PCAStatArbMonitor | null = null;
+  let pcaPersistence: PCAPersistence | null = null;
+
+  if (config.app.research?.pcaStatArb?.enabled) {
+    const pcaConfig = config.app.research.pcaStatArb;
+    pcaMonitor = new PCAStatArbMonitor(pcaConfig);
+    pcaPersistence = new PCAPersistence(pool);
+
+    // Map common pair names to PCA assets
+    const pairToAsset: Record<string, string> = {
+      'ETH/USDC': 'ETH',
+      'BTC/USDC': 'BTC',
+      'SOL/USDC': 'SOL',
+      'AVAX/USDC': 'AVAX',
+      'MATIC/USDC': 'MATIC',
+      'ARB/USDC': 'ARB',
+      'WETH/USDC': 'ETH',
+      'cbBTC/USDC': 'BTC',
+    };
+
+    // Subscribe to quotes from orchestrator for PCA assets
+    orchestrator.on('quote', (quote: { venue: string; pair: string; mid: number }) => {
+      if (quote.venue !== 'binance') return;
+
+      const asset = pairToAsset[quote.pair];
+      if (asset && pcaMonitor) {
+        pcaMonitor.updatePrice(asset, quote.mid);
+      }
+    });
+
+    // Persist signals
+    pcaMonitor.on('signal', async (event) => {
+      try {
+        if (pcaPersistence) {
+          await pcaPersistence.saveSignal(event);
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to save PCA signal');
+      }
+    });
+
+    pcaMonitor.on('exit', async (event) => {
+      try {
+        if (pcaPersistence) {
+          await pcaPersistence.resolveSignal(event);
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to resolve PCA signal');
+      }
+    });
+
+    pcaMonitor.start();
+    logger.info(
+      {
+        assets: pcaConfig.assets,
+        numFactors: pcaConfig.numFactors,
+        entryZScore: pcaConfig.entryZScore,
+      },
+      'PCA stat-arb monitor started'
+    );
+  }
+
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
 
@@ -469,6 +533,11 @@ async function main() {
 
     rankSpaceDetector.stop();
     logger.info('RankSpace detector stopped');
+
+    if (pcaMonitor) {
+      pcaMonitor.stop();
+      logger.info('PCA stat-arb monitor stopped');
+    }
 
     for (const calibrator of slippageCalibrators) {
       calibrator.stop();

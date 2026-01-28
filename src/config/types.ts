@@ -139,6 +139,24 @@ export interface PairConfig {
   thresholds: PairThresholds;
 }
 
+export interface PCAStatArbConfig {
+  enabled: boolean;
+  assets: string[];
+  returnWindowMs: number;
+  pcaLookbackPeriods: number;
+  numFactors: number;
+  minVarianceExplained: number;
+  residualLookbackPeriods: number;
+  entryZScore: number;
+  exitZScore: number;
+  tickIntervalMs: number;
+  pcaRefreshPeriods: number;
+}
+
+export interface ResearchConfig {
+  pcaStatArb?: PCAStatArbConfig;
+}
+
 export interface AppConfig {
   system: SystemConfig;
   detection: DetectionConfig;
@@ -148,6 +166,7 @@ export interface AppConfig {
   inventory: InventoryConfig;
   venues: VenuesConfig;
   chains: Record<string, ChainConfig>;
+  research?: ResearchConfig;
 }
 
 export interface EnvConfig {

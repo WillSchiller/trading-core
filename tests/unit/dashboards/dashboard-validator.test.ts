@@ -446,6 +446,12 @@ describe('Grafana Dashboard Validation', () => {
         'slippage_calibration',
         'slippage_curves',
         'latest_slippage_curves',
+        'pca_factor_models',
+        'pca_signals',
+        'pca_residuals',
+        'v_pca_signal_performance',
+        'v_pca_residual_stats',
+        'v_pca_factor_history',
       ];
 
       for (const [file, dashboard] of dashboards) {

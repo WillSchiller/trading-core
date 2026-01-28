@@ -135,6 +135,24 @@ export const pairConfigSchema = z.object({
   thresholds: pairThresholdsSchema,
 });
 
+export const pcaStatArbConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  assets: z.array(z.string()).default(['ETH', 'BTC', 'SOL', 'AVAX', 'MATIC', 'ARB']),
+  returnWindowMs: z.number().int().positive().default(60000),
+  pcaLookbackPeriods: z.number().int().positive().default(60),
+  numFactors: z.number().int().min(1).max(10).default(2),
+  minVarianceExplained: z.number().min(0).max(1).default(0.7),
+  residualLookbackPeriods: z.number().int().positive().default(30),
+  entryZScore: z.number().positive().default(2.0),
+  exitZScore: z.number().positive().default(0.5),
+  tickIntervalMs: z.number().int().positive().default(60000),
+  pcaRefreshPeriods: z.number().int().positive().default(15),
+});
+
+export const researchConfigSchema = z.object({
+  pcaStatArb: pcaStatArbConfigSchema.optional(),
+});
+
 export const appConfigSchema = z.object({
   system: systemConfigSchema,
   detection: detectionConfigSchema,
@@ -144,6 +162,7 @@ export const appConfigSchema = z.object({
   inventory: inventoryConfigSchema.default({ trackingEnabled: true, initialBalances: {} }),
   venues: venuesConfigSchema,
   chains: z.record(chainConfigSchema),
+  research: researchConfigSchema.optional(),
 });
 
 export const pairsFileSchema = z.object({

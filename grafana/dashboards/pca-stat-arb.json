@@ -1,0 +1,282 @@
+{
+  "id": null,
+  "uid": "pca-stat-arb",
+  "title": "PCA Statistical Arbitrage",
+  "tags": ["dislocation-trader", "research"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "asset",
+        "label": "Asset",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT asset FROM pca_signals ORDER BY asset",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "all",
+        "refresh": 2,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Signals",
+      "description": "Total PCA signals detected in time range",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) as \"Signals\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Long Signals",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) as \"Long\" FROM pca_signals WHERE direction = 'long' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Short Signals",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) as \"Short\" FROM pca_signals WHERE direction = 'short' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Signal Accuracy",
+      "description": "% of resolved signals where z-score moved toward zero",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE ABS(exit_z_score) < ABS(z_score)) / NULLIF(COUNT(*), 0), 1) as \"Accuracy\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 60, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg Hold Time",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(hold_time_ms) / 60000, 1) as \"Hold Time\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "min",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Variance Explained",
+      "description": "Latest factor model variance explained by PC1+PC2",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND((variance_explained[array_length(variance_explained, 1)] * 100)::numeric, 1) as \"Variance\" FROM pca_factor_models ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 60, "color": "yellow"},
+            {"value": 70, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Z-Scores Over Time",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, z_score FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "pointSize": 2}
+        }
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Residuals Over Time",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, residual * 10000 as \"Residual (bps)\" FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 0}
+        }
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Recent Signals",
+      "gridPos": {"x": 0, "y": 12, "w": 16, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 ORDER BY timestamp DESC LIMIT 30",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Direction"}, "properties": [
+            {"id": "custom.width", "value": 80},
+            {"id": "mappings", "value": [
+              {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+              {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+            ]}
+          ]},
+          {"matcher": {"id": "byName", "options": "Status"}, "properties": [
+            {"id": "custom.width", "value": 80}
+          ]}
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "piechart",
+      "title": "Signals by Asset",
+      "gridPos": {"x": 16, "y": 12, "w": 4, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 GROUP BY asset ORDER BY \"Count\" DESC",
+        "format": "table"
+      }],
+      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+    },
+    {
+      "id": 11,
+      "type": "piechart",
+      "title": "Signals by Direction",
+      "gridPos": {"x": 20, "y": 12, "w": 4, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT direction as \"Direction\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 GROUP BY direction",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "long"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Signal Performance by Asset",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset, direction, total_signals, resolved_signals, avg_hold_min, avg_entry_zscore, avg_exit_zscore, correct_direction, accuracy_pct FROM v_pca_signal_performance",
+        "format": "table"
+      }]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Latest Factor Loadings (PC1)",
+      "description": "Current PC1 loadings for each asset - represents market sensitivity",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Model Time\", num_factors as \"Factors\", ROUND((variance_explained[1] * 100)::numeric, 1) as \"PC1 Var %\", ROUND((variance_explained[2] * 100)::numeric, 1) as \"PC2 Var %\", pc1_loadings as \"PC1 Loadings\" FROM pca_factor_models ORDER BY timestamp DESC LIMIT 5",
+        "format": "table"
+      }]
+    }
+  ]
+}

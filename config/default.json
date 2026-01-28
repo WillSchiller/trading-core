@@ -73,6 +73,21 @@
       "lstOracle": { "enabled": true, "pollIntervalMs": 10000 }
     }
   },
+  "research": {
+    "pcaStatArb": {
+      "enabled": true,
+      "assets": ["ETH", "BTC", "SOL", "AVAX", "MATIC", "ARB"],
+      "returnWindowMs": 60000,
+      "pcaLookbackPeriods": 60,
+      "numFactors": 2,
+      "minVarianceExplained": 0.7,
+      "residualLookbackPeriods": 30,
+      "entryZScore": 2.0,
+      "exitZScore": 0.5,
+      "tickIntervalMs": 60000,
+      "pcaRefreshPeriods": 15
+    }
+  },
   "chains": {
     "mainnet": {
       "enabled": false,
