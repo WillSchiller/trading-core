@@ -26,7 +26,7 @@
         "minSpreadBps": 20,
         "minDurationMs": 2000,
         "minLiquidityUsd": 100000,
-        "maxTradeSizeUsd": 4000
+        "maxTradeSizeUsd": 100
       }
     },
     {
@@ -180,7 +180,7 @@
         "minSpreadBps": 20,
         "minDurationMs": 2000,
         "minLiquidityUsd": 50000,
-        "maxTradeSizeUsd": 500
+        "maxTradeSizeUsd": 100
       }
     },
     {
