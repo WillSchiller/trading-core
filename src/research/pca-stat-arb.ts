@@ -1034,13 +1034,13 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    if (direction === 'long') {
-      const exitZScore = this.config.long?.exitZScore ?? this.config.exitZScore;
-      if (Math.abs(currentZScore) < exitZScore) {
-        return { shouldExit: true, reason: 'zscore' };
-      }
+    // Z-score exit for both directions (strict mode)
+    const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
+    if (Math.abs(currentZScore) < exitZScore) {
+      return { shouldExit: true, reason: 'zscore' };
     }
 
+    // Trailing stop for shorts (only if enabled)
     if (direction === 'short' && this.config.short?.trailingExit?.enabled) {
       const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {

@@ -463,7 +463,7 @@ describe('PCAStatArbMonitor', () => {
       expect(result.reason).toBe('zscore');
     });
 
-    it('does NOT trigger z-score exit for short (shorts use trailing only)', () => {
+    it('triggers z-score exit for short in strict mode', () => {
       const monitor = new PCAStatArbMonitor(createTestConfig());
 
       const position = createPosition({
@@ -478,7 +478,8 @@ describe('PCAStatArbMonitor', () => {
 
       const result = checkExitConditions(position, 0.2, 1950, Date.now());
 
-      expect(result.shouldExit).toBe(false);
+      expect(result.shouldExit).toBe(true);
+      expect(result.reason).toBe('zscore');
     });
 
     it('activates trailing stop after profit threshold', () => {
