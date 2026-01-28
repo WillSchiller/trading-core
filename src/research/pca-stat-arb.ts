@@ -308,6 +308,10 @@ export class PCAStatArbMonitor extends EventEmitter {
     const now = Date.now();
     this.tickCount++;
 
+    // CRITICAL: Check time-stops for ALL active positions FIRST
+    // This must run even when signal data is incomplete
+    this.checkAllPositionExits(now);
+
     const returns = this.computeReturns(now);
     if (Object.keys(returns).length < this.config.assets.length) {
       const priceHistorySizes: Record<string, number> = {};
@@ -343,6 +347,50 @@ export class PCAStatArbMonitor extends EventEmitter {
 
     if (signals.length > 0) {
       this.emit('residuals', signals);
+    }
+  }
+
+  private checkAllPositionExits(now: number): void {
+    for (const [asset, position] of this.activePositions) {
+      const currentPrice = this.getCurrentPrice(asset);
+      if (currentPrice <= 0) continue;
+
+      const holdTimeMs = now - position.timestamp;
+      const dirConfig = position.direction === 'long' ? this.config.long : this.config.short;
+      const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
+
+      if (holdTimeMs >= maxHoldTimeMs) {
+        this.logger.info(
+          {
+            asset,
+            direction: position.direction,
+            holdTimeMin: (holdTimeMs / 60000).toFixed(1),
+            maxHoldTimeMin: (maxHoldTimeMs / 60000).toFixed(1),
+            entryTs: position.timestamp,
+            nowMs: now,
+          },
+          'Time-stop triggered'
+        );
+
+        const attribution = this.computeAttribution(position);
+        const exitEvent: PCAExitEvent = {
+          ...position,
+          exitTimestamp: now,
+          exitZScore: 0,
+          holdTimeMs,
+          exitPrice: currentPrice,
+          pnlBps: position.lastPnlBps,
+          exitReason: 'time_stop',
+          peakPnlBps: position.peakPnlBps,
+          troughPnlBps: position.troughPnlBps,
+          regimeState: this.regimeState,
+          attribution,
+        };
+
+        this.emit('exit', exitEvent);
+        this.activePositions.delete(asset);
+        this.activeSignals.delete(asset);
+      }
     }
   }
 
