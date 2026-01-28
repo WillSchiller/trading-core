@@ -62,7 +62,8 @@
         "options": [
           {"text": "All", "value": "all", "selected": true},
           {"text": "Dislocation", "value": "dislocation", "selected": false},
-          {"text": "Rank Space", "value": "rank_space", "selected": false}
+          {"text": "Rank Space", "value": "rank_space", "selected": false},
+          {"text": "PCA Stat-Arb", "value": "pca_stat_arb", "selected": false}
         ],
         "current": {"text": "All", "value": "all"},
         "multi": false,
@@ -74,9 +75,9 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Total Realized P&L",
-      "description": "Sum of all realized P&L in the selected time range",
-      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "title": "Execution P&L (USD)",
+      "description": "Sum of realized P&L from executions",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -111,11 +112,49 @@
       }
     },
     {
+      "id": 24,
+      "type": "stat",
+      "title": "PCA P&L (bps)",
+      "description": "Sum of P&L from PCA stat-arb signals",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_bps), 0)::numeric, 1) as value FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "text": {},
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 0, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 2,
       "type": "stat",
-      "title": "Win Rate",
+      "title": "Execution Win Rate",
       "description": "Percentage of trades with positive realized P&L",
-      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -150,11 +189,50 @@
       }
     },
     {
+      "id": 25,
+      "type": "stat",
+      "title": "PCA Win Rate",
+      "description": "Percentage of PCA signals with positive P&L",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(CASE WHEN pnl_bps > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) ELSE 0 END as value FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "text": {},
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 50, "color": "yellow"},
+              {"value": 60, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 3,
       "type": "stat",
       "title": "Avg Trade Size",
       "description": "Average trade size in USD",
-      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",
@@ -191,7 +269,7 @@
       "type": "stat",
       "title": "Total Executions",
       "description": "Number of executed trades in the selected time range",
-      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
       "targets": [
         {
           "refId": "A",

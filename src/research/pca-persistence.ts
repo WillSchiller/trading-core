@@ -40,8 +40,8 @@ export class PCAPersistence {
 
   async saveSignal(event: PCASignalEvent): Promise<number> {
     const result = await this.pool.query(
-      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         event.timestamp,
@@ -53,6 +53,7 @@ export class PCAPersistence {
         event.factorContext.pc1Return,
         event.factorContext.pc2Return,
         JSON.stringify(event.allAssetResiduals),
+        event.entryPrice || null,
       ]
     );
 
@@ -63,10 +64,11 @@ export class PCAPersistence {
   async resolveSignal(event: PCAExitEvent): Promise<void> {
     await this.pool.query(
       `UPDATE pca_signals
-       SET resolved = true, exit_timestamp = $1, exit_z_score = $2, hold_time_ms = $3
+       SET resolved = true, exit_timestamp = $1, exit_z_score = $2, hold_time_ms = $3,
+           exit_price = $5, pnl_bps = $6
        WHERE asset = $4 AND resolved = false
        ORDER BY timestamp DESC LIMIT 1`,
-      [event.exitTimestamp, event.exitZScore, event.holdTimeMs, event.asset]
+      [event.exitTimestamp, event.exitZScore, event.holdTimeMs, event.asset, event.exitPrice || null, event.pnlBps || null]
     );
 
     this.logger.debug({ asset: event.asset, holdTimeMs: event.holdTimeMs }, 'Signal resolved');

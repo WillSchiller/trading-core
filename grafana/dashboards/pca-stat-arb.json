@@ -157,10 +157,101 @@
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
+      "id": 14,
+      "type": "stat",
+      "title": "Total P&L (bps)",
+      "description": "Sum of realized P&L from closed signals",
+      "gridPos": {"x": 0, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_bps), 0)::numeric, 1) as \"P&L\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Win Rate",
+      "description": "% of closed signals with positive P&L",
+      "gridPos": {"x": 4, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 60, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Avg P&L (bps)",
+      "gridPos": {"x": 8, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(AVG(pnl_bps), 0)::numeric, 1) as \"Avg P&L\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Cumulative P&L (bps)",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(exit_timestamp / 1000) as time, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) as \"Cumulative P&L (bps)\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY exit_timestamp",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "fixed", "fixedColor": "yellow"},
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "scheme"}
+        }
+      }
+    },
+    {
       "id": 7,
       "type": "timeseries",
       "title": "Z-Scores Over Time",
-      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -179,7 +270,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Residuals Over Time",
-      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -198,11 +289,11 @@
       "id": 9,
       "type": "table",
       "title": "Recent Signals",
-      "gridPos": {"x": 0, "y": 12, "w": 16, "h": 8},
+      "gridPos": {"x": 0, "y": 16, "w": 16, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY timestamp DESC LIMIT 30",
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND(pnl_bps::numeric, 1) as \"P&L (bps)\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY timestamp DESC LIMIT 30",
         "format": "table"
       }],
       "fieldConfig": {
@@ -225,7 +316,7 @@
       "id": 10,
       "type": "piechart",
       "title": "Signals by Asset",
-      "gridPos": {"x": 16, "y": 12, "w": 4, "h": 8},
+      "gridPos": {"x": 16, "y": 16, "w": 4, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -238,7 +329,7 @@
       "id": 11,
       "type": "piechart",
       "title": "Signals by Direction",
-      "gridPos": {"x": 20, "y": 12, "w": 4, "h": 8},
+      "gridPos": {"x": 20, "y": 16, "w": 4, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -257,7 +348,7 @@
       "id": 12,
       "type": "table",
       "title": "Signal Performance by Asset",
-      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 6},
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 6},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -270,7 +361,7 @@
       "type": "table",
       "title": "Latest Factor Loadings (PC1)",
       "description": "Current PC1 loadings for each asset - represents market sensitivity",
-      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 6},
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 6},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},

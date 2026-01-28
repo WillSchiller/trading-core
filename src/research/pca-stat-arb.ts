@@ -55,6 +55,7 @@ export interface PCASignalEvent {
   zScore: number;
   residual: number;
   confidence: number;
+  entryPrice: number;
   factorContext: {
     pc1Return: number;
     pc2Return: number;
@@ -66,6 +67,8 @@ export interface PCAExitEvent extends PCASignalEvent {
   exitTimestamp: number;
   exitZScore: number;
   holdTimeMs: number;
+  exitPrice: number;
+  pnlBps: number;
 }
 
 export class PCAStatArbMonitor extends EventEmitter {
@@ -449,6 +452,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       const existingSignal = this.activeSignals.get(signal.asset);
 
       if (signal.signal !== 'neutral' && !existingSignal) {
+        const currentPrice = this.getCurrentPrice(signal.asset);
         const event: PCASignalEvent = {
           timestamp: now,
           asset: signal.asset,
@@ -457,6 +461,7 @@ export class PCAStatArbMonitor extends EventEmitter {
           residual: signal.residual,
           confidence:
             this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
+          entryPrice: currentPrice,
           factorContext: {
             pc1Return: signal.factorReturns[0] ?? 0,
             pc2Return: signal.factorReturns[1] ?? 0,
@@ -482,6 +487,12 @@ export class PCAStatArbMonitor extends EventEmitter {
 
       if (existingSignal && Math.abs(signal.residualZScore) < this.config.exitZScore) {
         const holdTime = now - existingSignal.timestamp;
+        const exitPrice = this.getCurrentPrice(signal.asset);
+        let pnlBps = 0;
+        if (existingSignal.entryPrice > 0 && exitPrice > 0) {
+          const rawReturn = (exitPrice - existingSignal.entryPrice) / existingSignal.entryPrice;
+          pnlBps = (existingSignal.direction === 'long' ? rawReturn : -rawReturn) * 10000;
+        }
 
         this.logger.info(
           {
@@ -490,6 +501,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             entryZScore: existingSignal.zScore.toFixed(2),
             exitZScore: signal.residualZScore.toFixed(2),
             holdTimeMin: (holdTime / 60000).toFixed(1),
+            pnlBps: pnlBps.toFixed(1),
           },
           'PCA signal closed'
         );
@@ -499,12 +511,20 @@ export class PCAStatArbMonitor extends EventEmitter {
           exitTimestamp: now,
           exitZScore: signal.residualZScore,
           holdTimeMs: holdTime,
+          exitPrice,
+          pnlBps,
         };
 
         this.emit('exit', exitEvent);
         this.activeSignals.delete(signal.asset);
       }
     }
+  }
+
+  private getCurrentPrice(asset: string): number {
+    const history = this.priceHistory.get(asset);
+    if (!history || history.length === 0) return 0;
+    return history[history.length - 1].price;
   }
 
   private logSummary(_returns: Record<string, number>, signals: AssetSignal[]): void {
