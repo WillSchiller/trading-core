@@ -255,6 +255,10 @@ export class CollectorOrchestrator extends EventEmitter {
           this.logger.info({ venue: data.venue, chain: data.chain }, 'DEX connector connected');
         });
 
+        connector.on('error', (data: { venue: string; chain: Chain; error: string }) => {
+          this.logger.error({ venue: data.venue, chain: data.chain, error: data.error }, 'DEX connector error');
+        });
+
         await connector.start();
         this.dexConnectors.set(`uniswap_v3:${chain}`, connector);
 

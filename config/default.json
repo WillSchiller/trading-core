@@ -38,16 +38,16 @@
     "minProfitUsd": 0.50
   },
   "risk": {
-    "maxTradeSizeUsd": 50,
-    "maxOpenExposureUsd": 200,
+    "maxTradeSizeUsd": 200,
+    "maxOpenExposureUsd": 800,
     "maxTradesPerHour": 20,
     "cooldownSeconds": 30,
     "maxGasGwei": 10,
     "haltOnConsecutiveReverts": 3,
     "chainOverrides": {
       "mainnet": {
-        "maxTradeSizeUsd": 25,
-        "maxOpenExposureUsd": 100,
+        "maxTradeSizeUsd": 100,
+        "maxOpenExposureUsd": 400,
         "maxTradesPerHour": 10
       }
     }

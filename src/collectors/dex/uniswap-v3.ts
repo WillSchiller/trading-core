@@ -40,8 +40,9 @@ export class UniswapV3Connector extends EventEmitter {
   private isRunning = false;
   private statsTimer: NodeJS.Timeout | null = null;
   private lastPollBlock: bigint = 0n;
-  private currentPollInterval: number = 1; // Start aggressive to get initial quotes flowing
-  private spreadProximity: number = 0; // 0 = far from threshold, 1 = at threshold
+  private currentPollInterval: number = 1;
+  private spreadProximity: number = 0;
+  private blockListener: ((blockInfo: { blockNumber: bigint; timestamp: number }) => void) | null = null;
 
   constructor(config: UniswapV3ConnectorConfig, provider: ChainProvider, blockWatcher: BlockWatcher) {
     super();
@@ -110,7 +111,11 @@ export class UniswapV3Connector extends EventEmitter {
     }
 
     this.poolStateTracker = null;
-    this.blockWatcher.removeAllListeners('block');
+
+    if (this.blockListener) {
+      this.blockWatcher.removeListener('block', this.blockListener);
+      this.blockListener = null;
+    }
   }
 
   private async startEventDrivenMode(): Promise<void> {
@@ -135,9 +140,13 @@ export class UniswapV3Connector extends EventEmitter {
 
     await this.poolEventWatcher.start();
 
-    this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) =>
-      this.handleNewBlockEventDriven(blockInfo)
-    );
+    this.blockListener = (blockInfo: { blockNumber: bigint; timestamp: number }) => {
+      this.handleNewBlockEventDriven(blockInfo).catch((error) => {
+        this.logger.error({ error: (error as Error).message, stack: (error as Error).stack }, 'Failed to handle block (event-driven)');
+        this.emit('error', { venue: 'uniswap_v3', chain: this.config.chain, error: (error as Error).message });
+      });
+    };
+    this.blockWatcher.on('block', this.blockListener);
 
     this.logger.info('Event-driven mode activated');
 
@@ -153,12 +162,15 @@ export class UniswapV3Connector extends EventEmitter {
   private startPollingMode(): void {
     this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Registering block listener');
 
-    this.blockWatcher.on('block', (blockInfo: { blockNumber: bigint; timestamp: number }) => {
-      this.logger.info({ blockNumber: blockInfo.blockNumber.toString(), timestamp: blockInfo.timestamp }, 'Block event received in Uniswap connector');
-      this.handleNewBlockPolling(blockInfo);
-    });
+    this.blockListener = (blockInfo: { blockNumber: bigint; timestamp: number }) => {
+      this.handleNewBlockPolling(blockInfo).catch((error) => {
+        this.logger.error({ error: (error as Error).message, stack: (error as Error).stack }, 'Failed to handle block (polling)');
+        this.emit('error', { venue: 'uniswap_v3', chain: this.config.chain, error: (error as Error).message });
+      });
+    };
+    this.blockWatcher.on('block', this.blockListener);
 
-    this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Polling mode activated (legacy)');
+    this.logger.info({ listenerCount: this.blockWatcher.listenerCount('block') }, 'Polling mode activated');
   }
 
   private async handleNewBlockEventDriven(blockInfo: { blockNumber: bigint; timestamp: number }): Promise<void> {
