@@ -18,6 +18,16 @@ export interface ExposureLimitsConfig {
   maxPositionsTotal: number;
 }
 
+export type SizingMode = 'flat' | 'vol_adjusted' | 'factor_neutral';
+
+export interface SizingConfig {
+  mode: SizingMode;
+  baseNotionalUsd: number;
+  minPositionUsd: number;
+  maxPositionUsd: number;
+  targetVolBps?: number;
+}
+
 export interface LongConfig {
   entryZScore: number;
   exitZScore: number;
@@ -52,6 +62,7 @@ export interface PCAConfig {
   positionSizeUsd: number;
   regimeGating?: RegimeGatingConfig;
   exposureLimits?: ExposureLimitsConfig;
+  sizing?: SizingConfig;
   long?: LongConfig;
   short?: ShortConfig;
 }
@@ -78,6 +89,13 @@ const DEFAULT_CONFIG: PCAConfig = {
     maxPositionsLong: 3,
     maxPositionsShort: 5,
     maxPositionsTotal: 6,
+  },
+  sizing: {
+    mode: 'factor_neutral',
+    baseNotionalUsd: 100,
+    minPositionUsd: 25,
+    maxPositionUsd: 200,
+    targetVolBps: 100,
   },
   long: {
     entryZScore: 2.5,
@@ -573,7 +591,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             confidence:
               this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
             entryPrice: currentPrice,
-            positionSizeUsd: this.config.positionSizeUsd,
+            positionSizeUsd: this.computePositionSize(signal.asset, direction),
             factorContext: {
               pc1Return: signal.factorReturns[0] ?? 0,
               pc2Return: signal.factorReturns[1] ?? 0,
@@ -597,6 +615,9 @@ export class PCAStatArbMonitor extends EventEmitter {
               pc1Bps: (signal.factorReturns[0] * 10000).toFixed(1),
               regimeState: this.regimeState,
               pc1Momentum: this.pc1Momentum.toFixed(4),
+              positionSizeUsd: position.positionSizeUsd.toFixed(2),
+              pc1Loading: this.getPC1Loading(signal.asset).toFixed(3),
+              portfolioPC1Exposure: this.computePortfolioPC1Exposure().toFixed(2),
             },
             'PCA signal detected'
           );
@@ -710,6 +731,75 @@ export class PCAStatArbMonitor extends EventEmitter {
       else shortCount++;
     }
     return { long: longCount, short: shortCount, total: longCount + shortCount };
+  }
+
+  private computeAssetVolatility(asset: string): number {
+    const history = this.returnHistory.get(asset);
+    if (!history || history.length < 10) return 0.01;
+    const mean = history.reduce((a, b) => a + b, 0) / history.length;
+    const variance = history.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / history.length;
+    return Math.sqrt(variance) || 0.01;
+  }
+
+  private getPC1Loading(asset: string): number {
+    if (!this.factorModel) return 1;
+    const betas = this.factorModel.assetBetas.get(asset);
+    return betas?.[0] ?? 1;
+  }
+
+  private computePositionSize(asset: string, direction: 'long' | 'short'): number {
+    const sizing = this.config.sizing;
+    if (!sizing) return this.config.positionSizeUsd;
+
+    const { mode, baseNotionalUsd, minPositionUsd, maxPositionUsd, targetVolBps } = sizing;
+
+    let size = baseNotionalUsd;
+
+    if (mode === 'vol_adjusted') {
+      const vol = this.computeAssetVolatility(asset);
+      const targetVol = (targetVolBps ?? 100) / 10000;
+      size = baseNotionalUsd * (targetVol / Math.max(vol, 0.001));
+    } else if (mode === 'factor_neutral') {
+      const pc1Loading = Math.abs(this.getPC1Loading(asset));
+      const vol = this.computeAssetVolatility(asset);
+      const avgLoading = this.computeAveragePC1Loading();
+      const loadingRatio = avgLoading / Math.max(pc1Loading, 0.01);
+      const targetVol = (targetVolBps ?? 100) / 10000;
+      const volAdjust = targetVol / Math.max(vol, 0.001);
+      size = baseNotionalUsd * loadingRatio * volAdjust;
+    }
+
+    size = Math.max(minPositionUsd, Math.min(maxPositionUsd, size));
+
+    this.logger.debug(
+      { asset, direction, size: size.toFixed(2), mode },
+      'Position size computed'
+    );
+
+    return size;
+  }
+
+  private computeAveragePC1Loading(): number {
+    if (!this.factorModel) return 1;
+    let sum = 0;
+    let count = 0;
+    for (const betas of this.factorModel.assetBetas.values()) {
+      if (betas[0] !== undefined) {
+        sum += Math.abs(betas[0]);
+        count++;
+      }
+    }
+    return count > 0 ? sum / count : 1;
+  }
+
+  private computePortfolioPC1Exposure(): number {
+    let exposure = 0;
+    for (const pos of this.activePositions.values()) {
+      const loading = this.getPC1Loading(pos.asset);
+      const sign = pos.direction === 'long' ? 1 : -1;
+      exposure += sign * loading * pos.positionSizeUsd;
+    }
+    return exposure;
   }
 
   private shouldEnterLong(zScore: number): boolean {

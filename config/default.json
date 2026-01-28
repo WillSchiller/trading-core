@@ -98,6 +98,13 @@
         "maxPositionsShort": 5,
         "maxPositionsTotal": 6
       },
+      "sizing": {
+        "mode": "factor_neutral",
+        "baseNotionalUsd": 100,
+        "minPositionUsd": 25,
+        "maxPositionUsd": 200,
+        "targetVolBps": 100
+      },
       "long": {
         "entryZScore": 2.5,
         "exitZScore": 0.3,
