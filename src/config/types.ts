@@ -135,6 +135,7 @@ export interface PairConfig {
   tier: number;
   aliases?: string[];
   enabled?: boolean;
+  researchOnly?: boolean;
   venues: Record<string, unknown>;
   thresholds: PairThresholds;
 }

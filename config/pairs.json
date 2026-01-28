@@ -204,6 +204,126 @@
         "minLiquidityUsd": 50000,
         "maxTradeSizeUsd": 500
       }
+    },
+    {
+      "base": "SOL",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "SOLUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "AVAX",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "AVAXUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "ARB",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "ARBUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "OP",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "OPUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "LINK",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "LINKUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "UNI",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "UNIUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "AAVE",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "AAVEUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "ATOM",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "ATOMUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "SUI",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "SUIUSDC" }
+      },
+      "thresholds": {}
+    },
+    {
+      "base": "DOT",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 3,
+      "enabled": false,
+      "researchOnly": true,
+      "venues": {
+        "binance": { "symbol": "DOTUSDC" }
+      },
+      "thresholds": {}
     }
   ]
 }

@@ -204,7 +204,7 @@ async function main() {
     cexConfigs.binance = {
       enabled: true,
       pairs: config.pairs
-        .filter(p => p.enabled !== false && p.venues.binance)
+        .filter(p => (p.enabled !== false || p.researchOnly) && p.venues.binance)
         .map(p => ({
           symbol: (p.venues.binance as { symbol: string }).symbol,
           canonical: `${p.base}/${p.quote}`,
@@ -474,13 +474,19 @@ async function main() {
     // Map common pair names to PCA assets
     const pairToAsset: Record<string, string> = {
       'ETH/USDC': 'ETH',
+      'WETH/USDC': 'ETH',
       'BTC/USDC': 'BTC',
+      'cbBTC/USDC': 'BTC',
       'SOL/USDC': 'SOL',
       'AVAX/USDC': 'AVAX',
-      'MATIC/USDC': 'MATIC',
       'ARB/USDC': 'ARB',
-      'WETH/USDC': 'ETH',
-      'cbBTC/USDC': 'BTC',
+      'OP/USDC': 'OP',
+      'LINK/USDC': 'LINK',
+      'UNI/USDC': 'UNI',
+      'AAVE/USDC': 'AAVE',
+      'ATOM/USDC': 'ATOM',
+      'SUI/USDC': 'SUI',
+      'DOT/USDC': 'DOT',
     };
 
     // Subscribe to quotes from orchestrator for PCA assets

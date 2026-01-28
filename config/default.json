@@ -76,10 +76,10 @@
   "research": {
     "pcaStatArb": {
       "enabled": true,
-      "assets": ["ETH", "BTC"],
+      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT"],
       "returnWindowMs": 60000,
       "pcaLookbackPeriods": 60,
-      "numFactors": 1,
+      "numFactors": 3,
       "minVarianceExplained": 0.7,
       "residualLookbackPeriods": 30,
       "entryZScore": 2.0,
