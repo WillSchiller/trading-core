@@ -334,6 +334,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
         'venue_id',
         'pair_id',
         'ts',
+        'timestamp',
         'detected_at',
         'created_at',
         'confirmed_at',
@@ -343,6 +344,8 @@ describe('SQL Query Anti-Pattern Detection', () => {
         'direction',
         'strategy',
         'trade_size_usd',
+        'resolved',
+        'asset',
       ];
       const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config'];
 
