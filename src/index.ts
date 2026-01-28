@@ -42,7 +42,7 @@ interface DexConnectorConfig {
   chains: Record<string, UniswapPoolConfig[]>;
 }
 import { checkNtpSync } from './utils/clock.js';
-import { initAlerts } from './utils/alerts.js';
+import { initAlerts, sendAlert } from './utils/alerts.js';
 import { buildRpcEndpoints } from './chain/index.js';
 
 const BASE_TOKENS: Record<string, TokenConfig> = {
@@ -147,8 +147,9 @@ async function main() {
 
   const config = getConfig();
 
+  const telegramEnabled = !!config.env.telegram;
   initAlerts({
-    enabled: !!config.env.telegram,
+    enabled: telegramEnabled,
     telegramBotToken: config.env.telegram?.botToken,
     telegramChatId: config.env.telegram?.chatId,
   });
@@ -156,7 +157,15 @@ async function main() {
     paperMode: config.env.paperMode,
     enableBase: config.env.enableBase,
     enableMainnet: config.env.enableMainnet,
+    telegramEnabled,
+    telegramChatId: config.env.telegram?.chatId ? `${config.env.telegram.chatId.slice(0, 4)}...` : 'not set',
   }, 'Config loaded');
+
+  if (telegramEnabled) {
+    sendAlert('🚀 *Dislocation Trader Started*\n\nSystem initialized successfully.', 'info')
+      .then(() => logger.info('Startup alert sent'))
+      .catch((err) => logger.error({ error: (err as Error).message }, 'Failed to send startup alert'));
+  }
 
   createPool(config.env.postgres);
   logger.info('Database pool initialized');
