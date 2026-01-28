@@ -127,7 +127,12 @@ export class PCAStatArbMonitor extends EventEmitter {
     const history = this.priceHistory.get(asset);
     if (!history) return;
 
-    history.push({ price, ts: Date.now() });
+    const now = Date.now();
+    history.push({ price, ts: now });
+
+    if (history.length % 10 === 0) {
+      this.logger.info({ asset, price, historyLength: history.length }, 'Price update received');
+    }
 
     const maxPoints = this.config.pcaLookbackPeriods * 3;
     while (history.length > maxPoints) {
@@ -141,8 +146,12 @@ export class PCAStatArbMonitor extends EventEmitter {
 
     const returns = this.computeReturns(now);
     if (Object.keys(returns).length < this.config.assets.length) {
-      this.logger.debug(
-        { assetsWithData: Object.keys(returns).length, required: this.config.assets.length },
+      const priceHistorySizes: Record<string, number> = {};
+      for (const asset of this.config.assets) {
+        priceHistorySizes[asset] = this.priceHistory.get(asset)?.length ?? 0;
+      }
+      this.logger.info(
+        { assetsWithData: Object.keys(returns).length, required: this.config.assets.length, priceHistorySizes },
         'Insufficient price data, waiting'
       );
       return;
