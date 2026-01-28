@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createChildLogger, type Logger } from '../utils/logger.js';
-import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal } from './pca-stat-arb.js';
+import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
 
 export class PCAPersistence {
   private pool: Pool;
@@ -38,10 +38,10 @@ export class PCAPersistence {
     return result.rows[0].id;
   }
 
-  async saveSignal(event: PCASignalEvent): Promise<number> {
+  async saveSignal(event: PCASignalEvent & { pc1Momentum?: number; regimeState?: RegimeState }): Promise<number> {
     const result = await this.pool.query(
-      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price, pc1_momentum, regime_state, position_size_usd)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         event.timestamp,
@@ -54,6 +54,9 @@ export class PCAPersistence {
         event.factorContext.pc2Return,
         JSON.stringify(event.allAssetResiduals),
         event.entryPrice > 0 ? event.entryPrice : null,
+        event.pc1Momentum ?? null,
+        event.regimeState ?? null,
+        event.positionSizeUsd > 0 ? event.positionSizeUsd : null,
       ]
     );
 
@@ -62,16 +65,31 @@ export class PCAPersistence {
   }
 
   async resolveSignal(event: PCAExitEvent): Promise<void> {
+    const pnlUsd = event.positionSizeUsd > 0 && event.pnlBps != null
+      ? (event.positionSizeUsd * event.pnlBps) / 10000
+      : null;
+
     await this.pool.query(
       `UPDATE pca_signals
        SET resolved = true, exit_timestamp = $1, exit_z_score = $2, hold_time_ms = $3,
-           exit_price = $5, pnl_bps = $6
+           exit_price = $5, pnl_bps = $6, exit_reason = $7, peak_pnl_bps = $8, trough_pnl_bps = $9, pnl_usd = $10
        WHERE asset = $4 AND resolved = false
        ORDER BY timestamp DESC LIMIT 1`,
-      [event.exitTimestamp, event.exitZScore, event.holdTimeMs, event.asset, event.exitPrice > 0 ? event.exitPrice : null, event.pnlBps ?? null]
+      [
+        event.exitTimestamp,
+        event.exitZScore,
+        event.holdTimeMs,
+        event.asset,
+        event.exitPrice > 0 ? event.exitPrice : null,
+        event.pnlBps ?? null,
+        event.exitReason ?? null,
+        event.peakPnlBps ?? null,
+        event.troughPnlBps ?? null,
+        pnlUsd,
+      ]
     );
 
-    this.logger.debug({ asset: event.asset, holdTimeMs: event.holdTimeMs }, 'Signal resolved');
+    this.logger.debug({ asset: event.asset, holdTimeMs: event.holdTimeMs, exitReason: event.exitReason, pnlUsd }, 'Signal resolved');
   }
 
   async saveResiduals(signals: AssetSignal[]): Promise<void> {
@@ -240,5 +258,23 @@ export class PCAPersistence {
        FROM pca_prices p
        WHERE s.asset = p.asset AND s.resolved = false`
     );
+  }
+
+  async getCapitalDeployed(): Promise<{
+    openPositions: number;
+    totalDeployedUsd: number;
+    longExposureUsd: number;
+    shortExposureUsd: number;
+    unrealizedPnlUsd: number;
+  }> {
+    const result = await this.pool.query(`SELECT * FROM v_pca_capital_deployed`);
+    const row = result.rows[0];
+    return {
+      openPositions: parseInt(row?.open_positions ?? '0'),
+      totalDeployedUsd: parseFloat(row?.total_deployed_usd ?? '0'),
+      longExposureUsd: parseFloat(row?.long_exposure_usd ?? '0'),
+      shortExposureUsd: parseFloat(row?.short_exposure_usd ?? '0'),
+      unrealizedPnlUsd: parseFloat(row?.unrealized_pnl_usd ?? '0'),
+    };
   }
 }

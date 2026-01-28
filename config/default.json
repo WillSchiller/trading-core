@@ -85,7 +85,29 @@
       "entryZScore": 2.0,
       "exitZScore": 0.5,
       "tickIntervalMs": 60000,
-      "pcaRefreshPeriods": 15
+      "pcaRefreshPeriods": 15,
+      "positionSizeUsd": 100,
+      "regimeGating": {
+        "enabled": true,
+        "pc1MomentumLookback": 10,
+        "pc1MomentumThreshold": 0
+      },
+      "long": {
+        "entryZScore": 2.5,
+        "exitZScore": 0.3,
+        "maxHoldTimeMs": 1800000,
+        "requireRegimeConfirmation": true
+      },
+      "short": {
+        "entryZScore": 2.0,
+        "exitZScore": 0.5,
+        "maxHoldTimeMs": 7200000,
+        "trailingExit": {
+          "enabled": true,
+          "activationPnlBps": 20,
+          "trailStopBps": 15
+        }
+      }
     }
   },
   "chains": {

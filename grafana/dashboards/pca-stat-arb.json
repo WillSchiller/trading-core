@@ -253,23 +253,49 @@
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
-      "id": 17,
-      "type": "timeseries",
-      "title": "Cumulative P&L (bps)",
-      "gridPos": {"x": 16, "y": 4, "w": 8, "h": 4},
+      "id": 19,
+      "type": "stat",
+      "title": "Capital Deployed",
+      "description": "Total notional USD in open positions",
+      "gridPos": {"x": 16, "y": 4, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(exit_timestamp / 1000) as time, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) as \"Cumulative P&L (bps)\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY exit_timestamp",
-        "format": "time_series"
+        "rawSql": "SELECT COALESCE(SUM(position_size_usd), 0) as \"Deployed\" FROM pca_signals WHERE resolved = false",
+        "format": "table"
       }],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "color": {"mode": "fixed", "fixedColor": "yellow"},
-          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "gradientMode": "scheme"}
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
         }
-      }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Unrealized P&L ($)",
+      "description": "Mark-to-market P&L in USD",
+      "gridPos": {"x": 20, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(CASE WHEN entry_price > 0 AND current_price > 0 THEN position_size_usd * (CASE direction WHEN 'long' THEN (current_price - entry_price) / entry_price WHEN 'short' THEN (entry_price - current_price) / entry_price END) ELSE 0 END), 0)::numeric, 2) as \"Unrealized\" FROM pca_signals WHERE resolved = false",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
       "id": 7,

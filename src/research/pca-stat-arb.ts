@@ -2,6 +2,35 @@ import { EventEmitter } from 'events';
 import * as math from 'mathjs';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 
+export type RegimeState = 'bullish' | 'bearish' | 'neutral';
+export type ExitReason = 'zscore' | 'time_stop' | 'trailing_stop';
+
+export interface RegimeGatingConfig {
+  enabled: boolean;
+  pc1MomentumLookback: number;
+  pc1MomentumThreshold: number;
+}
+
+export interface LongConfig {
+  entryZScore: number;
+  exitZScore: number;
+  maxHoldTimeMs: number;
+  requireRegimeConfirmation: boolean;
+}
+
+export interface TrailingExitConfig {
+  enabled: boolean;
+  activationPnlBps: number;
+  trailStopBps: number;
+}
+
+export interface ShortConfig {
+  entryZScore: number;
+  exitZScore: number;
+  maxHoldTimeMs: number;
+  trailingExit: TrailingExitConfig;
+}
+
 export interface PCAConfig {
   assets: string[];
   returnWindowMs: number;
@@ -13,6 +42,10 @@ export interface PCAConfig {
   exitZScore: number;
   tickIntervalMs: number;
   pcaRefreshPeriods: number;
+  positionSizeUsd: number;
+  regimeGating?: RegimeGatingConfig;
+  long?: LongConfig;
+  short?: ShortConfig;
 }
 
 const DEFAULT_CONFIG: PCAConfig = {
@@ -26,6 +59,28 @@ const DEFAULT_CONFIG: PCAConfig = {
   exitZScore: 0.5,
   tickIntervalMs: 60000,
   pcaRefreshPeriods: 15,
+  positionSizeUsd: 100,
+  regimeGating: {
+    enabled: true,
+    pc1MomentumLookback: 10,
+    pc1MomentumThreshold: 0,
+  },
+  long: {
+    entryZScore: 2.5,
+    exitZScore: 0.3,
+    maxHoldTimeMs: 1800000,
+    requireRegimeConfirmation: true,
+  },
+  short: {
+    entryZScore: 2.0,
+    exitZScore: 0.5,
+    maxHoldTimeMs: 7200000,
+    trailingExit: {
+      enabled: true,
+      activationPnlBps: 20,
+      trailStopBps: 15,
+    },
+  },
 };
 
 export interface FactorModel {
@@ -56,6 +111,7 @@ export interface PCASignalEvent {
   residual: number;
   confidence: number;
   entryPrice: number;
+  positionSizeUsd: number;
   factorContext: {
     pc1Return: number;
     pc2Return: number;
@@ -69,6 +125,17 @@ export interface PCAExitEvent extends PCASignalEvent {
   holdTimeMs: number;
   exitPrice: number;
   pnlBps: number;
+  exitReason: ExitReason;
+  peakPnlBps: number;
+  troughPnlBps: number;
+  regimeState: RegimeState;
+}
+
+export interface ActivePosition extends PCASignalEvent {
+  peakPnlBps: number;
+  troughPnlBps: number;
+  lastPnlBps: number;
+  trailingActivated: boolean;
 }
 
 export class PCAStatArbMonitor extends EventEmitter {
@@ -79,9 +146,13 @@ export class PCAStatArbMonitor extends EventEmitter {
   private factorModel: FactorModel | null = null;
   private residualHistory: Map<string, number[]> = new Map();
   private activeSignals: Map<string, PCASignalEvent> = new Map();
+  private activePositions: Map<string, ActivePosition> = new Map();
   private tickCount: number = 0;
   private tickInterval: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  private pc1ReturnHistory: number[] = [];
+  private regimeState: RegimeState = 'neutral';
+  private pc1Momentum: number = 0;
 
   constructor(config: Partial<PCAConfig>) {
     super();
@@ -172,6 +243,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     }
 
     const signals = this.computeSignals(returns, now);
+
+    if (signals.length > 0 && signals[0].factorReturns[0] !== undefined) {
+      this.computeRegimeState(signals[0].factorReturns[0]);
+    }
+
     this.processSignals(signals, now);
     this.logSummary(returns, signals);
 
@@ -449,78 +525,112 @@ export class PCAStatArbMonitor extends EventEmitter {
 
   private processSignals(signals: AssetSignal[], now: number): void {
     for (const signal of signals) {
-      const existingSignal = this.activeSignals.get(signal.asset);
+      const existingPosition = this.activePositions.get(signal.asset);
 
-      if (signal.signal !== 'neutral' && !existingSignal) {
-        const currentPrice = this.getCurrentPrice(signal.asset);
-        if (currentPrice <= 0) {
-          this.logger.warn({ asset: signal.asset }, 'Skipping signal - no valid price');
-          continue;
+      if (!existingPosition) {
+        let shouldEnter = false;
+        let direction: 'long' | 'short' | null = null;
+
+        if (this.shouldEnterLong(signal.residualZScore)) {
+          shouldEnter = true;
+          direction = 'long';
+        } else if (this.shouldEnterShort(signal.residualZScore)) {
+          shouldEnter = true;
+          direction = 'short';
         }
-        const event: PCASignalEvent = {
-          timestamp: now,
-          asset: signal.asset,
-          direction: signal.signal,
-          zScore: signal.residualZScore,
-          residual: signal.residual,
-          confidence:
-            this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
-          entryPrice: currentPrice,
-          factorContext: {
-            pc1Return: signal.factorReturns[0] ?? 0,
-            pc2Return: signal.factorReturns[1] ?? 0,
-          },
-          allAssetResiduals: Object.fromEntries(signals.map((s) => [s.asset, s.residual])),
-        };
 
-        this.activeSignals.set(signal.asset, event);
+        if (shouldEnter && direction) {
+          const currentPrice = this.getCurrentPrice(signal.asset);
+          if (currentPrice <= 0) {
+            this.logger.warn({ asset: signal.asset }, 'Skipping signal - no valid price');
+            continue;
+          }
 
-        this.logger.info(
-          {
+          const position: ActivePosition = {
+            timestamp: now,
             asset: signal.asset,
-            direction: signal.signal,
-            zScore: signal.residualZScore.toFixed(2),
-            residualBps: (signal.residual * 10000).toFixed(1),
-            pc1Bps: (signal.factorReturns[0] * 10000).toFixed(1),
-          },
-          'PCA signal detected'
-        );
+            direction,
+            zScore: signal.residualZScore,
+            residual: signal.residual,
+            confidence:
+              this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
+            entryPrice: currentPrice,
+            positionSizeUsd: this.config.positionSizeUsd,
+            factorContext: {
+              pc1Return: signal.factorReturns[0] ?? 0,
+              pc2Return: signal.factorReturns[1] ?? 0,
+            },
+            allAssetResiduals: Object.fromEntries(signals.map((s) => [s.asset, s.residual])),
+            peakPnlBps: 0,
+            troughPnlBps: 0,
+            lastPnlBps: 0,
+            trailingActivated: false,
+          };
 
-        this.emit('signal', event);
+          this.activePositions.set(signal.asset, position);
+          this.activeSignals.set(signal.asset, position);
+
+          this.logger.info(
+            {
+              asset: signal.asset,
+              direction,
+              zScore: signal.residualZScore.toFixed(2),
+              residualBps: (signal.residual * 10000).toFixed(1),
+              pc1Bps: (signal.factorReturns[0] * 10000).toFixed(1),
+              regimeState: this.regimeState,
+              pc1Momentum: this.pc1Momentum.toFixed(4),
+            },
+            'PCA signal detected'
+          );
+
+          this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState });
+        }
       }
 
-      if (existingSignal && Math.abs(signal.residualZScore) < this.config.exitZScore) {
-        const holdTime = now - existingSignal.timestamp;
-        const exitPrice = this.getCurrentPrice(signal.asset);
-        let pnlBps = 0;
-        if (existingSignal.entryPrice > 0 && exitPrice > 0) {
-          const rawReturn = (exitPrice - existingSignal.entryPrice) / existingSignal.entryPrice;
-          pnlBps = (existingSignal.direction === 'long' ? rawReturn : -rawReturn) * 10000;
-        }
-
-        this.logger.info(
-          {
-            asset: signal.asset,
-            direction: existingSignal.direction,
-            entryZScore: existingSignal.zScore.toFixed(2),
-            exitZScore: signal.residualZScore.toFixed(2),
-            holdTimeMin: (holdTime / 60000).toFixed(1),
-            pnlBps: pnlBps.toFixed(1),
-          },
-          'PCA signal closed'
+      if (existingPosition) {
+        const currentPrice = this.getCurrentPrice(signal.asset);
+        const { shouldExit, reason } = this.checkExitConditions(
+          existingPosition,
+          signal.residualZScore,
+          currentPrice,
+          now
         );
 
-        const exitEvent: PCAExitEvent = {
-          ...existingSignal,
-          exitTimestamp: now,
-          exitZScore: signal.residualZScore,
-          holdTimeMs: holdTime,
-          exitPrice,
-          pnlBps,
-        };
+        if (shouldExit) {
+          const holdTime = now - existingPosition.timestamp;
 
-        this.emit('exit', exitEvent);
-        this.activeSignals.delete(signal.asset);
+          this.logger.info(
+            {
+              asset: signal.asset,
+              direction: existingPosition.direction,
+              exitReason: reason,
+              entryZScore: existingPosition.zScore.toFixed(2),
+              exitZScore: signal.residualZScore.toFixed(2),
+              holdTimeMin: (holdTime / 60000).toFixed(1),
+              pnlBps: existingPosition.lastPnlBps.toFixed(1),
+              peakPnlBps: existingPosition.peakPnlBps.toFixed(1),
+              troughPnlBps: existingPosition.troughPnlBps.toFixed(1),
+            },
+            'PCA signal closed'
+          );
+
+          const exitEvent: PCAExitEvent = {
+            ...existingPosition,
+            exitTimestamp: now,
+            exitZScore: signal.residualZScore,
+            holdTimeMs: holdTime,
+            exitPrice: currentPrice,
+            pnlBps: existingPosition.lastPnlBps,
+            exitReason: reason,
+            peakPnlBps: existingPosition.peakPnlBps,
+            troughPnlBps: existingPosition.troughPnlBps,
+            regimeState: this.regimeState,
+          };
+
+          this.emit('exit', exitEvent);
+          this.activePositions.delete(signal.asset);
+          this.activeSignals.delete(signal.asset);
+        }
       }
     }
   }
@@ -529,6 +639,96 @@ export class PCAStatArbMonitor extends EventEmitter {
     const history = this.priceHistory.get(asset);
     if (!history || history.length === 0) return 0;
     return history[history.length - 1].price;
+  }
+
+  private computeRegimeState(pc1Return: number): void {
+    this.pc1ReturnHistory.push(pc1Return);
+    while (this.pc1ReturnHistory.length > 100) {
+      this.pc1ReturnHistory.shift();
+    }
+
+    const gating = this.config.regimeGating;
+    if (!gating?.enabled) return;
+
+    const lookback = gating.pc1MomentumLookback;
+    if (this.pc1ReturnHistory.length < lookback) return;
+
+    const recentReturns = this.pc1ReturnHistory.slice(-lookback);
+    this.pc1Momentum = recentReturns.reduce((a, b) => a + b, 0);
+
+    const threshold = gating.pc1MomentumThreshold;
+    const absThreshold = Math.abs(threshold) + 0.0001;
+    if (this.pc1Momentum > absThreshold) {
+      this.regimeState = 'bullish';
+    } else if (this.pc1Momentum < -absThreshold) {
+      this.regimeState = 'bearish';
+    } else {
+      this.regimeState = 'neutral';
+    }
+  }
+
+  private shouldEnterLong(zScore: number): boolean {
+    const longConfig = this.config.long;
+    const threshold = longConfig?.entryZScore ?? this.config.entryZScore;
+    if (zScore > -threshold) return false;
+
+    if (longConfig?.requireRegimeConfirmation && this.config.regimeGating?.enabled) {
+      if (this.regimeState === 'bearish') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private shouldEnterShort(zScore: number): boolean {
+    const shortConfig = this.config.short;
+    const threshold = shortConfig?.entryZScore ?? this.config.entryZScore;
+    return zScore >= threshold;
+  }
+
+  private checkExitConditions(
+    position: ActivePosition,
+    currentZScore: number,
+    currentPrice: number,
+    now: number
+  ): { shouldExit: boolean; reason: ExitReason } {
+    const holdTimeMs = now - position.timestamp;
+    const direction = position.direction;
+    const dirConfig = direction === 'long' ? this.config.long : this.config.short;
+    const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
+    const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
+
+    let currentPnlBps = 0;
+    if (position.entryPrice > 0 && currentPrice > 0) {
+      const rawReturn = (currentPrice - position.entryPrice) / position.entryPrice;
+      currentPnlBps = (direction === 'long' ? rawReturn : -rawReturn) * 10000;
+    }
+    position.lastPnlBps = currentPnlBps;
+    position.peakPnlBps = Math.max(position.peakPnlBps, currentPnlBps);
+    position.troughPnlBps = Math.min(position.troughPnlBps, currentPnlBps);
+
+    if (holdTimeMs >= maxHoldTimeMs) {
+      return { shouldExit: true, reason: 'time_stop' };
+    }
+
+    if (Math.abs(currentZScore) < exitZScore) {
+      return { shouldExit: true, reason: 'zscore' };
+    }
+
+    if (direction === 'short' && this.config.short?.trailingExit?.enabled) {
+      const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
+      if (currentPnlBps >= activationPnlBps) {
+        position.trailingActivated = true;
+      }
+      if (position.trailingActivated) {
+        const drawdownFromPeak = position.peakPnlBps - currentPnlBps;
+        if (drawdownFromPeak >= trailStopBps) {
+          return { shouldExit: true, reason: 'trailing_stop' };
+        }
+      }
+    }
+
+    return { shouldExit: false, reason: 'zscore' };
   }
 
   private logSummary(_returns: Record<string, number>, signals: AssetSignal[]): void {
@@ -541,9 +741,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     this.logger.info(
       {
         tick: this.tickCount,
-        activeSignals: this.activeSignals.size,
+        activeSignals: this.activePositions.size,
         residuals: residualSummary,
         pc1Bps: signals[0] ? (signals[0].factorReturns[0] * 10000).toFixed(1) : 'N/A',
+        regimeState: this.regimeState,
+        pc1Momentum: this.pc1Momentum.toFixed(4),
       },
       'PCA summary'
     );
@@ -573,5 +775,13 @@ export class PCAStatArbMonitor extends EventEmitter {
       if (price > 0) prices[asset] = price;
     }
     return prices;
+  }
+
+  getRegimeState(): { state: RegimeState; pc1Momentum: number } {
+    return { state: this.regimeState, pc1Momentum: this.pc1Momentum };
+  }
+
+  getActivePositions(): Map<string, ActivePosition> {
+    return new Map(this.activePositions);
   }
 }
