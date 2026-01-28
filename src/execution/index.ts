@@ -448,34 +448,69 @@ export class ExecutionManager {
 
     this.breakEvenCache.refresh(pair, sizeBucket, feeTierBps, gasBps, quote.slippageBps);
 
-    if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
-      const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
+    if (strategy === 'rank_space') {
+      const validationMode = this.appConfig.rankSpace.validationMode ?? 'direction_only';
+      const directionToleranceBps = this.appConfig.rankSpace.directionToleranceBps ?? 3;
 
-      if (strategy === 'rank_space') {
-        const grossSpreadBps = Math.abs(freshSpreadBps);
-        const shadowPnl = {
-          wouldClearBreakEven: grossSpreadBps >= breakEvenBps,
-          wouldClearBreakEvenPlus2: grossSpreadBps >= breakEvenBps + 2,
-          wouldClearBreakEvenPlus4: grossSpreadBps >= breakEvenBps + 4,
-          counterfactualPnlBps: grossSpreadBps - breakEvenBps,
-        };
+      if (validationMode === 'none') {
+        this.logger.debug(
+          { opportunityId: opportunity.id?.toString(), strategy, freshSpreadBps },
+          'Validation skipped (mode: none)'
+        );
+      } else if (validationMode === 'direction_only') {
+        const directionConsistent =
+          (opportunity.direction === 'sell_dex' && freshSpreadBps > -directionToleranceBps) ||
+          (opportunity.direction === 'buy_dex' && freshSpreadBps < directionToleranceBps);
+
+        if (!directionConsistent) {
+          const reason = `Direction reversed: ${opportunity.direction} but fresh spread ${freshSpreadBps.toFixed(1)} bps (tolerance: ${directionToleranceBps} bps)`;
+          this.logger.info(
+            {
+              opportunityId: opportunity.id?.toString(),
+              strategy,
+              direction: opportunity.direction,
+              freshSpreadBps,
+              directionToleranceBps,
+              originalSpreadBps: opportunity.spreadBps,
+            },
+            'Direction validation failed (rank_space)'
+          );
+          this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
+          return;
+        }
 
         this.logger.info(
           {
             opportunityId: opportunity.id?.toString(),
             strategy,
+            direction: opportunity.direction,
             freshSpreadBps,
-            requiredSpreadBps,
+            directionToleranceBps,
             breakEvenBps,
-            feeTierBps,
-            slippageBps: quote.slippageBps,
-            gasBps,
-            edgeBufferBps,
-            shadowPnl,
+            validationMode,
           },
-          'Shadow execution (rank_space skipped)'
+          'Direction validation passed (rank_space) - proceeding regardless of magnitude'
         );
       } else {
+        if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
+          const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps`;
+          this.logger.info(
+            {
+              opportunityId: opportunity.id?.toString(),
+              strategy,
+              freshSpreadBps,
+              requiredSpreadBps,
+              breakEvenBps,
+            },
+            'Full validation failed (rank_space)'
+          );
+          this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
+          return;
+        }
+      }
+    } else {
+      if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
+        const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
         this.logger.info(
           {
             opportunityId: opportunity.id?.toString(),
@@ -492,10 +527,9 @@ export class ExecutionManager {
           },
           'Below break-even threshold (fresh spread)'
         );
+        this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
+        return;
       }
-
-      this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
-      return;
     }
 
     const tokenInScale = new Decimal(10).pow(tokenInConfig.decimals);

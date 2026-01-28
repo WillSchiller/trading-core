@@ -24,6 +24,8 @@ export const rankSpaceConfigSchema = z.object({
   triggerPercentile: z.number().min(0).max(1),
   minSpreadBps: z.number().positive(),
   minDurationMs: z.number().int().positive(),
+  validationMode: z.enum(['none', 'direction_only', 'full']).default('direction_only'),
+  directionToleranceBps: z.number().nonnegative().default(3),
 });
 
 export const executionConfigSchema = z.object({

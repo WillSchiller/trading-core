@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { appConfigSchema, envConfigSchema, pairsFileSchema } from './schema.js';
 import type { AppConfig, EnvConfig, PairConfig } from './types.js';
+export type { ValidationMode } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_DIR = join(__dirname, '../../config');

@@ -23,11 +23,15 @@ export interface DetectionConfig {
   defaultGasGwei?: number;
 }
 
+export type ValidationMode = 'none' | 'direction_only' | 'full';
+
 export interface RankSpaceConfig {
   minVenues: number;
   triggerPercentile: number;
   minSpreadBps: number;
   minDurationMs: number;
+  validationMode: ValidationMode;
+  directionToleranceBps: number;
 }
 
 export interface ExecutionConfig {

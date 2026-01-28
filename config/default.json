@@ -24,7 +24,9 @@
     "minVenues": 3,
     "triggerPercentile": 0.15,
     "minSpreadBps": 5,
-    "minDurationMs": 1000
+    "minDurationMs": 1000,
+    "validationMode": "direction_only",
+    "directionToleranceBps": 3
   },
   "execution": {
     "paperMode": true,
