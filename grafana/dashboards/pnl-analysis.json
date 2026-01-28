@@ -159,7 +159,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT AVG(input_amount_human * quoted_price) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${paper_mode}' = 'all' OR is_paper_trade::text = '${paper_mode}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND input_amount_human IS NOT NULL AND quoted_price IS NOT NULL",
+          "rawSql": "SELECT AVG(CASE WHEN direction = 'buy_dex' THEN input_amount_human ELSE input_amount_human * quoted_price END) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND ('${paper_mode}' = 'all' OR is_paper_trade::text = '${paper_mode}') AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND input_amount_human IS NOT NULL",
           "format": "table"
         }
       ],
