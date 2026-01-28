@@ -323,9 +323,9 @@ export interface QuoteRefreshFilterInput {
 }
 
 function hashQuote(anchorQuote: NormalizedQuote, dexQuote: NormalizedQuote, confirmQuote?: NormalizedQuote): string {
-  const anchorTs = anchorQuote.exchangeTsMs ?? anchorQuote.receivedTsMs;
-  const dexTs = dexQuote.blockTsMs ?? dexQuote.receivedTsMs;
-  const confirmTs = confirmQuote ? (confirmQuote.exchangeTsMs ?? confirmQuote.receivedTsMs) : 0;
+  const anchorTs = anchorQuote.exchangeTsMs ?? anchorQuote.receivedTsMs ?? 0;
+  const dexTs = dexQuote.blockTsMs ?? dexQuote.receivedTsMs ?? 0;
+  const confirmTs = confirmQuote ? (confirmQuote.exchangeTsMs ?? confirmQuote.receivedTsMs ?? 0) : 0;
 
   const parts = [
     anchorQuote.mid.toFixed(8),
