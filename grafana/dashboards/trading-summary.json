@@ -123,12 +123,13 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT o.detected_at as \"Time\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY o.detected_at DESC LIMIT 20",
+        "rawSql": "SELECT o.detected_at as \"Time\", o.chain as \"Chain\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY o.detected_at DESC LIMIT 20",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
+          {"matcher": {"id": "byName", "options": "Chain"}, "properties": [{"id": "custom.width", "value": 80}]},
           {"matcher": {"id": "byName", "options": "Status"}, "properties": [{"id": "custom.width", "value": 80}]},
           {"matcher": {"id": "byName", "options": "Skip Reason"}, "properties": [{"id": "custom.width", "value": 300}]}
         ]
@@ -138,7 +139,7 @@
       "id": 7,
       "type": "piechart",
       "title": "Outcome Breakdown",
-      "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+      "gridPos": {"x": 0, "y": 12, "w": 6, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -148,10 +149,32 @@
       "options": {"legend": {"displayMode": "list", "placement": "right"}}
     },
     {
+      "id": 9,
+      "type": "piechart",
+      "title": "By Chain",
+      "gridPos": {"x": 6, "y": 12, "w": 6, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT chain as \"Chain\", COUNT(*) as \"Count\" FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY chain",
+        "format": "table"
+      }],
+      "options": {"legend": {"displayMode": "list", "placement": "right"}},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "base"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "mainnet"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
+        ]
+      }
+    },
+    {
       "id": 8,
       "type": "timeseries",
       "title": "Cumulative P&L Over Time",
-      "gridPos": {"x": 8, "y": 12, "w": 16, "h": 8},
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
