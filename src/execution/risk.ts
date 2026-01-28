@@ -6,6 +6,12 @@ import type { RiskConfig } from '../config/types.js';
 
 const MIN_PROFIT_ABOVE_GAS_USD = 0.50;
 
+interface EffectiveRiskLimits {
+  maxTradeSizeUsd: number;
+  maxOpenExposureUsd: number;
+  maxTradesPerHour: number;
+}
+
 export interface RiskState {
   chain: Chain;
   openExposureUsd: number;
@@ -32,6 +38,7 @@ export interface TradeParams {
 export class RiskManager {
   private logger: Logger;
   private config: RiskConfig;
+  private effectiveLimits: EffectiveRiskLimits;
   private state: RiskState;
   private tradeTimestamps: Date[];
   private readonly mutex: Mutex;
@@ -41,6 +48,7 @@ export class RiskManager {
   constructor(chain: Chain, config: RiskConfig) {
     this.logger = createChildLogger({ component: 'risk-manager', chain });
     this.config = config;
+    this.effectiveLimits = this.resolveChainLimits(chain, config);
     this.mutex = new Mutex();
     this.state = {
       chain,
@@ -53,6 +61,19 @@ export class RiskManager {
       consecutiveReverts: 0,
     };
     this.tradeTimestamps = [];
+    this.logger.info(
+      { effectiveLimits: this.effectiveLimits },
+      'Risk manager initialized with chain-specific limits'
+    );
+  }
+
+  private resolveChainLimits(chain: Chain, config: RiskConfig): EffectiveRiskLimits {
+    const overrides = config.chainOverrides?.[chain];
+    return {
+      maxTradeSizeUsd: overrides?.maxTradeSizeUsd ?? config.maxTradeSizeUsd,
+      maxOpenExposureUsd: overrides?.maxOpenExposureUsd ?? config.maxOpenExposureUsd,
+      maxTradesPerHour: overrides?.maxTradesPerHour ?? config.maxTradesPerHour,
+    };
   }
 
   checkTradeAllowed(params: TradeParams): RiskCheckResult {
@@ -140,10 +161,10 @@ export class RiskManager {
   }
 
   private checkTradeSize(tradeSizeUsd: number): RiskCheckResult {
-    if (tradeSizeUsd > this.config.maxTradeSizeUsd) {
+    if (tradeSizeUsd > this.effectiveLimits.maxTradeSizeUsd) {
       return {
         allowed: false,
-        reason: `Trade size $${tradeSizeUsd.toFixed(2)} exceeds max $${this.config.maxTradeSizeUsd}`,
+        reason: `Trade size $${tradeSizeUsd.toFixed(2)} exceeds max $${this.effectiveLimits.maxTradeSizeUsd}`,
       };
     }
     return { allowed: true };
@@ -151,10 +172,10 @@ export class RiskManager {
 
   private checkExposure(tradeSizeUsd: number): RiskCheckResult {
     const projectedExposure = this.state.openExposureUsd + tradeSizeUsd;
-    if (projectedExposure > this.config.maxOpenExposureUsd) {
+    if (projectedExposure > this.effectiveLimits.maxOpenExposureUsd) {
       return {
         allowed: false,
-        reason: `Projected exposure $${projectedExposure.toFixed(2)} exceeds max $${this.config.maxOpenExposureUsd}`,
+        reason: `Projected exposure $${projectedExposure.toFixed(2)} exceeds max $${this.effectiveLimits.maxOpenExposureUsd}`,
       };
     }
     return { allowed: true };
@@ -162,10 +183,10 @@ export class RiskManager {
 
   private checkTradeRate(): RiskCheckResult {
     const count = this.getRecentTradeCount();
-    if (count >= this.config.maxTradesPerHour) {
+    if (count >= this.effectiveLimits.maxTradesPerHour) {
       return {
         allowed: false,
-        reason: `Rate limit: ${count}/${this.config.maxTradesPerHour} trades in last hour`,
+        reason: `Rate limit: ${count}/${this.effectiveLimits.maxTradesPerHour} trades in last hour`,
       };
     }
     return { allowed: true };

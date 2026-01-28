@@ -132,6 +132,30 @@
         "minLiquidityUsd": 10000,
         "maxTradeSizeUsd": 1000
       }
+    },
+    {
+      "base": "WETH",
+      "quote": "USDC",
+      "chain": "mainnet",
+      "tier": 1,
+      "aliases": ["ETH/USDC"],
+      "venues": {
+        "binance": { "symbol": "ETHUSDC" },
+        "coinbase": { "symbol": "ETH-USD" },
+        "bybit": { "symbol": "ETHUSDC" },
+        "uniswap_v3": {
+          "mainnet": [
+            { "pool": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640", "feeTier": 500, "primary": true },
+            { "pool": "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8", "feeTier": 3000 }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 45,
+        "minDurationMs": 2500,
+        "minLiquidityUsd": 50000,
+        "maxTradeSizeUsd": 500
+      }
     }
   ]
 }

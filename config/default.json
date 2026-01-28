@@ -16,7 +16,9 @@
     "volatilityAdjustment": true,
     "requireConfirmationVenue": true,
     "maxTimeSkewMsBase": 1500,
-    "maxTimeSkewMsMainnet": 3000
+    "maxTimeSkewMsMainnet": 3000,
+    "gasBpsPerGwei": 0.5,
+    "defaultGasGwei": 50
   },
   "rankSpace": {
     "minVenues": 3,
@@ -39,7 +41,14 @@
     "maxTradesPerHour": 20,
     "cooldownSeconds": 30,
     "maxGasGwei": 10,
-    "haltOnConsecutiveReverts": 3
+    "haltOnConsecutiveReverts": 3,
+    "chainOverrides": {
+      "mainnet": {
+        "maxTradeSizeUsd": 25,
+        "maxOpenExposureUsd": 100,
+        "maxTradesPerHour": 10
+      }
+    }
   },
   "inventory": {
     "trackingEnabled": true,
@@ -55,7 +64,7 @@
       "bybit": { "enabled": true, "isAnchor": false, "wsUrl": "wss://stream.bybit.com/v5/public/spot" }
     },
     "dex": {
-      "uniswap_v3": { "enabled": true, "chains": ["base"] },
+      "uniswap_v3": { "enabled": true, "chains": ["base", "mainnet"] },
       "aerodrome": { "enabled": true, "chains": ["base"] }
     }
   },

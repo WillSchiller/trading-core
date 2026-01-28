@@ -608,3 +608,147 @@ Implemented fire-and-forget background queue pattern for DB operations:
 - Clear distinction between historical opportunities and live market data
 
 ---
+
+## 2026-01-28
+
+### Opportunity Detector Agent
+
+**DONE** - Chain-specific threshold multipliers for mainnet detection
+
+**Goal:** Mainnet requires higher thresholds than Base due to higher gas costs and slower block times.
+
+**Implementation:**
+Added chain-aware threshold multipliers following the existing `getMaxTimeSkewMs()` pattern.
+
+**Files Changed:**
+1. `/Users/will/dev/blockhelix/src/detection/filters.ts`
+   - Added `getMinSpreadBpsMultiplier(chain: Chain): number`
+     - Base: 1.0x (no change)
+     - Mainnet: 2.75x (widens thresholds for profitability)
+   - Added `getMinDurationMsMultiplier(chain: Chain): number`
+     - Base: 1.0x (no change)
+     - Mainnet: 2.5x (requires longer persistence)
+
+2. `/Users/will/dev/blockhelix/src/detection/index.ts`
+   - Applied multipliers to thresholds from pair config
+   - Calculate `adjustedMinSpreadBps = pairConfig.thresholds.minSpreadBps * getMinSpreadBpsMultiplier(chain)`
+   - Calculate `adjustedMinDurationMs = pairConfig.thresholds.minDurationMs * getMinDurationMsMultiplier(chain)`
+   - Updated all filter calls to use adjusted thresholds:
+     - `thresholdFilter()` - uses `adjustedMinSpreadBps`
+     - `durationFilter()` - uses `adjustedMinSpreadBps` and `adjustedMinDurationMs`
+     - `thinMarketBufferFilter()` - uses `adjustedMinSpreadBps`
+     - `volatilityFilter()` - uses `adjustedMinSpreadBps`
+     - `handleOpportunityLifecycle()` - uses `adjustedMinSpreadBps`
+   - Updated adaptive polling callback to report adjusted thresholds
+
+3. `/Users/will/dev/blockhelix/tests/unit/filters.test.ts`
+   - Added 9 new tests for multiplier functions (33 tests total, all passing)
+
+**Example Thresholds:**
+
+Base chain (WETH/USDC):
+- Config: 20 bps spread, 2000ms duration
+- Multipliers: 1.0x spread, 1.0x duration
+- Effective: 20 bps spread, 2000ms duration (unchanged)
+
+Mainnet (WETH/USDC):
+- Config: 20 bps spread, 2000ms duration
+- Multipliers: 2.75x spread, 2.5x duration
+- Effective: 55 bps spread, 5000ms duration
+
+**Rationale:**
+- Mainnet gas costs ~10-20x higher than Base
+- Mainnet block time ~12s vs Base ~2s (longer settlement risk)
+- Higher thresholds ensure profitable opportunities after costs
+- Simple multiplier approach leaves room for more sophisticated logic later (e.g., dynamic gas-adjusted thresholds, block building integration)
+
+**Verification:**
+- All unit tests pass (33 tests in filters.test.ts)
+- TypeScript compilation succeeds with no errors
+- Build completes successfully
+
+**Architecture Notes:**
+- Kept implementation minimal and composable
+- No separate config system (multipliers apply to existing thresholds)
+- Follows existing pattern from `getMaxTimeSkewMs()`
+- Ready for future enhancement (gas-adjusted spreads, MEV integration)
+
+---
+
+## 2026-01-28
+
+### Opportunity Detector Agent
+
+✅ **DONE** — Gas-adjusted spread threshold filter for mainnet
+
+**Goal**: Prevent trading when gas costs exceed profitability on mainnet. Critical for mainnet execution.
+
+**Implementation:**
+
+1. `/Users/will/dev/blockhelix/src/config/types.ts`
+   - Added `gasBpsPerGwei?: number` to DetectionConfig (default 0.5)
+   - Added `defaultGasGwei?: number` to DetectionConfig (default 50 gwei)
+
+2. `/Users/will/dev/blockhelix/src/detection/filters.ts`
+   - Added `GasAdjustedThresholdFilterInput` interface
+   - Added `gasAdjustedThresholdFilter()` function
+   - Formula: `effectiveThreshold = minSpreadBps + (gasGwei * gasBpsPerGwei)`
+   - Chain-aware: Only applies to mainnet, passes automatically for Base/Arbitrum
+   - Fallback: Uses `defaultGasGwei` when current gas unavailable
+
+3. `/Users/will/dev/blockhelix/src/detection/index.ts`
+   - Added `getGasPrice?: (chain: Chain) => Promise<number | undefined>` to config
+   - Integrated filter into detection flow after thin market buffer filter
+   - Fetches current gas price from execution manager for mainnet chains
+   - Gracefully handles gas fetch failures (logs debug, uses default)
+
+4. `/Users/will/dev/blockhelix/config/default.json`
+   - Added `"gasBpsPerGwei": 0.5` to detection section
+   - Added `"defaultGasGwei": 50` to detection section
+
+5. `/Users/will/dev/blockhelix/tests/unit/filters.test.ts`
+   - Added 8 comprehensive test cases for gas-adjusted filter
+   - Tests cover: Base bypass, mainnet threshold logic, default gas, high gas, negative spreads
+   - All 52 tests passing
+
+**How It Works:**
+
+Example calculation (mainnet):
+- Base threshold: 20 bps
+- Current gas: 60 gwei
+- `gasBpsPerGwei`: 0.5
+- Gas adjustment: 60 * 0.5 = 30 bps
+- Effective threshold: 20 + 30 = 50 bps
+
+If spread = 45 bps → REJECTED (gas would eat profit)
+If spread = 55 bps → PASSED (profitable after gas)
+
+**Reason Codes:**
+- `gas_adjustment_not_required_for_chain` - Base/Arbitrum (low gas)
+- `gas_adjusted_threshold_met: X >= Y (gas: Z gwei, adjustment: +W bps)` - Passed
+- `gas_adjusted_threshold_not_met: X < Y (gas: Z gwei, adjustment: +W bps)` - Failed
+
+**Filter Placement:**
+Runs after `thinMarketBufferFilter` and before `durationFilter`. This ensures:
+1. Basic threshold check passes first
+2. Thin market premium applied (if applicable)
+3. Gas profitability verified
+4. Only then track duration/persistence
+
+**Configuration Flexibility:**
+- `gasBpsPerGwei = 0.5`: Conservative (50 gwei adds 25 bps)
+- `gasBpsPerGwei = 1.0`: Aggressive (50 gwei adds 50 bps)
+- `defaultGasGwei = 50`: Safe fallback when gas estimator unavailable
+
+**Future Enhancement:**
+- Dynamic `gasBpsPerGwei` based on trade size (larger trades amortize gas better)
+- Integration with actual quoter gas estimates
+- MEV/Flashbots considerations
+
+**Verification:**
+- TypeScript compilation: PASSED
+- All 52 unit tests: PASSED
+- Filter properly chain-aware
+- Graceful error handling for gas fetch
+
+---

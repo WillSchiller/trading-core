@@ -31,6 +31,28 @@ resource "aws_secretsmanager_secret" "rpc_base_ws" {
   }
 }
 
+resource "aws_secretsmanager_secret" "rpc_mainnet_http" {
+  name        = "${var.project_name}/rpc-mainnet-http"
+  description = "Ethereum mainnet RPC HTTP endpoint (contains API key)"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-rpc-mainnet-http"
+  }
+}
+
+resource "aws_secretsmanager_secret" "rpc_mainnet_ws" {
+  name        = "${var.project_name}/rpc-mainnet-ws"
+  description = "Ethereum mainnet RPC WebSocket endpoint (contains API key)"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-rpc-mainnet-ws"
+  }
+}
+
 resource "aws_secretsmanager_secret" "binance_api_key" {
   name        = "${var.project_name}/binance-api-key"
   description = "Binance API key for market data"

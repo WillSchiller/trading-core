@@ -26,20 +26,19 @@ export class QuotePersistence {
   private config: QuotePersistenceConfig;
   private sampleCounter = 0;
   private rollupTimers: Map<RollupInterval, NodeJS.Timeout>;
-  private rollupBuffers: Map<string, number[]>;
 
   constructor(pool: Pool, config: QuotePersistenceConfig) {
     this.pool = pool;
     this.config = config;
     this.logger = createChildLogger({ component: 'quote-persistence' });
     this.rollupTimers = new Map();
-    this.rollupBuffers = new Map();
   }
 
   public async insertRawQuote(quote: NormalizedQuote, venueId: number, pairId: number): Promise<void> {
     this.sampleCounter++;
 
-    const shouldSample = this.sampleCounter % this.config.sampleRate === 0;
+    const isDex = quote.venue === 'uniswap_v3' || quote.venue === 'aerodrome';
+    const shouldSample = isDex || this.sampleCounter % this.config.sampleRate === 0;
 
     this.logger.info(
       {
@@ -48,18 +47,13 @@ export class QuotePersistence {
         venueId,
         pairId,
         sampleCounter: this.sampleCounter,
-        sampleRate: this.config.sampleRate,
+        sampleRate: isDex ? 1 : this.config.sampleRate,
         shouldSample,
       },
       'Processing quote for persistence'
     );
 
     if (!shouldSample) {
-      this.logger.debug(
-        { venue: quote.venue, pair: quote.pair, sampleCounter: this.sampleCounter },
-        'Skipping sample, buffering for rollup only'
-      );
-      this.bufferForRollup(quote, venueId, pairId);
       return;
     }
 
@@ -99,8 +93,6 @@ export class QuotePersistence {
           quote.blockTsMs ?? null,
         ]
       );
-
-      this.bufferForRollup(quote, venueId, pairId);
 
       this.logger.info(
         {
@@ -195,14 +187,6 @@ export class QuotePersistence {
     } catch (error) {
       this.logger.error({ error: (error as Error).message, interval }, 'Failed to perform rollup');
     }
-  }
-
-  private bufferForRollup(quote: NormalizedQuote, venueId: number, pairId: number): void {
-    const key = `${venueId}:${pairId}:${quote.chain || 'null'}`;
-    if (!this.rollupBuffers.has(key)) {
-      this.rollupBuffers.set(key, []);
-    }
-    this.rollupBuffers.get(key)!.push(quote.mid);
   }
 
   private parseInterval(interval: RollupInterval): number {

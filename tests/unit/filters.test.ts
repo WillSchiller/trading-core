@@ -6,6 +6,13 @@ import {
   stalenessFilter,
   volatilityFilter,
   anchorConfidenceFilter,
+  quoteRefreshFilter,
+  gasAdjustedThresholdFilter,
+  getMaxTimeSkewMs,
+  getMinSpreadBpsMultiplier,
+  getMinDurationMsMultiplier,
+  getMinQuoteRefreshes,
+  type QuoteRefreshState,
 } from '../../src/detection/filters.js';
 import type { QuoteWithStaleness, NormalizedQuote } from '../../src/types/index.js';
 
@@ -101,6 +108,29 @@ describe('durationFilter', () => {
     expect(result.passed).toBe(false);
     expect(result.reason).toBe('spread_below_threshold');
     expect(gapFirstSeenMap.has('WETH/USDC:base')).toBe(false);
+  });
+
+  it('resets quote refresh map when spread falls below threshold', () => {
+    const quoteRefreshMap: Map<string, QuoteRefreshState> = new Map();
+    gapFirstSeenMap.set('WETH/USDC:base', Date.now() - 3000);
+    quoteRefreshMap.set('WETH/USDC:base', {
+      count: 3,
+      lastHash: 'some-hash',
+      spreadDirection: 'sell_dex',
+    });
+
+    const result = durationFilter({
+      pairChainKey: 'WETH/USDC:base',
+      currentSpreadBps: 5,
+      minSpreadBps: 10,
+      minDurationMs: 2000,
+      gapFirstSeenMap,
+      quoteRefreshMap,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(gapFirstSeenMap.has('WETH/USDC:base')).toBe(false);
+    expect(quoteRefreshMap.has('WETH/USDC:base')).toBe(false);
   });
 
   it('tracks different pair-chain combinations independently', () => {
@@ -319,5 +349,379 @@ describe('anchorConfidenceFilter', () => {
     });
 
     expect(result.reason).toContain('25.50bps');
+  });
+});
+
+describe('getMaxTimeSkewMs', () => {
+  it('returns 1500ms for base chain', () => {
+    expect(getMaxTimeSkewMs('base')).toBe(1500);
+  });
+
+  it('returns 3000ms for mainnet chain', () => {
+    expect(getMaxTimeSkewMs('mainnet')).toBe(3000);
+  });
+
+  it('returns default 1500ms for unknown chain', () => {
+    expect(getMaxTimeSkewMs('arbitrum')).toBe(1500);
+  });
+});
+
+describe('getMinSpreadBpsMultiplier', () => {
+  it('returns 1.0 for base chain', () => {
+    expect(getMinSpreadBpsMultiplier('base')).toBe(1.0);
+  });
+
+  it('returns 2.75 for mainnet chain', () => {
+    expect(getMinSpreadBpsMultiplier('mainnet')).toBe(2.75);
+  });
+
+  it('returns default 1.0 for unknown chain', () => {
+    expect(getMinSpreadBpsMultiplier('arbitrum')).toBe(1.0);
+  });
+});
+
+describe('getMinDurationMsMultiplier', () => {
+  it('returns 1.0 for base chain', () => {
+    expect(getMinDurationMsMultiplier('base')).toBe(1.0);
+  });
+
+  it('returns 2.5 for mainnet chain', () => {
+    expect(getMinDurationMsMultiplier('mainnet')).toBe(2.5);
+  });
+
+  it('returns default 1.0 for unknown chain', () => {
+    expect(getMinDurationMsMultiplier('arbitrum')).toBe(1.0);
+  });
+});
+
+describe('getMinQuoteRefreshes', () => {
+  it('returns 1 for base chain', () => {
+    expect(getMinQuoteRefreshes('base')).toBe(1);
+  });
+
+  it('returns 2 for mainnet chain', () => {
+    expect(getMinQuoteRefreshes('mainnet')).toBe(2);
+  });
+
+  it('returns default 1 for unknown chain', () => {
+    expect(getMinQuoteRefreshes('arbitrum')).toBe(1);
+  });
+});
+
+describe('quoteRefreshFilter', () => {
+  let quoteRefreshMap: Map<string, QuoteRefreshState>;
+
+  function createMockQuote(mid: number, receivedTsMs: number, exchangeTsMs?: number): NormalizedQuote {
+    return {
+      ts: new Date(receivedTsMs),
+      venue: 'binance',
+      pair: 'WETH/USDC',
+      mid,
+      latencyMs: 10,
+      receivedTsMs,
+      exchangeTsMs,
+    };
+  }
+
+  function createDexQuote(mid: number, blockTsMs: number): NormalizedQuote {
+    return {
+      ts: new Date(blockTsMs),
+      venue: 'uniswap_v3',
+      pair: 'WETH/USDC',
+      chain: 'mainnet',
+      mid,
+      latencyMs: 10,
+      receivedTsMs: blockTsMs,
+      blockTsMs,
+    };
+  }
+
+  beforeEach(() => {
+    quoteRefreshMap = new Map();
+  });
+
+  it('fails on first detection and tracks state', () => {
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2000, 1000, 995),
+      dexQuote: createDexQuote(2030, 1000),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe('quote_refresh_count: 1/2');
+    expect(quoteRefreshMap.has('WETH/USDC:mainnet')).toBe(true);
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(1);
+    expect(state?.spreadDirection).toBe('sell_dex');
+  });
+
+  it('increments count when quote data changes', () => {
+    quoteRefreshMap.set('WETH/USDC:mainnet', {
+      count: 1,
+      lastHash: '2000.00000000|995|2030.00000000|1000',
+      spreadDirection: 'sell_dex',
+    });
+
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2001, 1100, 1095),
+      dexQuote: createDexQuote(2031, 1100),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(2);
+    expect(result.passed).toBe(true);
+    expect(result.reason).toBe('quote_refresh_met: 2/2');
+  });
+
+  it('does not increment count when quote data is unchanged', () => {
+    const anchorQuote = createMockQuote(2000, 1000, 995);
+    const dexQuote = createDexQuote(2030, 1000);
+
+    quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote,
+      dexQuote,
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote,
+      dexQuote,
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(1);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe('quote_refresh_count: 1/2');
+  });
+
+  it('resets count when spread direction changes', () => {
+    quoteRefreshMap.set('WETH/USDC:mainnet', {
+      count: 3,
+      lastHash: '2000.00000000|995|2030.00000000|1000',
+      spreadDirection: 'sell_dex',
+    });
+
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2000, 1100, 1095),
+      dexQuote: createDexQuote(1970, 1100),
+      spreadDirection: 'buy_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(1);
+    expect(state?.spreadDirection).toBe('buy_dex');
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe('quote_refresh_direction_changed: 1/2');
+  });
+
+  it('passes immediately for Base chain with minQuoteRefreshes=1', () => {
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:base',
+      anchorQuote: createMockQuote(2000, 1000, 995),
+      dexQuote: createDexQuote(2030, 1000),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 1,
+      quoteRefreshMap,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe('quote_refresh_count: 1/1');
+
+    const result2 = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:base',
+      anchorQuote: createMockQuote(2001, 1100, 1095),
+      dexQuote: createDexQuote(2031, 1100),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 1,
+      quoteRefreshMap,
+    });
+
+    expect(result2.passed).toBe(true);
+    expect(result2.reason).toBe('quote_refresh_met: 2/1');
+  });
+
+  it('detects price changes even with same timestamp', () => {
+    quoteRefreshMap.set('WETH/USDC:mainnet', {
+      count: 1,
+      lastHash: '2000.00000000|1000|2030.00000000|1000',
+      spreadDirection: 'sell_dex',
+    });
+
+    const result = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2005, 1000),
+      dexQuote: createDexQuote(2030, 1000),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(2);
+    expect(result.passed).toBe(true);
+  });
+
+  it('includes confirmation quote in hash when present', () => {
+    const result1 = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2000, 1000, 995),
+      dexQuote: createDexQuote(2030, 1000),
+      confirmQuote: createMockQuote(2002, 1000, 998),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    expect(result1.passed).toBe(false);
+
+    const result2 = quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2000, 1000, 995),
+      dexQuote: createDexQuote(2030, 1000),
+      confirmQuote: createMockQuote(2003, 1100, 1095),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    const state = quoteRefreshMap.get('WETH/USDC:mainnet');
+    expect(state?.count).toBe(2);
+    expect(result2.passed).toBe(true);
+  });
+
+  it('tracks different pair-chain combinations independently', () => {
+    quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:mainnet',
+      anchorQuote: createMockQuote(2000, 1000),
+      dexQuote: createDexQuote(2030, 1000),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 2,
+      quoteRefreshMap,
+    });
+
+    quoteRefreshFilter({
+      pairChainKey: 'WETH/USDC:base',
+      anchorQuote: createMockQuote(2000, 1000),
+      dexQuote: createDexQuote(2030, 1000),
+      spreadDirection: 'sell_dex',
+      minQuoteRefreshes: 1,
+      quoteRefreshMap,
+    });
+
+    expect(quoteRefreshMap.get('WETH/USDC:mainnet')?.count).toBe(1);
+    expect(quoteRefreshMap.get('WETH/USDC:base')?.count).toBe(1);
+  });
+});
+
+describe('gasAdjustedThresholdFilter', () => {
+  it('passes for Base chain (gas filter not applicable)', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: 15,
+      minSpreadBps: 10,
+      chain: 'base',
+      gasGwei: 0.5,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(true);
+    expect(result.reason).toBe('gas_adjustment_not_required_for_chain');
+  });
+
+  it('passes when spread exceeds gas-adjusted threshold on mainnet', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: 40,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: 30,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(true);
+    expect(result.reason).toContain('gas_adjusted_threshold_met');
+    expect(result.reason).toContain('gas: 30.0 gwei');
+    expect(result.reason).toContain('adjustment: +15.0 bps');
+  });
+
+  it('fails when spread below gas-adjusted threshold on mainnet', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: 20,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: 30,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain('gas_adjusted_threshold_not_met');
+    expect(result.reason).toContain('20.0 < 25.0');
+  });
+
+  it('uses default gas when gasGwei is undefined', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: 40,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: undefined,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(true);
+    expect(result.reason).toContain('gas: 50.0 gwei');
+    expect(result.reason).toContain('adjustment: +25.0 bps');
+  });
+
+  it('calculates adjustment correctly at high gas (100 gwei)', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: 60,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: 100,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(true);
+    expect(result.reason).toContain('adjustment: +50.0 bps');
+  });
+
+  it('handles negative spread correctly', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: -40,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: 30,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(true);
+  });
+
+  it('fails when negative spread below gas-adjusted threshold', () => {
+    const result = gasAdjustedThresholdFilter({
+      spreadBps: -20,
+      minSpreadBps: 10,
+      chain: 'mainnet',
+      gasGwei: 30,
+      gasBpsPerGwei: 0.5,
+      defaultGasGwei: 50,
+    });
+    expect(result.passed).toBe(false);
   });
 });

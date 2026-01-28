@@ -28,6 +28,8 @@ fetch_secret() {
 fetch_secret "postgres-password" "POSTGRES_PASSWORD"
 fetch_secret "rpc-base-http" "RPC_BASE_HTTP"
 fetch_secret "rpc-base-ws" "RPC_BASE_WS"
+fetch_secret "rpc-mainnet-http" "RPC_MAINNET_HTTP"
+fetch_secret "rpc-mainnet-ws" "RPC_MAINNET_WS"
 fetch_secret "binance-api-key" "BINANCE_API_KEY"
 fetch_secret "binance-api-secret" "BINANCE_API_SECRET"
 fetch_secret "coinbase-api-key" "COINBASE_API_KEY"
@@ -47,6 +49,8 @@ if [ "$1" = "export" ]; then
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 RPC_BASE_HTTP=$RPC_BASE_HTTP
 RPC_BASE_WS=$RPC_BASE_WS
+RPC_MAINNET_HTTP=$RPC_MAINNET_HTTP
+RPC_MAINNET_WS=$RPC_MAINNET_WS
 BINANCE_API_KEY=$BINANCE_API_KEY
 BINANCE_API_SECRET=$BINANCE_API_SECRET
 COINBASE_API_KEY=$COINBASE_API_KEY

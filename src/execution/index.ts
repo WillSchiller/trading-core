@@ -377,8 +377,19 @@ export class ExecutionManager {
     const freshAnchorMid = freshAnchorQuote.quote.mid;
     const freshDexPrice = quote.quotedPrice;
 
-    const freshSpreadBps = ((freshDexPrice - freshAnchorMid) / freshAnchorMid) * 10000;
-    const spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
+    const rawFreshSpreadBps = ((freshDexPrice - freshAnchorMid) / freshAnchorMid) * 10000;
+
+    const strategy = opportunity.strategy ?? 'dislocation';
+
+    let freshSpreadBps: number;
+    let spreadDecay: number;
+    if (strategy === 'rank_space') {
+      freshSpreadBps = rawFreshSpreadBps;
+      spreadDecay = 0;
+    } else {
+      freshSpreadBps = rawFreshSpreadBps;
+      spreadDecay = Math.abs(opportunity.spreadBps) - Math.abs(freshSpreadBps);
+    }
 
     const feeTierBps = fee / 100;
     const gasBps = (gasEstimate.estimatedGasUsd / tradeSizeUsd) * 10000;
@@ -393,17 +404,20 @@ export class ExecutionManager {
       breakEvenBps = feeTierBps + Math.abs(quote.slippageBps) + gasBps;
     }
 
-    const edgeBufferBps = 10;
+    const edgeBufferBps = strategy === 'rank_space' ? 3 : this.appConfig.execution.edgeBufferBps;
     const requiredSpreadBps = breakEvenBps + edgeBufferBps;
 
     const totalLatencyMs = Date.now() - startTime;
     this.logger.info(
       {
         opportunityId: opportunity.id?.toString(),
+        strategy,
         originalSpreadBps: opportunity.spreadBps,
         freshSpreadBps,
         spreadDecay,
         requiredSpreadBps,
+        edgeBufferBps,
+        breakEvenBps,
         breakEvenCacheHit: cacheHit,
         anchorAgeMs: freshAnchorQuote.staleDurationMs,
         quoteLatencyMs,
@@ -418,21 +432,50 @@ export class ExecutionManager {
 
     if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
       const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
-      this.logger.info(
-        {
-          opportunityId: opportunity.id?.toString(),
-          freshSpreadBps,
-          requiredSpreadBps,
-          feeTierBps,
-          slippageBps: quote.slippageBps,
-          gasBps,
-          quoteLatencyMs,
-          gasEstimateLatencyMs,
-          riskCheckLatencyMs,
-          totalLatencyMs,
-        },
-        'Below break-even threshold (fresh spread)'
-      );
+
+      if (strategy === 'rank_space') {
+        const grossSpreadBps = Math.abs(freshSpreadBps);
+        const shadowPnl = {
+          wouldClearBreakEven: grossSpreadBps >= breakEvenBps,
+          wouldClearBreakEvenPlus2: grossSpreadBps >= breakEvenBps + 2,
+          wouldClearBreakEvenPlus4: grossSpreadBps >= breakEvenBps + 4,
+          counterfactualPnlBps: grossSpreadBps - breakEvenBps,
+        };
+
+        this.logger.info(
+          {
+            opportunityId: opportunity.id?.toString(),
+            strategy,
+            freshSpreadBps,
+            requiredSpreadBps,
+            breakEvenBps,
+            feeTierBps,
+            slippageBps: quote.slippageBps,
+            gasBps,
+            edgeBufferBps,
+            shadowPnl,
+          },
+          'Shadow execution (rank_space skipped)'
+        );
+      } else {
+        this.logger.info(
+          {
+            opportunityId: opportunity.id?.toString(),
+            strategy,
+            freshSpreadBps,
+            requiredSpreadBps,
+            feeTierBps,
+            slippageBps: quote.slippageBps,
+            gasBps,
+            quoteLatencyMs,
+            gasEstimateLatencyMs,
+            riskCheckLatencyMs,
+            totalLatencyMs,
+          },
+          'Below break-even threshold (fresh spread)'
+        );
+      }
+
       this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
       return;
     }
@@ -567,6 +610,13 @@ export { GasEstimator, type GasEstimate } from './gas.js';
 export { RiskManager, type RiskState, type RiskCheckResult, type TradeParams } from './risk.js';
 export { SwapRouter, type SwapParams, type SwapTransaction, RouterError } from './router.js';
 export { TransactionSigner, NonceError, SimulationError, ReceiptTimeoutError } from './signer.js';
+export {
+  type SubmissionStrategy,
+  DirectRpcSubmission,
+  FlashbotsProtectSubmission,
+  FlashbotsSubmissionError,
+  getSubmissionStrategy,
+} from './submission.js';
 export { PaperTrader, type PaperTradeParams, type PaperTradeResult } from './paper-trader.js';
 export { LiveTrader, type LiveTradeParams, type LiveTradeResult } from './live-trader.js';
 export { SlippageCalibrator, type CalibrationConfig, type SlippagePoint } from './slippage-calibrator.js';

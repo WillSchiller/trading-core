@@ -1,17 +1,16 @@
 import {
-  createWalletClient,
-  http,
-  type WalletClient,
   type PublicClient,
   type Address,
   type Chain as ViemChain,
   type TransactionRequest,
   type Hash,
+  type TransactionSerializable,
 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { base, mainnet } from 'viem/chains';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain } from '../types/index.js';
+import { type SubmissionStrategy, getSubmissionStrategy } from './submission.js';
 
 class Mutex {
   private locked = false;
@@ -43,17 +42,18 @@ export interface SignerConfig {
   chain: Chain;
   httpUrl: string;
   privateKey: string;
+  useFlashbotsProtect?: boolean;
 }
 
 export class TransactionSigner {
   private logger: Logger;
-  private walletClient: WalletClient;
   private publicClient: PublicClient;
   private account: PrivateKeyAccount;
   private viemChain: ViemChain;
   private currentNonce: number | null;
   private pendingNonces: Set<number>;
   private nonceMutex: Mutex;
+  private submissionStrategy: SubmissionStrategy;
   private static readonly MUTEX_WARN_THRESHOLD_MS = 200;
 
   constructor(publicClient: PublicClient, config: SignerConfig) {
@@ -66,13 +66,20 @@ export class TransactionSigner {
 
     this.account = privateKeyToAccount(config.privateKey as `0x${string}`);
 
-    this.walletClient = createWalletClient({
-      account: this.account,
-      chain: this.viemChain,
-      transport: http(config.httpUrl),
-    });
+    const useFlashbots = config.useFlashbotsProtect ?? (config.chain === 'mainnet');
+    if (useFlashbots && config.chain === 'mainnet') {
+      this.submissionStrategy = getSubmissionStrategy('mainnet', publicClient);
+    } else {
+      this.submissionStrategy = getSubmissionStrategy(config.chain, publicClient);
+    }
 
-    this.logger.info({ address: this.account.address }, 'Signer initialized');
+    this.logger.info(
+      {
+        address: this.account.address,
+        submissionStrategy: this.submissionStrategy.getName(),
+      },
+      'Signer initialized'
+    );
   }
 
   private getViemChain(chain: Chain): ViemChain {
@@ -142,16 +149,45 @@ export class TransactionSigner {
     this.logger.info({ nonce: this.currentNonce }, 'Nonce reset');
   }
 
-  async signAndSendTransaction(request: TransactionRequest): Promise<Hash> {
+  async signTransaction(request: TransactionRequest): Promise<{ signedTx: `0x${string}`; nonce: number }> {
     const nonce = await this.reserveNonce();
 
     try {
-      const hash = await this.walletClient.sendTransaction({
-        ...request,
+      const txToSign: TransactionSerializable = {
+        to: request.to,
+        data: request.data,
+        value: request.value ?? 0n,
+        gas: request.gas,
+        maxFeePerGas: request.maxFeePerGas,
+        maxPriorityFeePerGas: request.maxPriorityFeePerGas,
         nonce,
-        chain: this.viemChain,
-        account: this.account,
-      });
+        chainId: this.viemChain.id,
+        type: 'eip1559',
+      };
+
+      const signature = await this.account.signTransaction(txToSign);
+
+      this.logger.debug(
+        {
+          nonce,
+          to: request.to,
+          chainId: this.viemChain.id,
+        },
+        'Transaction signed'
+      );
+
+      return { signedTx: signature, nonce };
+    } catch (error) {
+      this.releaseNonce(nonce);
+      throw error;
+    }
+  }
+
+  async signAndSendTransaction(request: TransactionRequest): Promise<Hash> {
+    const { signedTx, nonce } = await this.signTransaction(request);
+
+    try {
+      const hash = await this.submissionStrategy.submit(signedTx);
 
       this.logger.info(
         {
@@ -159,6 +195,7 @@ export class TransactionSigner {
           nonce,
           to: request.to,
           value: request.value?.toString(),
+          strategy: this.submissionStrategy.getName(),
         },
         'Transaction sent'
       );
@@ -204,10 +241,12 @@ export class TransactionSigner {
     const startTime = Date.now();
 
     try {
-      const receipt = await this.publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: timeoutMs,
-      });
+      const receipt = await this.submissionStrategy.waitForInclusion(hash, timeoutMs);
+
+      if (!receipt) {
+        this.logger.warn({ hash, elapsedMs: Date.now() - startTime }, 'Transaction receipt timeout');
+        throw new ReceiptTimeoutError('Receipt timeout', hash);
+      }
 
       const elapsed = Date.now() - startTime;
       this.logger.info(
@@ -217,21 +256,24 @@ export class TransactionSigner {
           blockNumber: receipt.blockNumber.toString(),
           gasUsed: receipt.gasUsed.toString(),
           elapsedMs: elapsed,
+          strategy: this.submissionStrategy.getName(),
         },
         'Transaction receipt received'
       );
 
       return receipt;
     } catch (error) {
-      const elapsed = Date.now() - startTime;
-
-      if (elapsed >= timeoutMs) {
-        this.logger.warn({ hash, elapsedMs: elapsed }, 'Transaction receipt timeout');
-        throw new ReceiptTimeoutError('Receipt timeout', hash);
+      if (error instanceof ReceiptTimeoutError) {
+        throw error;
       }
-
+      const elapsed = Date.now() - startTime;
+      this.logger.warn({ hash, elapsedMs: elapsed, error: (error as Error).message }, 'Error waiting for receipt');
       throw error;
     }
+  }
+
+  getSubmissionStrategyName(): string {
+    return this.submissionStrategy.getName();
   }
 }
 

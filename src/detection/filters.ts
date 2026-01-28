@@ -34,16 +34,20 @@ export interface DurationFilterInput {
   minSpreadBps: number;
   minDurationMs: number;
   gapFirstSeenMap: Map<string, number>;
+  quoteRefreshMap?: Map<string, QuoteRefreshState>;
 }
 
 export function durationFilter(input: DurationFilterInput): FilterResult {
-  const { pairChainKey, currentSpreadBps, minSpreadBps, minDurationMs, gapFirstSeenMap } = input;
+  const { pairChainKey, currentSpreadBps, minSpreadBps, minDurationMs, gapFirstSeenMap, quoteRefreshMap } = input;
 
   const absSpread = Math.abs(currentSpreadBps);
   const now = Date.now();
 
   if (absSpread < minSpreadBps) {
     gapFirstSeenMap.delete(pairChainKey);
+    if (quoteRefreshMap) {
+      quoteRefreshMap.delete(pairChainKey);
+    }
     return {
       passed: false,
       reason: 'spread_below_threshold',
@@ -236,6 +240,28 @@ export function getMaxTimeSkewMs(chain: Chain): number {
   }
 }
 
+export function getMinSpreadBpsMultiplier(chain: Chain): number {
+  switch (chain) {
+    case 'base':
+      return 1.0;
+    case 'mainnet':
+      return 2.75;
+    default:
+      return 1.0;
+  }
+}
+
+export function getMinDurationMsMultiplier(chain: Chain): number {
+  switch (chain) {
+    case 'base':
+      return 1.0;
+    case 'mainnet':
+      return 2.5;
+    default:
+      return 1.0;
+  }
+}
+
 export interface ThinMarketBufferFilterInput {
   spreadBps: number;
   minSpreadBps: number;
@@ -266,5 +292,136 @@ export function thinMarketBufferFilter(input: ThinMarketBufferFilterInput): Filt
   return {
     passed: false,
     reason: `thin_market_buffer_not_met: ${absSpread.toFixed(1)} < ${adjustedThreshold.toFixed(1)}`,
+  };
+}
+
+export function getMinQuoteRefreshes(chain: Chain): number {
+  switch (chain) {
+    case 'base':
+      return 1;
+    case 'mainnet':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+export interface QuoteRefreshState {
+  count: number;
+  lastHash: string;
+  spreadDirection: 'buy_dex' | 'sell_dex';
+}
+
+export interface QuoteRefreshFilterInput {
+  pairChainKey: string;
+  anchorQuote: NormalizedQuote;
+  dexQuote: NormalizedQuote;
+  confirmQuote?: NormalizedQuote;
+  spreadDirection: 'buy_dex' | 'sell_dex';
+  minQuoteRefreshes: number;
+  quoteRefreshMap: Map<string, QuoteRefreshState>;
+}
+
+function hashQuote(anchorQuote: NormalizedQuote, dexQuote: NormalizedQuote, confirmQuote?: NormalizedQuote): string {
+  const anchorTs = anchorQuote.exchangeTsMs ?? anchorQuote.receivedTsMs;
+  const dexTs = dexQuote.blockTsMs ?? dexQuote.receivedTsMs;
+  const confirmTs = confirmQuote ? (confirmQuote.exchangeTsMs ?? confirmQuote.receivedTsMs) : 0;
+
+  const parts = [
+    anchorQuote.mid.toFixed(8),
+    anchorTs.toString(),
+    dexQuote.mid.toFixed(8),
+    dexTs.toString(),
+  ];
+
+  if (confirmQuote) {
+    parts.push(confirmQuote.mid.toFixed(8), confirmTs.toString());
+  }
+
+  return parts.join('|');
+}
+
+export function quoteRefreshFilter(input: QuoteRefreshFilterInput): FilterResult {
+  const { pairChainKey, anchorQuote, dexQuote, confirmQuote, spreadDirection, minQuoteRefreshes, quoteRefreshMap } = input;
+
+  const currentHash = hashQuote(anchorQuote, dexQuote, confirmQuote);
+  const existing = quoteRefreshMap.get(pairChainKey);
+
+  if (!existing) {
+    quoteRefreshMap.set(pairChainKey, {
+      count: 1,
+      lastHash: currentHash,
+      spreadDirection,
+    });
+    return {
+      passed: false,
+      reason: `quote_refresh_count: 1/${minQuoteRefreshes}`,
+    };
+  }
+
+  if (existing.spreadDirection !== spreadDirection) {
+    quoteRefreshMap.set(pairChainKey, {
+      count: 1,
+      lastHash: currentHash,
+      spreadDirection,
+    });
+    return {
+      passed: false,
+      reason: `quote_refresh_direction_changed: 1/${minQuoteRefreshes}`,
+    };
+  }
+
+  if (existing.lastHash !== currentHash) {
+    existing.count += 1;
+    existing.lastHash = currentHash;
+  }
+
+  if (existing.count >= minQuoteRefreshes) {
+    return {
+      passed: true,
+      reason: `quote_refresh_met: ${existing.count}/${minQuoteRefreshes}`,
+    };
+  }
+
+  return {
+    passed: false,
+    reason: `quote_refresh_count: ${existing.count}/${minQuoteRefreshes}`,
+  };
+}
+
+export interface GasAdjustedThresholdFilterInput {
+  spreadBps: number;
+  minSpreadBps: number;
+  chain: Chain;
+  gasGwei?: number;
+  gasBpsPerGwei: number;
+  defaultGasGwei: number;
+}
+
+export function gasAdjustedThresholdFilter(input: GasAdjustedThresholdFilterInput): FilterResult {
+  const { spreadBps, minSpreadBps, chain, gasGwei, gasBpsPerGwei, defaultGasGwei } = input;
+
+  if (chain !== 'mainnet') {
+    return {
+      passed: true,
+      reason: 'gas_adjustment_not_required_for_chain',
+    };
+  }
+
+  const effectiveGasGwei = gasGwei ?? defaultGasGwei;
+  const gasAdjustmentBps = effectiveGasGwei * gasBpsPerGwei;
+  const effectiveThreshold = minSpreadBps + gasAdjustmentBps;
+  const absSpread = Math.abs(spreadBps);
+
+  if (absSpread >= effectiveThreshold) {
+    return {
+      passed: true,
+      reason: `gas_adjusted_threshold_met: ${absSpread.toFixed(1)} >= ${effectiveThreshold.toFixed(1)} (gas: ${effectiveGasGwei.toFixed(1)} gwei, adjustment: +${gasAdjustmentBps.toFixed(1)} bps)`,
+    };
+  }
+
+  return {
+    passed: false,
+    reason: `gas_adjusted_threshold_not_met: ${absSpread.toFixed(1)} < ${effectiveThreshold.toFixed(1)} (gas: ${effectiveGasGwei.toFixed(1)} gwei, adjustment: +${gasAdjustmentBps.toFixed(1)} bps)`,
   };
 }

@@ -5,7 +5,7 @@
   "tags": ["dislocation-trader", "spreads"],
   "timezone": "utc",
   "schemaVersion": 38,
-  "version": 6,
+  "version": 7,
   "refresh": "5s",
   "time": {
     "from": "now-1h",
@@ -26,6 +26,20 @@
         "allValue": "0",
         "current": {},
         "options": []
+      },
+      {
+        "name": "chain",
+        "type": "custom",
+        "label": "Chain",
+        "query": "all : All,base : base,mainnet : mainnet",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "base", "value": "base", "selected": false},
+          {"text": "mainnet", "value": "mainnet", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -40,7 +54,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT r.interval_start as time, r.close_mid as value, v.name as metric FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR r.pair_id = ${pair}) ORDER BY time",
+          "rawSql": "SELECT r.interval_start as time, r.close_mid as value, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND r.chain IS NOT NULL THEN CONCAT(' (', r.chain, ')') ELSE '' END) as metric FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR r.pair_id = ${pair}) AND ('${chain}' = 'all' OR r.chain::text = '${chain}' OR r.chain IS NULL) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -58,10 +72,10 @@
           "decimals": 6
         },
         "overrides": [
-          {"matcher": {"id": "byName", "options": "binance"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
-          {"matcher": {"id": "byName", "options": "coinbase"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "bybit"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]},
-          {"matcher": {"id": "byName", "options": "uniswap_v3"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+          {"matcher": {"id": "byRegexp", "options": "/binance.*/"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byRegexp", "options": "/coinbase.*/"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byRegexp", "options": "/bybit.*/"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]},
+          {"matcher": {"id": "byRegexp", "options": "/uniswap.*/"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
         ]
       },
       "options": {
@@ -79,7 +93,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, ABS(spread_bps) as value, CONCAT(strategy, ' - ', direction) as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, ABS(spread_bps) as value, CONCAT(strategy, ' - ', direction, CASE WHEN '${chain}' = 'all' THEN CONCAT(' (', chain, ')') ELSE '' END) as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -122,7 +136,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(ABS(spread_bps), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY detected_at DESC LIMIT 1",
+          "rawSql": "SELECT ROUND(ABS(spread_bps), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at DESC LIMIT 1",
           "format": "table"
         }
       ],
@@ -158,7 +172,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - detected_at)) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY detected_at DESC LIMIT 1",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - detected_at)) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY detected_at DESC LIMIT 1",
           "format": "table"
         }
       ],
@@ -194,7 +208,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH latest_quotes AS (SELECT DISTINCT ON (r.pair_id, v.venue_type) r.pair_id, v.venue_type, v.is_anchor, r.close_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start > now() - interval '5 minutes' AND (${pair} = 0 OR r.pair_id = ${pair}) ORDER BY r.pair_id, v.venue_type, r.interval_start DESC) SELECT COALESCE(ROUND(ABS((cex.close_mid - dex.close_mid) / NULLIF(cex.close_mid, 0) * 10000), 2), 0) as value FROM latest_quotes cex JOIN latest_quotes dex ON cex.pair_id = dex.pair_id WHERE cex.venue_type = 'cex' AND cex.is_anchor = true AND dex.venue_type = 'dex' LIMIT 1",
+          "rawSql": "WITH latest_quotes AS (SELECT DISTINCT ON (r.pair_id, v.venue_type, r.chain) r.pair_id, v.venue_type, v.is_anchor, r.chain, r.close_mid FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE r.interval_type = '10s' AND r.interval_start > now() - interval '5 minutes' AND (${pair} = 0 OR r.pair_id = ${pair}) AND ('${chain}' = 'all' OR r.chain::text = '${chain}') ORDER BY r.pair_id, v.venue_type, r.chain, v.is_anchor DESC, r.interval_start DESC) SELECT COALESCE(ROUND(ABS((cex.close_mid - dex.close_mid) / NULLIF(cex.close_mid, 0) * 10000), 2), 0) as value FROM latest_quotes cex JOIN latest_quotes dex ON cex.pair_id = dex.pair_id AND (cex.chain IS NULL OR dex.chain IS NULL OR cex.chain = dex.chain) WHERE cex.venue_type = 'cex' AND cex.is_anchor = true AND dex.venue_type = 'dex' LIMIT 1",
           "format": "table"
         }
       ],
@@ -230,7 +244,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -266,7 +280,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '1 hour'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '1 hour'",
           "format": "table"
         }
       ],
@@ -302,7 +316,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT COALESCE(MAX(ABS(COALESCE(max_spread_bps, spread_bps))), 0) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -338,7 +352,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(COALESCE(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 0), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT ROUND(COALESCE(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 0), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -368,7 +382,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '15 minutes'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '15 minutes'",
           "format": "table"
         }
       ],
@@ -400,7 +414,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours'",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '24 hours'",
           "format": "table"
         }
       ],
@@ -434,7 +448,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -468,7 +482,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
+          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))))::numeric, 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL",
           "format": "table"
         }
       ],
@@ -502,7 +516,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ABS(COALESCE(max_spread_bps, spread_bps)) as spread_bps FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours' ORDER BY detected_at DESC LIMIT 500",
+          "rawSql": "SELECT ABS(COALESCE(max_spread_bps, spread_bps)) as spread_bps FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at DESC LIMIT 500",
           "format": "table"
         }
       ],
@@ -536,7 +550,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as duration_seconds FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 1000",
           "format": "table"
         }
       ],
@@ -570,7 +584,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as time, COALESCE(max_spread_bps, ABS(spread_bps)) as \"Spread (bps)\", EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at))) as \"Duration (s)\" FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND COALESCE(opened_at, detected_at) > now() - interval '24 hours' AND closed_at IS NOT NULL ORDER BY COALESCE(opened_at, detected_at) LIMIT 500",
           "format": "table"
         }
       ],
@@ -619,7 +633,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT detected_at as time, ABS(COALESCE(max_spread_bps, spread_bps)) as value, CONCAT(strategy, ' - ', direction, ' (', status, ')') as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours' ORDER BY detected_at",
+          "rawSql": "SELECT detected_at as time, ABS(COALESCE(max_spread_bps, spread_bps)) as value, CONCAT(strategy, ' - ', direction, ' (', status, ')', CASE WHEN '${chain}' = 'all' THEN CONCAT(' [', chain, ']') ELSE '' END) as metric FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') AND detected_at > now() - interval '24 hours' ORDER BY detected_at",
           "format": "time_series"
         }
       ],
@@ -652,6 +666,85 @@
       }
     },
     {
+      "id": 18,
+      "type": "piechart",
+      "title": "Spread Distribution by Chain",
+      "description": "Comparison of opportunity spreads across chains",
+      "gridPos": {"x": 0, "y": 24, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT chain::text as metric, ROUND(AVG(ABS(COALESCE(max_spread_bps, spread_bps))), 2) as value FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND detected_at > now() - interval '24 hours' GROUP BY chain ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "pieType": "pie",
+        "displayLabels": ["name", "value"],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value"]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "bargauge",
+      "title": "Quote Staleness by Chain",
+      "description": "Seconds since last DEX quote per chain",
+      "gridPos": {"x": 6, "y": 24, "w": 6, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT qr.chain::text as metric, EXTRACT(EPOCH FROM (now() - MAX(qr.ts)))::integer as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE v.venue_type = 'dex' AND qr.ts > now() - interval '10 minutes' GROUP BY qr.chain ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 30, "color": "yellow"},
+              {"value": 60, "color": "orange"},
+              {"value": 120, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
       "id": 9,
       "type": "table",
       "title": "Recent Opportunities - ${pair:text}",
@@ -660,7 +753,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(opened_at, detected_at) as opened_at, ROUND(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(max_spread_bps, ABS(spread_bps)), 2) as max_spread_bps, direction, strategy, status, COALESCE(close_reason, '') as close_reason, ROUND(anchor_mid, 2) as cex_price, ROUND(dex_mid, 2) as dex_price FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) ORDER BY COALESCE(opened_at, detected_at) DESC LIMIT 30",
+          "rawSql": "SELECT COALESCE(opened_at, detected_at) as opened_at, chain::text as chain, ROUND(EXTRACT(EPOCH FROM (closed_at - COALESCE(opened_at, detected_at)))::numeric, 2) as duration_s, ROUND(COALESCE(max_spread_bps, ABS(spread_bps)), 2) as max_spread_bps, direction, strategy, status, COALESCE(close_reason, '') as close_reason, ROUND(anchor_mid, 2) as cex_price, ROUND(dex_mid, 2) as dex_price FROM opportunities WHERE (${pair} = 0 OR pair_id = ${pair}) AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY COALESCE(opened_at, detected_at) DESC LIMIT 30",
           "format": "table"
         }
       ],
@@ -672,7 +765,8 @@
         "defaults": {},
         "overrides": [
           {"matcher": {"id": "byName", "options": "max_spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 30, "color": "red"}]}}]},
-          {"matcher": {"id": "byName", "options": "duration_s"}, "properties": [{"id": "unit", "value": "s"}]}
+          {"matcher": {"id": "byName", "options": "duration_s"}, "properties": [{"id": "unit", "value": "s"}]},
+          {"matcher": {"id": "byName", "options": "chain"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "mappings", "value": [{"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}]}]}
         ]
       }
     },
@@ -686,7 +780,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH latest_cex AS (SELECT DISTINCT ON (r.pair_id) r.pair_id, r.close_mid as cex_mid, r.interval_start as cex_ts, v.name as cex_venue FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'cex' AND r.interval_type = '10s' AND r.interval_start > now() - interval '10 minutes' ORDER BY r.pair_id, r.interval_start DESC), latest_dex AS (SELECT DISTINCT ON (r.pair_id) r.pair_id, r.close_mid as dex_mid, r.interval_start as dex_ts FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'dex' AND r.interval_type = '10s' AND r.interval_start > now() - interval '2 minutes' ORDER BY r.pair_id, r.interval_start DESC) SELECT p.canonical as pair, c.cex_venue, ROUND(c.cex_mid, 6) as cex_mid, ROUND(d.dex_mid, 6) as dex_mid, ROUND((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000, 2) as spread_bps, ROUND(EXTRACT(EPOCH FROM (now() - c.cex_ts)), 1) as cex_age_sec, ROUND(EXTRACT(EPOCH FROM (now() - d.dex_ts)), 1) as dex_age_sec FROM pairs p LEFT JOIN latest_cex c ON c.pair_id = p.id LEFT JOIN latest_dex d ON d.pair_id = p.id WHERE p.is_enabled = true ORDER BY ABS(COALESCE((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000, 0)) DESC",
+          "rawSql": "WITH latest_cex AS (SELECT DISTINCT ON (r.pair_id) r.pair_id, r.close_mid as cex_mid, r.interval_start as cex_ts, v.name as cex_venue FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'cex' AND r.interval_type = '10s' AND r.interval_start > now() - interval '10 minutes' ORDER BY r.pair_id, r.interval_start DESC), latest_dex AS (SELECT DISTINCT ON (r.pair_id, r.chain) r.pair_id, r.chain, r.close_mid as dex_mid, r.interval_start as dex_ts FROM quote_rollups r JOIN venues v ON v.id = r.venue_id WHERE v.venue_type = 'dex' AND r.interval_type = '10s' AND r.interval_start > now() - interval '2 minutes' AND ('${chain}' = 'all' OR r.chain::text = '${chain}') ORDER BY r.pair_id, r.chain, r.interval_start DESC) SELECT p.canonical as pair, d.chain::text as chain, c.cex_venue, ROUND(c.cex_mid, 6) as cex_mid, ROUND(d.dex_mid, 6) as dex_mid, ROUND((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000, 2) as spread_bps, ROUND(EXTRACT(EPOCH FROM (now() - c.cex_ts)), 1) as cex_age_sec, ROUND(EXTRACT(EPOCH FROM (now() - d.dex_ts)), 1) as dex_age_sec FROM pairs p LEFT JOIN latest_cex c ON c.pair_id = p.id LEFT JOIN latest_dex d ON d.pair_id = p.id WHERE p.is_enabled = true ORDER BY ABS(COALESCE((c.cex_mid - d.dex_mid) / NULLIF(c.cex_mid, 0) * 10000, 0)) DESC",
           "format": "table"
         }
       ],
@@ -696,7 +790,8 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 30, "color": "red"}]}}]}
+          {"matcher": {"id": "byName", "options": "spread_bps"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 20, "color": "orange"}, {"value": 30, "color": "red"}]}}]},
+          {"matcher": {"id": "byName", "options": "chain"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "mappings", "value": [{"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}]}]}
         ]
       }
     }

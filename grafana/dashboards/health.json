@@ -5,7 +5,7 @@
   "tags": ["dislocation-trader", "health"],
   "timezone": "utc",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-1h",
@@ -28,6 +28,20 @@
         "allValue": "0",
         "current": {},
         "options": []
+      },
+      {
+        "name": "chain",
+        "type": "custom",
+        "label": "Chain",
+        "query": "all : All,base : base,mainnet : mainnet",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "base", "value": "base", "selected": false},
+          {"text": "mainnet", "value": "mainnet", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -41,7 +55,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name as venue, CASE WHEN ch.ws_connected THEN 1 ELSE 0 END as connected FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND ch.chain IS NOT NULL THEN CONCAT(' (', ch.chain, ')') ELSE '' END) as venue, CASE WHEN ch.ws_connected THEN 1 ELSE 0 END as connected FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) AND ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY time",
           "format": "table"
         }
       ],
@@ -85,7 +99,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (${venue} = 0 OR ch.venue_id = ${venue}) ORDER BY v.name",
+          "rawSql": "SELECT CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND ch.chain IS NOT NULL THEN CONCAT(' (', ch.chain, ')') ELSE '' END) as name, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (${venue} = 0 OR ch.venue_id = ${venue}) AND ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY v.name, ch.chain",
           "format": "table"
         }
       ],
@@ -125,7 +139,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT SUM(reconnect_count) as value FROM connector_health WHERE (${venue} = 0 OR venue_id = ${venue})",
+          "rawSql": "SELECT SUM(reconnect_count) as value FROM connector_health WHERE (${venue} = 0 OR venue_id = ${venue}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -163,7 +177,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT SUM(error_count) as value FROM connector_health WHERE (${venue} = 0 OR venue_id = ${venue})",
+          "rawSql": "SELECT SUM(error_count) as value FROM connector_health WHERE (${venue} = 0 OR venue_id = ${venue}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -201,7 +215,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT (SELECT MAX(block_number) FROM quotes_raw WHERE venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex')) - (SELECT MIN(last_block) FROM connector_health WHERE venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex')) as value",
+          "rawSql": "SELECT (SELECT MAX(block_number) FROM quotes_raw qr WHERE qr.venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex') AND ('${chain}' = 'all' OR qr.chain::text = '${chain}')) - (SELECT MIN(last_block) FROM connector_health ch WHERE ch.venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex') AND ('${chain}' = 'all' OR ch.chain::text = '${chain}')) as value",
           "format": "table"
         }
       ],
@@ -239,7 +253,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM connector_health WHERE ws_connected = true AND (${venue} = 0 OR venue_id = ${venue})",
+          "rawSql": "SELECT COUNT(*) as value FROM connector_health WHERE ws_connected = true AND (${venue} = 0 OR venue_id = ${venue}) AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -276,7 +290,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT qr.ts as time, v.name, AVG(qr.latency_ms) as avg_latency FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR qr.venue_id = ${venue}) AND qr.latency_ms IS NOT NULL GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
+          "rawSql": "SELECT date_trunc('minute', qr.ts) as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND qr.chain IS NOT NULL THEN CONCAT(' (', qr.chain, ')') ELSE '' END) as metric, AVG(qr.latency_ms) as avg_latency FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR qr.venue_id = ${venue}) AND ('${chain}' = 'all' OR qr.chain::text = '${chain}') AND qr.latency_ms IS NOT NULL GROUP BY date_trunc('minute', qr.ts), v.name, qr.chain ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -344,7 +358,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', qr.ts) as time, v.name, COUNT(*) / 60.0 as quotes_per_sec FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR qr.venue_id = ${venue}) GROUP BY date_trunc('minute', qr.ts), v.name ORDER BY time",
+          "rawSql": "SELECT date_trunc('minute', qr.ts) as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND qr.chain IS NOT NULL THEN CONCAT(' (', qr.chain, ')') ELSE '' END) as metric, COUNT(*) / 60.0 as quotes_per_sec FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR qr.venue_id = ${venue}) AND ('${chain}' = 'all' OR qr.chain::text = '${chain}') GROUP BY date_trunc('minute', qr.ts), v.name, qr.chain ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -407,7 +421,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as venue, v.venue_type, ch.chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote, ch.last_block, ch.reconnect_count, ch.error_count, ch.updated_at FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (${venue} = 0 OR ch.venue_id = ${venue}) ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
+          "rawSql": "SELECT v.name as venue, v.venue_type, ch.chain::text as chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_since_quote, ch.last_block, ch.reconnect_count, ch.error_count, ch.updated_at FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE (${venue} = 0 OR ch.venue_id = ${venue}) AND ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
           "format": "table"
         }
       ],
@@ -518,6 +532,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "chain"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}
+                ]
+              }
+            ]
           }
         ]
       }
@@ -531,7 +560,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name, ch.reconnect_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND ch.chain IS NOT NULL THEN CONCAT(' (', ch.chain, ')') ELSE '' END) as metric, ch.reconnect_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) AND ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -592,7 +621,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ch.updated_at as time, v.name, ch.error_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) ORDER BY time",
+          "rawSql": "SELECT ch.updated_at as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND ch.chain IS NOT NULL THEN CONCAT(' (', ch.chain, ')') ELSE '' END) as metric, ch.error_count FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ch.updated_at BETWEEN $__timeFrom() AND $__timeTo() AND (${venue} = 0 OR ch.venue_id = ${venue}) AND ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -653,7 +682,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT chain, open_exposure_usd, trades_last_hour, last_trade_at, cooldown_until, is_halted, halt_reason, updated_at FROM risk_state ORDER BY chain",
+          "rawSql": "SELECT chain::text as chain, open_exposure_usd, trades_last_hour, last_trade_at, cooldown_until, is_halted, halt_reason, updated_at FROM risk_state WHERE ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY chain",
           "format": "table"
         }
       ],
@@ -742,6 +771,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "chain"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}
+                ]
+              }
+            ]
           }
         ]
       }
@@ -763,7 +807,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT strategy, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY strategy ORDER BY strategy",
+          "rawSql": "SELECT strategy, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY strategy ORDER BY strategy",
           "format": "table"
         }
       ],
@@ -817,7 +861,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT strategy, MAX(detected_at) as last_detected, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'submitted') as submitted FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY strategy ORDER BY last_detected DESC NULLS LAST",
+          "rawSql": "SELECT strategy, chain::text as chain, MAX(detected_at) as last_detected, COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'submitted') as submitted FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY strategy, chain ORDER BY last_detected DESC NULLS LAST",
           "format": "table"
         }
       ],
@@ -858,7 +902,7 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "total_24h"},
+            "matcher": {"id": "byName", "options": "total"},
             "properties": [
               {
                 "id": "custom.displayMode",
@@ -878,7 +922,7 @@
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "submitted_24h"},
+            "matcher": {"id": "byName", "options": "submitted"},
             "properties": [
               {
                 "id": "custom.displayMode",
@@ -895,6 +939,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "chain"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}
+                ]
+              }
+            ]
           }
         ]
       },
@@ -906,9 +965,10 @@
             "indexByName": {},
             "renameByName": {
               "strategy": "Strategy",
+              "chain": "Chain",
               "last_detected": "Last Detected",
-              "total_24h": "Total (24h)",
-              "submitted_24h": "Submitted (24h)"
+              "total": "Total",
+              "submitted": "Submitted"
             }
           }
         }
@@ -917,14 +977,14 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Opportunities Over Time by Strategy",
+      "title": "Opportunities Over Time by Strategy and Chain",
       "description": "Hourly opportunity count by strategy to visualize detector activity",
       "gridPos": {"x": 0, "y": 53, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('hour', detected_at) as time, strategy, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY date_trunc('hour', detected_at), strategy ORDER BY time",
+          "rawSql": "SELECT date_trunc('hour', detected_at) as time, CONCAT(strategy, CASE WHEN '${chain}' = 'all' THEN CONCAT(' (', chain, ')') ELSE '' END) as metric, COUNT(*) as count FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}') GROUP BY date_trunc('hour', detected_at), strategy, chain ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -987,7 +1047,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH latest_quotes AS (SELECT DISTINCT ON (venue_id, pair_id) venue_id, pair_id, mid, ts FROM quotes_raw WHERE ts BETWEEN $__timeFrom() AND $__timeTo() ORDER BY venue_id, pair_id, ts DESC), cex_prices AS (SELECT lq.pair_id, AVG(lq.mid) as cex_mid FROM latest_quotes lq JOIN venues v ON v.id = lq.venue_id WHERE v.venue_type = 'cex' AND v.is_anchor = true GROUP BY lq.pair_id), dex_prices AS (SELECT lq.pair_id, lq.mid as dex_mid, v.chain FROM latest_quotes lq JOIN venues v ON v.id = lq.venue_id WHERE v.venue_type = 'dex' GROUP BY lq.pair_id, lq.mid, v.chain), spread_calc AS (SELECT p.canonical as pair, dp.chain, cp.cex_mid, dp.dex_mid, CASE WHEN cp.cex_mid > 0 THEN ((dp.dex_mid - cp.cex_mid) / cp.cex_mid * 10000) ELSE 0 END as current_spread_bps FROM pairs p JOIN cex_prices cp ON cp.pair_id = p.id JOIN dex_prices dp ON dp.pair_id = p.id WHERE p.is_enabled = true) SELECT sc.pair, sc.chain, sc.current_spread_bps, COALESCE(MIN(pvc.min_spread_bps), 15.0) as min_threshold_bps, sc.current_spread_bps - COALESCE(MIN(pvc.min_spread_bps), 15.0) as bps_below_threshold, sc.cex_mid, sc.dex_mid FROM spread_calc sc LEFT JOIN pair_venue_config pvc ON pvc.pair_id IN (SELECT id FROM pairs WHERE canonical = sc.pair) AND pvc.chain::text = sc.chain GROUP BY sc.pair, sc.chain, sc.current_spread_bps, sc.cex_mid, sc.dex_mid ORDER BY ABS(sc.current_spread_bps) DESC",
+          "rawSql": "WITH latest_quotes AS (SELECT DISTINCT ON (venue_id, pair_id, chain) venue_id, pair_id, chain, mid, ts FROM quotes_raw WHERE ts BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY venue_id, pair_id, chain, ts DESC), cex_prices AS (SELECT lq.pair_id, AVG(lq.mid) as cex_mid FROM latest_quotes lq JOIN venues v ON v.id = lq.venue_id WHERE v.venue_type = 'cex' AND v.is_anchor = true GROUP BY lq.pair_id), dex_prices AS (SELECT lq.pair_id, lq.mid as dex_mid, lq.chain FROM latest_quotes lq JOIN venues v ON v.id = lq.venue_id WHERE v.venue_type = 'dex' GROUP BY lq.pair_id, lq.mid, lq.chain), spread_calc AS (SELECT p.canonical as pair, dp.chain, cp.cex_mid, dp.dex_mid, CASE WHEN cp.cex_mid > 0 THEN ((dp.dex_mid - cp.cex_mid) / cp.cex_mid * 10000) ELSE 0 END as current_spread_bps FROM pairs p JOIN cex_prices cp ON cp.pair_id = p.id JOIN dex_prices dp ON dp.pair_id = p.id WHERE p.is_enabled = true) SELECT sc.pair, sc.chain::text as chain, sc.current_spread_bps, COALESCE(MIN(pvc.min_spread_bps), 15.0) as min_threshold_bps, sc.current_spread_bps - COALESCE(MIN(pvc.min_spread_bps), 15.0) as bps_below_threshold, sc.cex_mid, sc.dex_mid FROM spread_calc sc LEFT JOIN pair_venue_config pvc ON pvc.pair_id IN (SELECT id FROM pairs WHERE canonical = sc.pair) AND pvc.chain::text = sc.chain::text GROUP BY sc.pair, sc.chain, sc.current_spread_bps, sc.cex_mid, sc.dex_mid ORDER BY ABS(sc.current_spread_bps) DESC",
           "format": "table"
         }
       ],
@@ -1097,6 +1157,21 @@
               {
                 "id": "decimals",
                 "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "chain"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"base": {"text": "base", "color": "blue"}, "mainnet": {"text": "mainnet", "color": "purple"}}}
+                ]
               }
             ]
           }

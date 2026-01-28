@@ -29,9 +29,17 @@ export const rankSpaceConfigSchema = z.object({
 export const executionConfigSchema = z.object({
   paperMode: z.boolean(),
   maxSlippageBps: z.number().positive(),
+  edgeBufferBps: z.number().positive(),
   deadlineSeconds: z.number().int().positive(),
   gasBufferPercent: z.number().int().min(0),
   simulateBeforeSend: z.boolean(),
+  minProfitUsd: z.number().positive().optional(),
+});
+
+export const chainRiskOverridesSchema = z.object({
+  maxTradeSizeUsd: z.number().positive().optional(),
+  maxOpenExposureUsd: z.number().positive().optional(),
+  maxTradesPerHour: z.number().int().positive().optional(),
 });
 
 export const riskConfigSchema = z.object({
@@ -42,6 +50,11 @@ export const riskConfigSchema = z.object({
   maxGasGwei: z.number().positive(),
   haltOnConsecutiveReverts: z.number().int().positive(),
   skipProfitCheckForTesting: z.boolean().optional(),
+  chainOverrides: z.object({
+    mainnet: chainRiskOverridesSchema.optional(),
+    base: chainRiskOverridesSchema.optional(),
+    arbitrum: chainRiskOverridesSchema.optional(),
+  }).optional(),
 });
 
 export const inventoryConfigSchema = z.object({

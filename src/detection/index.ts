@@ -13,8 +13,14 @@ import {
   anchorConfidenceFilter,
   thinMarketBufferFilter,
   timeAlignmentFilter,
+  quoteRefreshFilter,
+  gasAdjustedThresholdFilter,
   getMaxTimeSkewMs,
+  getMinSpreadBpsMultiplier,
+  getMinDurationMsMultiplier,
+  getMinQuoteRefreshes,
   type FilterResult,
+  type QuoteRefreshState,
 } from './filters.js';
 import { OpportunityEmitter } from './emitter.js';
 import { DetectionQueue } from './detection-queue.js';
@@ -27,6 +33,7 @@ export interface OpportunityDetectorConfig {
   venueIdMap: Map<string, number>;
   pairIdMap: Map<string, number>;
   onSpreadUpdate?: (chain: Chain, pair: string, spreadBps: number, thresholdBps: number) => void;
+  getGasPrice?: (chain: Chain) => Promise<number | undefined>;
 }
 
 interface DetectionCycle {
@@ -75,11 +82,13 @@ export class OpportunityDetector {
   private emitter: OpportunityEmitter;
   private detectionQueue: DetectionQueue;
   private gapFirstSeen: Map<string, number>;
+  private quoteRefreshMap: Map<string, QuoteRefreshState>;
   private intervalHandle: NodeJS.Timeout | null;
   private isRunning: boolean;
   private cycleInProgress: boolean;
   private openOpportunities: Map<string, OpenOpportunity>;
   private onSpreadUpdate?: (chain: Chain, pair: string, spreadBps: number, thresholdBps: number) => void;
+  private getGasPrice?: (chain: Chain) => Promise<number | undefined>;
   private consecutiveFailures: number;
   private circuitBreakerOpen: boolean;
   private circuitBreakerOpenedAt: number;
@@ -94,11 +103,13 @@ export class OpportunityDetector {
     this.emitter = new OpportunityEmitter();
     this.detectionQueue = new DetectionQueue();
     this.gapFirstSeen = new Map();
+    this.quoteRefreshMap = new Map();
     this.intervalHandle = null;
     this.isRunning = false;
     this.cycleInProgress = false;
     this.openOpportunities = new Map();
     this.onSpreadUpdate = config.onSpreadUpdate;
+    this.getGasPrice = config.getGasPrice;
     this.consecutiveFailures = 0;
     this.circuitBreakerOpen = false;
     this.circuitBreakerOpenedAt = 0;
@@ -278,9 +289,14 @@ export class OpportunityDetector {
       dexQuote: dexQuote.quote,
     });
 
+    const spreadMultiplier = getMinSpreadBpsMultiplier(chain);
+    const durationMultiplier = getMinDurationMsMultiplier(chain);
+    const adjustedMinSpreadBps = pairConfig.thresholds.minSpreadBps * spreadMultiplier;
+    const adjustedMinDurationMs = pairConfig.thresholds.minDurationMs * durationMultiplier;
+
     // Notify listeners about current spread vs threshold for adaptive polling
     if (this.onSpreadUpdate) {
-      this.onSpreadUpdate(chain, pair, spreadResult.spreadBps, pairConfig.thresholds.minSpreadBps);
+      this.onSpreadUpdate(chain, pair, spreadResult.spreadBps, adjustedMinSpreadBps);
     }
 
     const reasons: string[] = [];
@@ -288,7 +304,7 @@ export class OpportunityDetector {
 
     const thresholdResult = thresholdFilter({
       spreadBps: spreadResult.spreadBps,
-      minSpreadBps: pairConfig.thresholds.minSpreadBps,
+      minSpreadBps: adjustedMinSpreadBps,
     });
     filters.push(thresholdResult);
     reasons.push(thresholdResult.reason);
@@ -312,7 +328,7 @@ export class OpportunityDetector {
     if (hasThinMarketQuotes && pairConfig.thresholds.thinMarketBufferBps) {
       const thinMarketResult = thinMarketBufferFilter({
         spreadBps: spreadResult.spreadBps,
-        minSpreadBps: pairConfig.thresholds.minSpreadBps,
+        minSpreadBps: adjustedMinSpreadBps,
         thinMarketBufferBps: pairConfig.thresholds.thinMarketBufferBps,
         hasThinMarketQuotes,
       });
@@ -335,18 +351,81 @@ export class OpportunityDetector {
       }
     }
 
+    let gasGwei: number | undefined;
+    if (chain === 'mainnet' && this.getGasPrice) {
+      try {
+        gasGwei = await this.getGasPrice(chain);
+      } catch (err) {
+        this.logger.debug({ err, chain }, 'Failed to get gas price for filter');
+      }
+    }
+
+    const gasAdjustedResult = gasAdjustedThresholdFilter({
+      spreadBps: spreadResult.spreadBps,
+      minSpreadBps: adjustedMinSpreadBps,
+      chain,
+      gasGwei,
+      gasBpsPerGwei: this.appConfig.detection.gasBpsPerGwei ?? 0.5,
+      defaultGasGwei: this.appConfig.detection.defaultGasGwei ?? 50,
+    });
+    filters.push(gasAdjustedResult);
+    reasons.push(gasAdjustedResult.reason);
+
+    if (!gasAdjustedResult.passed) {
+      this.logDetectionCycle({
+        pair,
+        chain,
+        pairId,
+        anchorMid: spreadResult.anchorMid,
+        confirmMid: spreadResult.confirmMid,
+        dexMid: spreadResult.dexMid,
+        spreadBps: spreadResult.spreadBps,
+        passed: false,
+        reasons,
+      });
+      return;
+    }
+
     const pairChainKey = `${pair}:${chain}`;
     const durationResult = durationFilter({
       pairChainKey,
       currentSpreadBps: spreadResult.spreadBps,
-      minSpreadBps: pairConfig.thresholds.minSpreadBps,
-      minDurationMs: pairConfig.thresholds.minDurationMs,
+      minSpreadBps: adjustedMinSpreadBps,
+      minDurationMs: adjustedMinDurationMs,
       gapFirstSeenMap: this.gapFirstSeen,
+      quoteRefreshMap: this.quoteRefreshMap,
     });
     filters.push(durationResult);
     reasons.push(durationResult.reason);
 
     if (!durationResult.passed) {
+      this.logDetectionCycle({
+        pair,
+        chain,
+        pairId,
+        anchorMid: spreadResult.anchorMid,
+        confirmMid: spreadResult.confirmMid,
+        dexMid: spreadResult.dexMid,
+        spreadBps: spreadResult.spreadBps,
+        passed: false,
+        reasons,
+      });
+      return;
+    }
+
+    const quoteRefreshResult = quoteRefreshFilter({
+      pairChainKey,
+      anchorQuote: anchorQuote.quote,
+      dexQuote: dexQuote.quote,
+      confirmQuote: confirmQuote?.quote,
+      spreadDirection: spreadResult.direction,
+      minQuoteRefreshes: getMinQuoteRefreshes(chain),
+      quoteRefreshMap: this.quoteRefreshMap,
+    });
+    filters.push(quoteRefreshResult);
+    reasons.push(quoteRefreshResult.reason);
+
+    if (!quoteRefreshResult.passed) {
       this.logDetectionCycle({
         pair,
         chain,
@@ -386,7 +465,7 @@ export class OpportunityDetector {
 
     const volatilityResult = volatilityFilter({
       spreadBps: spreadResult.spreadBps,
-      minSpreadBps: pairConfig.thresholds.minSpreadBps,
+      minSpreadBps: adjustedMinSpreadBps,
       volatilityAdjustment: this.appConfig.detection.volatilityAdjustment,
     });
     filters.push(volatilityResult);
@@ -488,7 +567,7 @@ export class OpportunityDetector {
       await this.handleOpportunityLifecycle({
         oppKey,
         spreadBps: spreadResult.spreadBps,
-        minSpreadBps: pairConfig.thresholds.minSpreadBps,
+        minSpreadBps: adjustedMinSpreadBps,
         pairId,
         chain,
         anchorVenueId,

@@ -5,7 +5,7 @@
   "tags": ["dislocation-trader", "live"],
   "timezone": "utc",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -28,6 +28,20 @@
         "allValue": "0",
         "current": {},
         "options": []
+      },
+      {
+        "name": "chain",
+        "type": "custom",
+        "label": "Chain",
+        "query": "all : All,base : base,mainnet : mainnet",
+        "options": [
+          {"text": "All", "value": "all", "selected": true},
+          {"text": "base", "value": "base", "selected": false},
+          {"text": "mainnet", "value": "mainnet", "selected": false}
+        ],
+        "current": {"text": "All", "value": "all"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -42,7 +56,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - MAX(ts)))::integer as value FROM quotes_raw",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (now() - MAX(ts)))::integer as value FROM quotes_raw qr WHERE ('${chain}' = 'all' OR qr.chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -137,7 +151,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN is_halted THEN 'HALTED' ELSE 'ACTIVE' END as status, open_exposure_usd, trades_last_hour FROM risk_state WHERE chain = 'base' ORDER BY updated_at DESC LIMIT 1",
+          "rawSql": "SELECT CASE WHEN bool_or(is_halted) THEN 'HALTED' ELSE 'ACTIVE' END as status FROM risk_state WHERE ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -184,13 +198,13 @@
       "id": 11,
       "type": "stat",
       "title": "Exposure (USD)",
-      "description": "Current open exposure in USD (max $5000)",
+      "description": "Current open exposure in USD (max $5000 per chain)",
       "gridPos": {"x": 7, "y": 0, "w": 3, "h": 3},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(open_exposure_usd, 2) as value FROM risk_state WHERE chain = 'base' ORDER BY updated_at DESC LIMIT 1",
+          "rawSql": "SELECT ROUND(SUM(open_exposure_usd), 2) as value FROM risk_state WHERE ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -229,7 +243,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH status_check AS (SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM connector_health WHERE ws_connected = true) THEN 'OFFLINE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw))) > 60 THEN 'STALE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw WHERE venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex')))) > 25 THEN 'CONSERVING' ELSE 'ACTIVE' END as status) SELECT status FROM status_check",
+          "rawSql": "WITH status_check AS (SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM connector_health WHERE ws_connected = true AND ('${chain}' = 'all' OR chain::text = '${chain}')) THEN 'OFFLINE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw WHERE ('${chain}' = 'all' OR chain::text = '${chain}')))) > 60 THEN 'STALE' WHEN EXTRACT(EPOCH FROM (now() - (SELECT MAX(ts) FROM quotes_raw qr WHERE qr.venue_id IN (SELECT id FROM venues WHERE venue_type = 'dex') AND ('${chain}' = 'all' OR qr.chain::text = '${chain}')))) > 25 THEN 'CONSERVING' ELSE 'ACTIVE' END as status) SELECT status FROM status_check",
           "format": "table"
         }
       ],
@@ -292,7 +306,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT CASE WHEN spread_bps >= 13.5 THEN 'BUSY' WHEN spread_bps >= 7.5 THEN 'MODERATE' WHEN spread_bps >= 4.5 THEN 'QUIET' ELSE 'VERY QUIET' END as activity FROM (SELECT COALESCE(ABS(MAX(o.spread_bps)), 0) as spread_bps FROM opportunities o WHERE o.detected_at > now() - interval '15 minutes') t",
+          "rawSql": "SELECT CASE WHEN spread_bps >= 13.5 THEN 'BUSY' WHEN spread_bps >= 7.5 THEN 'MODERATE' WHEN spread_bps >= 4.5 THEN 'QUIET' ELSE 'VERY QUIET' END as activity FROM (SELECT COALESCE(ABS(MAX(o.spread_bps)), 0) as spread_bps FROM opportunities o WHERE o.detected_at > now() - interval '15 minutes' AND ('${chain}' = 'all' OR o.chain::text = '${chain}')) t",
           "format": "table"
         }
       ],
@@ -354,7 +368,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT qr.interval_start as time, v.name as metric, qr.close_mid as value FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.interval_type = '1s' AND (${pair} = 0 OR p.id = ${pair}) AND qr.close_mid IS NOT NULL ORDER BY time",
+          "rawSql": "SELECT qr.interval_start as time, CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND qr.chain IS NOT NULL THEN CONCAT(' (', qr.chain, ')') ELSE '' END) as metric, qr.close_mid as value FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.interval_type = '1s' AND (${pair} = 0 OR p.id = ${pair}) AND ('${chain}' = 'all' OR qr.chain::text = '${chain}' OR qr.chain IS NULL) AND qr.close_mid IS NOT NULL ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -399,25 +413,25 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "binance"},
+            "matcher": {"id": "byRegexp", "options": "/binance.*/"},
             "properties": [
               {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "coinbase"},
+            "matcher": {"id": "byRegexp", "options": "/coinbase.*/"},
             "properties": [
               {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "bybit"},
+            "matcher": {"id": "byRegexp", "options": "/bybit.*/"},
             "properties": [
               {"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "uniswap_v3"},
+            "matcher": {"id": "byRegexp", "options": "/uniswap.*/"},
             "properties": [
               {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
               {"id": "custom.lineWidth", "value": 3}
@@ -447,7 +461,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH binance_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'binance' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND (${pair} = 0 OR p.id = ${pair})), uniswap_quotes AS (SELECT qr.interval_start, qr.pair_id, qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id JOIN pairs p ON p.id = qr.pair_id WHERE v.name = 'uniswap_v3' AND qr.interval_type = '1s' AND qr.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND qr.close_mid IS NOT NULL AND (${pair} = 0 OR p.id = ${pair})) SELECT b.interval_start as time, 10000.0 * (u.close_mid - b.close_mid) / b.close_mid as spread_bps FROM binance_quotes b JOIN uniswap_quotes u ON b.pair_id = u.pair_id AND b.interval_start = u.interval_start ORDER BY time",
+          "rawSql": "SELECT dex.interval_start as time, CASE WHEN '${chain}' = 'all' THEN CONCAT('spread_', dex.chain) ELSE 'spread_bps' END as metric, 10000.0 * (dex.close_mid - cex.close_mid) / cex.close_mid as value FROM quote_rollups dex JOIN venues dex_v ON dex_v.id = dex.venue_id JOIN pairs p ON p.id = dex.pair_id CROSS JOIN LATERAL (SELECT qr.close_mid FROM quote_rollups qr JOIN venues v ON v.id = qr.venue_id WHERE v.name = 'binance' AND qr.pair_id = dex.pair_id AND qr.interval_type = '1s' AND qr.interval_start BETWEEN dex.interval_start - INTERVAL '10 seconds' AND dex.interval_start + INTERVAL '10 seconds' AND qr.close_mid IS NOT NULL ORDER BY ABS(EXTRACT(EPOCH FROM (qr.interval_start - dex.interval_start))) LIMIT 1) cex WHERE dex_v.name = 'uniswap_v3' AND dex.interval_type = '1s' AND dex.interval_start BETWEEN $__timeFrom() AND $__timeTo() AND dex.close_mid IS NOT NULL AND (${pair} = 0 OR p.id = ${pair}) AND ('${chain}' = 'all' OR dex.chain::text = '${chain}') ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -492,7 +506,21 @@
               {"value": 30, "color": "red"}
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "spread_base"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "spread_mainnet"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          }
+        ]
       },
       "options": {
         "tooltip": {
@@ -517,7 +545,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT COUNT(*) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -554,7 +582,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COALESCE(AVG(spread_bps), 0) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo()",
+          "rawSql": "SELECT COALESCE(AVG(spread_bps), 0) as value FROM opportunities WHERE detected_at BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR chain::text = '${chain}')",
           "format": "table"
         }
       ],
@@ -593,7 +621,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as metric, COUNT(*) as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY v.name ORDER BY value DESC",
+          "rawSql": "SELECT CONCAT(v.name, CASE WHEN '${chain}' = 'all' AND qr.chain IS NOT NULL THEN CONCAT(' (', qr.chain, ')') ELSE '' END) as metric, COUNT(*) as value FROM quotes_raw qr JOIN venues v ON v.id = qr.venue_id WHERE qr.ts BETWEEN $__timeFrom() AND $__timeTo() AND ('${chain}' = 'all' OR qr.chain::text = '${chain}') GROUP BY v.name, qr.chain ORDER BY value DESC",
           "format": "table"
         }
       ],
@@ -629,7 +657,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as venue, ch.chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_ago, ch.reconnect_count as reconnects, ch.error_count as errors FROM connector_health ch JOIN venues v ON v.id = ch.venue_id ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
+          "rawSql": "SELECT v.name as venue, ch.chain, ch.ws_connected as connected, ch.last_quote_at, EXTRACT(EPOCH FROM (now() - ch.last_quote_at)) as seconds_ago, ch.reconnect_count as reconnects, ch.error_count as errors FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE ('${chain}' = 'all' OR ch.chain::text = '${chain}') ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
           "format": "table"
         }
       ],
@@ -730,15 +758,190 @@
       }
     },
     {
-      "id": 7,
-      "type": "table",
-      "title": "Recent Opportunities",
-      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 8},
+      "id": 14,
+      "type": "piechart",
+      "title": "Opportunities by Chain (15m)",
+      "gridPos": {"x": 0, "y": 29, "w": 6, "h": 8},
       "targets": [
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain, o.spread_bps, o.direction, o.status, o.anchor_mid as cex_price, o.dex_mid as dex_price, o.skip_reason FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at > now() - interval '15 minutes' ORDER BY o.detected_at DESC LIMIT 50",
+          "rawSql": "SELECT chain::text as metric, COUNT(*) as value FROM opportunities WHERE detected_at > now() - interval '15 minutes' GROUP BY chain ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "pieType": "pie",
+        "displayLabels": ["name", "percent"],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "bargauge",
+      "title": "Detection Latency by Chain (ms)",
+      "description": "Average latency from quote arrival to opportunity detection",
+      "gridPos": {"x": 6, "y": 29, "w": 6, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT chain::text as metric, ROUND(AVG(EXTRACT(EPOCH FROM (detected_at - COALESCE(opened_at, detected_at))) * 1000), 0) as value FROM opportunities WHERE detected_at > now() - interval '1 hour' GROUP BY chain ORDER BY value DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 100, "color": "yellow"},
+              {"value": 500, "color": "orange"},
+              {"value": 1000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Risk State by Chain",
+      "gridPos": {"x": 12, "y": 29, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT chain::text, open_exposure_usd, trades_last_hour, CASE WHEN is_halted THEN 'HALTED' ELSE 'ACTIVE' END as status, halt_reason, updated_at FROM risk_state WHERE ('${chain}' = 'all' OR chain::text = '${chain}') ORDER BY chain",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "status"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "HALTED": {"text": "HALTED", "color": "red"},
+                      "ACTIVE": {"text": "ACTIVE", "color": "green"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "open_exposure_usd"},
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 3000, "color": "yellow"},
+                    {"value": 5000, "color": "red"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "trades_last_hour"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 15, "color": "yellow"},
+                    {"value": 20, "color": "red"}
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Recent Opportunities",
+      "gridPos": {"x": 0, "y": 37, "w": 24, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT o.detected_at, p.canonical as pair, o.chain::text as chain, o.spread_bps, o.direction, o.status, o.anchor_mid as cex_price, o.dex_mid as dex_price, o.skip_reason FROM opportunities o JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at > now() - interval '15 minutes' AND ('${chain}' = 'all' OR o.chain::text = '${chain}') ORDER BY o.detected_at DESC LIMIT 50",
           "format": "table"
         }
       ],
@@ -830,6 +1033,27 @@
               {
                 "id": "decimals",
                 "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "chain"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "base": {"text": "base", "color": "blue"},
+                      "mainnet": {"text": "mainnet", "color": "purple"}
+                    }
+                  }
+                ]
               }
             ]
           }

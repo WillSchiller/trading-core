@@ -17,6 +17,11 @@ Always read these files first:
 - /CLAUDE.md — Project conventions and constraints
 - /docs/spec-additions.md — Full database schema (essential for writing queries)
 
+## After any task
+
+- Always run the query against the DB and validate the output
+- Find bugs and fix them
+
 ## Your Specific Tasks (from spec)
 
 You own these tasks from /docs/spec-additions.md Section 7:

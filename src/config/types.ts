@@ -19,6 +19,8 @@ export interface DetectionConfig {
   requireConfirmationVenue: boolean;
   maxTimeSkewMsBase?: number;
   maxTimeSkewMsMainnet?: number;
+  gasBpsPerGwei?: number;
+  defaultGasGwei?: number;
 }
 
 export interface RankSpaceConfig {
@@ -31,9 +33,17 @@ export interface RankSpaceConfig {
 export interface ExecutionConfig {
   paperMode: boolean;
   maxSlippageBps: number;
+  edgeBufferBps: number;
   deadlineSeconds: number;
   gasBufferPercent: number;
   simulateBeforeSend: boolean;
+  minProfitUsd?: number;
+}
+
+export interface ChainRiskOverrides {
+  maxTradeSizeUsd?: number;
+  maxOpenExposureUsd?: number;
+  maxTradesPerHour?: number;
 }
 
 export interface RiskConfig {
@@ -44,6 +54,11 @@ export interface RiskConfig {
   maxGasGwei: number;
   haltOnConsecutiveReverts: number;
   skipProfitCheckForTesting?: boolean;
+  chainOverrides?: {
+    mainnet?: ChainRiskOverrides;
+    base?: ChainRiskOverrides;
+    arbitrum?: ChainRiskOverrides;
+  };
 }
 
 export interface InventoryConfig {
