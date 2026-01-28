@@ -53,7 +53,7 @@ export class PCAPersistence {
         event.factorContext.pc1Return,
         event.factorContext.pc2Return,
         JSON.stringify(event.allAssetResiduals),
-        event.entryPrice || null,
+        event.entryPrice > 0 ? event.entryPrice : null,
       ]
     );
 
@@ -68,7 +68,7 @@ export class PCAPersistence {
            exit_price = $5, pnl_bps = $6
        WHERE asset = $4 AND resolved = false
        ORDER BY timestamp DESC LIMIT 1`,
-      [event.exitTimestamp, event.exitZScore, event.holdTimeMs, event.asset, event.exitPrice || null, event.pnlBps || null]
+      [event.exitTimestamp, event.exitZScore, event.holdTimeMs, event.asset, event.exitPrice > 0 ? event.exitPrice : null, event.pnlBps ?? null]
     );
 
     this.logger.debug({ asset: event.asset, holdTimeMs: event.holdTimeMs }, 'Signal resolved');

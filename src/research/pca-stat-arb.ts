@@ -453,6 +453,10 @@ export class PCAStatArbMonitor extends EventEmitter {
 
       if (signal.signal !== 'neutral' && !existingSignal) {
         const currentPrice = this.getCurrentPrice(signal.asset);
+        if (currentPrice <= 0) {
+          this.logger.warn({ asset: signal.asset }, 'Skipping signal - no valid price');
+          continue;
+        }
         const event: PCASignalEvent = {
           timestamp: now,
           asset: signal.asset,
