@@ -80,6 +80,11 @@ const BASE_TOKENS: Record<string, TokenConfig> = {
     decimals: 18,
     symbol: 'rETH',
   },
+  cbBTC: {
+    address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf' as Address,
+    decimals: 8,
+    symbol: 'cbBTC',
+  },
 };
 
 const MAINNET_TOKENS: Record<string, TokenConfig> = {

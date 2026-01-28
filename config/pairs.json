@@ -156,6 +156,51 @@
         "minLiquidityUsd": 50000,
         "maxTradeSizeUsd": 500
       }
+    },
+    {
+      "base": "cbBTC",
+      "quote": "USDC",
+      "chain": "base",
+      "tier": 1,
+      "aliases": ["BTC/USDC"],
+      "venues": {
+        "binance": { "symbol": "BTCUSDC" },
+        "coinbase": { "symbol": "BTC-USD" },
+        "bybit": { "symbol": "BTCUSDC" },
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef", "feeTier": 500, "primary": true }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 20,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 50000,
+        "maxTradeSizeUsd": 500
+      }
+    },
+    {
+      "base": "cbBTC",
+      "quote": "WETH",
+      "chain": "base",
+      "tier": 2,
+      "enabled": false,
+      "aliases": ["BTC/ETH"],
+      "venues": {
+        "uniswap_v3": {
+          "base": [
+            { "pool": "0x7aea2e8a3843516afa07293a10ac8e49906dabd1", "feeTier": 500, "primary": true },
+            { "pool": "0x8c7080564b5a792a33ef2fd473fba6364d5495e5", "feeTier": 3000 }
+          ]
+        }
+      },
+      "thresholds": {
+        "minSpreadBps": 25,
+        "minDurationMs": 2000,
+        "minLiquidityUsd": 50000,
+        "maxTradeSizeUsd": 500
+      }
     }
   ]
 }
