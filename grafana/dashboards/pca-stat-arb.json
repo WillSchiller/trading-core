@@ -229,10 +229,34 @@
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
+      "id": 18,
+      "type": "stat",
+      "title": "Unrealized P&L (bps)",
+      "description": "Mark-to-market P&L of open positions",
+      "gridPos": {"x": 12, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(CASE direction WHEN 'long' THEN ((current_price - entry_price) / NULLIF(entry_price, 0)) * 10000 WHEN 'short' THEN ((entry_price - current_price) / NULLIF(entry_price, 0)) * 10000 END), 0)::numeric, 1) as \"Unrealized\" FROM pca_signals WHERE resolved = false AND entry_price > 0 AND current_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
       "id": 17,
       "type": "timeseries",
       "title": "Cumulative P&L (bps)",
-      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 4},
+      "gridPos": {"x": 16, "y": 4, "w": 8, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -293,7 +317,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND(pnl_bps::numeric, 1) as \"P&L (bps)\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY timestamp DESC LIMIT 30",
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND(COALESCE(hold_time_ms / 60000.0, EXTRACT(EPOCH FROM (NOW() - to_timestamp(timestamp / 1000))) / 60)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND(CASE WHEN resolved THEN pnl_bps WHEN entry_price > 0 AND current_price > 0 THEN CASE direction WHEN 'long' THEN ((current_price - entry_price) / entry_price) * 10000 WHEN 'short' THEN ((entry_price - current_price) / entry_price) * 10000 END END::numeric, 1) as \"P&L (bps)\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY timestamp DESC LIMIT 30",
         "format": "table"
       }],
       "fieldConfig": {

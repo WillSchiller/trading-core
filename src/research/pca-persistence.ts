@@ -208,4 +208,19 @@ export class PCAPersistence {
       residual: parseFloat(row.residual),
     }));
   }
+
+  async updateCurrentPrices(prices: Record<string, number>): Promise<void> {
+    const assets = Object.keys(prices);
+    if (assets.length === 0) return;
+
+    const cases = assets.map((_asset, i) => `WHEN asset = $${i + 1} THEN $${assets.length + i + 1}`).join(' ');
+    const params = [...assets, ...assets.map(a => prices[a])];
+
+    await this.pool.query(
+      `UPDATE pca_signals
+       SET current_price = CASE ${cases} END
+       WHERE resolved = false AND asset = ANY($${params.length + 1})`,
+      [...params, assets]
+    );
+  }
 }

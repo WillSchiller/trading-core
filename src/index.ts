@@ -541,8 +541,12 @@ async function main() {
 
     pcaMonitor.on('residuals', async (signals) => {
       try {
-        if (pcaPersistence) {
+        if (pcaPersistence && pcaMonitor) {
           await pcaPersistence.saveResiduals(signals);
+          const prices = pcaMonitor.getCurrentPrices();
+          if (Object.keys(prices).length > 0) {
+            await pcaPersistence.updateCurrentPrices(prices);
+          }
         }
       } catch (err) {
         logger.error({ error: (err as Error).message }, 'Failed to save PCA residuals');

@@ -561,4 +561,13 @@ export class PCAStatArbMonitor extends EventEmitter {
   getConfig(): PCAConfig {
     return { ...this.config };
   }
+
+  getCurrentPrices(): Record<string, number> {
+    const prices: Record<string, number> = {};
+    for (const asset of this.config.assets) {
+      const price = this.getCurrentPrice(asset);
+      if (price > 0) prices[asset] = price;
+    }
+    return prices;
+  }
 }
