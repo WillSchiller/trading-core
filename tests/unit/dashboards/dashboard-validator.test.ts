@@ -463,7 +463,8 @@ describe('Grafana Dashboard Validation', () => {
 
           const cleanQuery = query.replace(/EXTRACT\s*\([^)]*FROM\s+\w+\s*\)/gi, '');
           const fromMatch = cleanQuery.match(/FROM\s+(\w+)/gi);
-          const joinMatch = cleanQuery.match(/JOIN\s+(\w+)/gi);
+          // Exclude LATERAL keyword from being treated as a table name
+          const joinMatch = cleanQuery.match(/JOIN\s+(?!LATERAL\b)(\w+)/gi);
 
           const tables = [
             ...(fromMatch || []).map((m) => m.split(/\s+/).pop()!.toLowerCase()),

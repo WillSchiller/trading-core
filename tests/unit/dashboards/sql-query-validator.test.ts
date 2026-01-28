@@ -486,6 +486,10 @@ describe('SQL Query Anti-Pattern Detection', () => {
 
         if (joinMatches) {
           for (const joinClause of joinMatches) {
+            // LATERAL joins use implicit correlation, not ON/USING
+            const isLateral = /\bLATERAL\b/i.test(joinClause);
+            if (isLateral) continue;
+
             const hasOn = /\bON\b/i.test(joinClause);
             const hasUsing = /\bUSING\b/i.test(joinClause);
 
