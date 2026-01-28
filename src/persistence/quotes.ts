@@ -40,7 +40,7 @@ export class QuotePersistence {
     const isDex = quote.venue === 'uniswap_v3' || quote.venue === 'aerodrome';
     const shouldSample = isDex || this.sampleCounter % this.config.sampleRate === 0;
 
-    this.logger.info(
+    this.logger.debug(
       {
         venue: quote.venue,
         pair: quote.pair,
@@ -58,7 +58,7 @@ export class QuotePersistence {
     }
 
     try {
-      this.logger.info(
+      this.logger.debug(
         {
           venue: quote.venue,
           pair: quote.pair,
@@ -94,7 +94,7 @@ export class QuotePersistence {
         ]
       );
 
-      this.logger.info(
+      this.logger.debug(
         {
           venue: quote.venue,
           pair: quote.pair,
