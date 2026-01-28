@@ -273,6 +273,7 @@ async function main() {
       chains: chainConfigs,
       cex: cexConfigs,
       dex: dexConfigs,
+      protocol: config.app.venues.protocol,
       quoteCache: {
         cexStaleThresholdMs: config.app.system.quoteStaleThresholdMs,
         dexBlockLagThreshold: config.app.system.dexBlockLagThreshold ?? 2,

@@ -97,9 +97,17 @@ export interface DexVenueConfig {
   chains: Chain[];
 }
 
+export interface ProtocolVenueConfig {
+  lstOracle?: {
+    enabled: boolean;
+    pollIntervalMs: number;
+  };
+}
+
 export interface VenuesConfig {
   cex: Record<string, CexVenueConfig>;
   dex: Record<string, DexVenueConfig>;
+  protocol?: ProtocolVenueConfig;
 }
 
 export interface PoolConfig {
