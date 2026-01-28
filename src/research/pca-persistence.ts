@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createChildLogger, type Logger } from '../utils/logger.js';
-import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState, PnLAttribution } from './pca-stat-arb.js';
+import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
 
 export class PCAPersistence {
   private pool: Pool;
