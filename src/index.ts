@@ -499,12 +499,19 @@ async function main() {
     };
 
     // Subscribe to quotes from orchestrator for PCA assets
+    const lastPriceSave: Record<string, number> = {};
     orchestrator.on('quote', (quote: { venue: string; pair: string; mid: number }) => {
       if (quote.venue !== 'binance') return;
 
       const asset = pairToAsset[quote.pair];
       if (asset && pcaMonitor) {
         pcaMonitor.updatePrice(asset, quote.mid);
+        // Persist price to database (throttled - every 10s per asset)
+        const now = Date.now();
+        if (pcaPersistence && (!lastPriceSave[asset] || now - lastPriceSave[asset] > 10000)) {
+          lastPriceSave[asset] = now;
+          pcaPersistence.savePrice(asset, quote.mid).catch(() => {});
+        }
       }
     });
 
@@ -554,6 +561,18 @@ async function main() {
     });
 
     pcaMonitor.start();
+
+    // Update open signal prices every 30 seconds
+    setInterval(async () => {
+      if (pcaPersistence) {
+        try {
+          await pcaPersistence.updateOpenSignalPrices();
+        } catch (err) {
+          logger.error({ error: (err as Error).message }, 'Failed to update open signal prices');
+        }
+      }
+    }, 30000);
+
     logger.info(
       {
         assets: pcaConfig.assets,

@@ -223,4 +223,22 @@ export class PCAPersistence {
       [...params, assets]
     );
   }
+
+  async savePrice(asset: string, price: number): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO pca_prices (asset, price, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (asset) DO UPDATE SET price = $2, updated_at = NOW()`,
+      [asset, price]
+    );
+  }
+
+  async updateOpenSignalPrices(): Promise<void> {
+    await this.pool.query(
+      `UPDATE pca_signals s
+       SET current_price = p.price
+       FROM pca_prices p
+       WHERE s.asset = p.asset AND s.resolved = false`
+    );
+  }
 }
