@@ -92,9 +92,19 @@ export const dexVenueConfigSchema = z.object({
   chains: z.array(chainSchema),
 });
 
+export const lstOracleConfigSchema = z.object({
+  enabled: z.boolean(),
+  pollIntervalMs: z.number().int().positive(),
+});
+
+export const protocolVenueConfigSchema = z.object({
+  lstOracle: lstOracleConfigSchema.optional(),
+});
+
 export const venuesConfigSchema = z.object({
   cex: z.record(cexVenueConfigSchema),
   dex: z.record(dexVenueConfigSchema),
+  protocol: protocolVenueConfigSchema.optional(),
 });
 
 export const poolConfigSchema = z.object({
