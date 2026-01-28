@@ -35,7 +35,7 @@
     "deadlineSeconds": 60,
     "gasBufferPercent": 20,
     "simulateBeforeSend": true,
-    "minProfitUsd": 0.05
+    "minProfitUsd": 0.01
   },
   "risk": {
     "maxTradeSizeUsd": 200,
