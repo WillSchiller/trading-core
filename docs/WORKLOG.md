@@ -906,3 +906,61 @@ Bake config into Docker image, remove volume mount. This ensures config and code
 - Rollback: `docker-compose up -d --force-recreate` with previous IMAGE_TAG
 
 ---
+
+## 2026-01-28
+
+### DevOps/Platform Agent
+
+**DONE** - Configured Telegram alerts credentials in AWS Secrets Manager
+
+**Task:** Add Telegram bot token and chat ID for production alerts
+
+**Infrastructure Status:**
+- Terraform secrets already defined in `infra/secrets.tf`:
+  - `dislocation-trader/telegram-bot-token`
+  - `dislocation-trader/telegram-chat-id`
+- `scripts/fetch-secrets.sh` already fetches both secrets
+- `docker/docker-compose.prod.yml` already passes `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to app container
+
+**Action Taken:**
+Populated the Telegram secrets in AWS Secrets Manager (ap-southeast-1):
+
+```bash
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id "dislocation-trader/telegram-bot-token" \
+  --secret-string "8186286649:AAGleC5eLP5Ql4o3teu4sVfDF3E2YIJAxnU"
+
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id "dislocation-trader/telegram-chat-id" \
+  --secret-string "960887040"
+```
+
+**To Apply Changes (restart required):**
+
+Option 1 - SSH to EC2 and restart:
+```bash
+ssh -i ~/.ssh/blockhelix.pem ubuntu@3.1.140.199
+cd /home/ubuntu/app
+./scripts/fetch-secrets.sh export
+source .env.secrets
+docker-compose -f docker/docker-compose.prod.yml up -d --force-recreate app
+```
+
+Option 2 - Full redeploy via GitHub Actions:
+- Push any commit to trigger `deploy.yml` workflow
+- Or manually trigger workflow from GitHub Actions tab
+
+**Verification:**
+After restart, check logs for Telegram initialization:
+```bash
+docker logs dislocation-trader-app 2>&1 | grep -i telegram
+```
+
+Test alert manually (if test endpoint exists):
+```bash
+curl http://localhost:8080/test-alert
+```
+
+---
