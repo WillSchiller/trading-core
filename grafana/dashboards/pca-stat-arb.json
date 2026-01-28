@@ -34,7 +34,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Signals\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "rawSql": "SELECT COUNT(*) as \"Signals\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
         "format": "table"
       }],
       "fieldConfig": {
@@ -54,7 +54,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Long\" FROM pca_signals WHERE direction = 'long' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "rawSql": "SELECT COUNT(*) as \"Long\" FROM pca_signals WHERE direction = 'long' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
         "format": "table"
       }],
       "fieldConfig": {
@@ -74,7 +74,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) as \"Short\" FROM pca_signals WHERE direction = 'short' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "rawSql": "SELECT COUNT(*) as \"Short\" FROM pca_signals WHERE direction = 'short' AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
         "format": "table"
       }],
       "fieldConfig": {
@@ -95,7 +95,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE ABS(exit_z_score) < ABS(z_score)) / NULLIF(COUNT(*), 0), 1) as \"Accuracy\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE ABS(exit_z_score) < ABS(z_score)) / NULLIF(COUNT(*), 0), 1) as \"Accuracy\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
         "format": "table"
       }],
       "fieldConfig": {
@@ -119,7 +119,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(AVG(hold_time_ms) / 60000, 1) as \"Hold Time\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000",
+        "rawSql": "SELECT ROUND(AVG(hold_time_ms) / 60000, 1) as \"Hold Time\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
         "format": "table"
       }],
       "fieldConfig": {
@@ -164,7 +164,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, z_score FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, z_score FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -183,7 +183,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, residual * 10000 as \"Residual (bps)\" FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, asset, residual * 10000 as \"Residual (bps)\" FROM pca_residuals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) ORDER BY timestamp",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -202,7 +202,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 ORDER BY timestamp DESC LIMIT 30",
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Time\", asset as \"Asset\", direction as \"Direction\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(exit_z_score::numeric, 2) as \"Exit Z\", ROUND((hold_time_ms / 60000)::numeric, 1) as \"Hold (min)\", CASE WHEN resolved THEN 'Closed' ELSE 'Open' END as \"Status\", ROUND((residual * 10000)::numeric, 2) as \"Residual (bps)\", ROUND((pc1_return * 10000)::numeric, 2) as \"PC1 (bps)\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 ORDER BY timestamp DESC LIMIT 30",
         "format": "table"
       }],
       "fieldConfig": {
@@ -229,7 +229,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 GROUP BY asset ORDER BY \"Count\" DESC",
+        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY asset ORDER BY \"Count\" DESC",
         "format": "table"
       }],
       "options": {"legend": {"displayMode": "list", "placement": "right"}}
@@ -242,7 +242,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT direction as \"Direction\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()) * 1000 GROUP BY direction",
+        "rawSql": "SELECT direction as \"Direction\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY direction",
         "format": "table"
       }],
       "fieldConfig": {
