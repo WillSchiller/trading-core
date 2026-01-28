@@ -146,7 +146,11 @@ async function main() {
     telegramBotToken: config.env.telegram?.botToken,
     telegramChatId: config.env.telegram?.chatId,
   });
-  logger.info({ paperMode: config.env.paperMode, enableBase: config.env.enableBase }, 'Config loaded');
+  logger.info({
+    paperMode: config.env.paperMode,
+    enableBase: config.env.enableBase,
+    enableMainnet: config.env.enableMainnet,
+  }, 'Config loaded');
 
   createPool(config.env.postgres);
   logger.info('Database pool initialized');
@@ -164,6 +168,12 @@ async function main() {
       : chainName === 'base' ? config.env.enableBase
       : false;
     const isEnabled = chainConfig.enabled || envEnabled;
+    logger.info({
+      chain: chainName,
+      configEnabled: chainConfig.enabled,
+      envEnabled,
+      isEnabled,
+    }, 'Chain enable check');
     if (isEnabled) {
       try {
         const endpoints = buildRpcEndpoints(chainName as Chain, config.env);
@@ -180,6 +190,7 @@ async function main() {
       }
     }
   }
+  logger.info({ enabledChains: Object.keys(chainConfigs) }, 'Chain configuration complete');
 
   const cexConfigs: Record<string, CexConnectorConfig> = {};
 

@@ -182,15 +182,28 @@ export class CollectorOrchestrator extends EventEmitter {
   }
 
   private async startDexConnectors(): Promise<void> {
+    this.logger.info({
+      uniswapEnabled: this.config.dex.uniswap_v3?.enabled,
+      configuredChains: this.config.dex.uniswap_v3?.enabled ? Object.keys(this.config.dex.uniswap_v3.chains) : [],
+      availableProviders: Array.from(this.chainProviders.keys()),
+    }, 'Starting DEX connectors');
+
     if (this.config.dex.uniswap_v3?.enabled) {
       for (const [chain, rawPools] of Object.entries(this.config.dex.uniswap_v3.chains)) {
-        if (!rawPools || rawPools.length === 0) continue;
+        if (!rawPools || rawPools.length === 0) {
+          this.logger.warn({ chain, poolCount: rawPools?.length ?? 0 }, 'No pools configured for chain');
+          continue;
+        }
 
         const provider = this.chainProviders.get(chain as Chain);
         const blockWatcher = this.blockWatchers.get(chain as Chain);
 
         if (!provider || !blockWatcher) {
-          this.logger.warn({ chain }, 'Chain provider or block watcher not found');
+          this.logger.warn({
+            chain,
+            hasProvider: !!provider,
+            hasBlockWatcher: !!blockWatcher,
+          }, 'Chain provider or block watcher not found, skipping DEX connector');
           continue;
         }
 

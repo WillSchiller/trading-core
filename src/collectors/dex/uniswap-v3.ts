@@ -40,7 +40,7 @@ export class UniswapV3Connector extends EventEmitter {
   private isRunning = false;
   private statsTimer: NodeJS.Timeout | null = null;
   private lastPollBlock: bigint = 0n;
-  private currentPollInterval: number = 10; // Start conservative, adaptive will adjust
+  private currentPollInterval: number = 1; // Start aggressive to get initial quotes flowing
   private spreadProximity: number = 0; // 0 = far from threshold, 1 = at threshold
 
   constructor(config: UniswapV3ConnectorConfig, provider: ChainProvider, blockWatcher: BlockWatcher) {
