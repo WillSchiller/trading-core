@@ -34,7 +34,7 @@
       "quote": "WETH",
       "chain": "base",
       "tier": 1,
-      "enabled": false,
+      "enabled": true,
       "venues": {
         "coinbase": { "symbol": "CBETH-ETH" },
         "uniswap_v3": {
@@ -44,22 +44,23 @@
         }
       },
       "thresholds": {
-        "minSpreadBps": 25,
+        "minSpreadBps": 15,
         "minDurationMs": 2000,
         "minLiquidityUsd": 50000,
         "maxTradeSizeUsd": 500,
         "thinMarketMode": true,
         "maxQuoteAgeMs": 300000,
-        "thinMarketBufferBps": 30
+        "thinMarketBufferBps": 20
       }
     },
     {
       "base": "weETH",
       "quote": "WETH",
       "chain": "base",
-      "tier": 2,
-      "enabled": false,
+      "tier": 1,
+      "enabled": true,
       "venues": {
+        "protocol": { "isAnchor": true },
         "uniswap_v3": {
           "base": [
             { "pool": "0xb1419a7f9e8c6e434b1d05377e0dbc4154e3de78", "feeTier": 100, "primary": true }
@@ -67,7 +68,7 @@
         }
       },
       "thresholds": {
-        "minSpreadBps": 15,
+        "minSpreadBps": 10,
         "minDurationMs": 2000,
         "minLiquidityUsd": 25000,
         "maxTradeSizeUsd": 500
@@ -77,9 +78,10 @@
       "base": "wstETH",
       "quote": "WETH",
       "chain": "base",
-      "tier": 2,
-      "enabled": false,
+      "tier": 1,
+      "enabled": true,
       "venues": {
+        "protocol": { "isAnchor": true },
         "uniswap_v3": {
           "base": [
             { "pool": "0x20E068D76f9E90b90604500B84c7e19dCB923e7e", "feeTier": 100, "primary": true }
@@ -87,7 +89,7 @@
         }
       },
       "thresholds": {
-        "minSpreadBps": 15,
+        "minSpreadBps": 10,
         "minDurationMs": 2000,
         "minLiquidityUsd": 25000,
         "maxTradeSizeUsd": 500
@@ -97,9 +99,10 @@
       "base": "rETH",
       "quote": "WETH",
       "chain": "base",
-      "tier": 2,
-      "enabled": false,
+      "tier": 1,
+      "enabled": true,
       "venues": {
+        "protocol": { "isAnchor": true },
         "uniswap_v3": {
           "base": [
             { "pool": "0x9e13996a9f5a9870c105d7e3c311848273740e98", "feeTier": 500, "primary": true }
@@ -107,7 +110,7 @@
         }
       },
       "thresholds": {
-        "minSpreadBps": 20,
+        "minSpreadBps": 15,
         "minDurationMs": 2000,
         "minLiquidityUsd": 25000,
         "maxTradeSizeUsd": 500

@@ -7,7 +7,8 @@ INSERT INTO venues (name, venue_type, is_anchor, is_enabled) VALUES
     ('coinbase', 'cex', FALSE, TRUE),
     ('bybit', 'cex', FALSE, TRUE),
     ('uniswap_v3', 'dex', FALSE, TRUE),
-    ('aerodrome', 'dex', FALSE, TRUE)
+    ('aerodrome', 'dex', FALSE, TRUE),
+    ('protocol', 'cex', TRUE, TRUE)
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================
@@ -20,7 +21,9 @@ INSERT INTO pairs (base_asset, quote_asset, is_enabled) VALUES
     ('weETH', 'WETH', TRUE),
     ('wstETH', 'WETH', TRUE),
     ('rETH', 'WETH', TRUE),
-    ('USDC', 'USDbC', TRUE)
+    ('USDC', 'USDbC', TRUE),
+    ('cbBTC', 'USDC', TRUE),
+    ('cbBTC', 'WETH', TRUE)
 ON CONFLICT (base_asset, quote_asset) DO NOTHING;
 
 -- ============================================

@@ -68,6 +68,23 @@ interface OpenOpportunity {
 
 const HYSTERESIS_BPS = 2;
 const CONSECUTIVE_TICKS_REQUIRED = 2;
+
+function getAnchorVenue(pairConfig: PairConfig): string {
+  const venues = pairConfig.venues as Record<string, { isAnchor?: boolean }>;
+  for (const [venue, config] of Object.entries(venues)) {
+    if (config?.isAnchor) {
+      return venue;
+    }
+  }
+  return 'binance';
+}
+
+function getConfirmVenue(_pairConfig: PairConfig, anchorVenue: string): string | null {
+  if (anchorVenue === 'protocol') {
+    return null;
+  }
+  return anchorVenue === 'binance' ? 'coinbase' : null;
+}
 const UPDATE_THROTTLE_MS = 250;
 const CIRCUIT_BREAKER_THRESHOLD = 5;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 30000;
@@ -237,14 +254,17 @@ export class OpportunityDetector {
       return;
     }
 
+    const anchorVenue = getAnchorVenue(pairConfig);
+    const confirmVenue = getConfirmVenue(pairConfig, anchorVenue);
+
     const anchorQuote = this.quoteCache.getQuoteWithStaleness({
-      venue: 'binance',
+      venue: anchorVenue,
       pair,
     });
 
-    const confirmQuote = this.appConfig.detection.requireConfirmationVenue
+    const confirmQuote = confirmVenue && this.appConfig.detection.requireConfirmationVenue
       ? this.quoteCache.getQuoteWithStaleness({
-          venue: 'coinbase',
+          venue: confirmVenue,
           pair,
         })
       : undefined;
@@ -520,8 +540,8 @@ export class OpportunityDetector {
       reasons,
     });
 
-    const anchorVenueId = this.venueIdMap.get('binance');
-    const confirmVenueId = confirmQuote ? this.venueIdMap.get('coinbase') : undefined;
+    const anchorVenueId = this.venueIdMap.get(anchorVenue);
+    const confirmVenueId = confirmQuote && confirmVenue ? this.venueIdMap.get(confirmVenue) : undefined;
     const dexVenueId = this.venueIdMap.get('uniswap_v3');
 
     if (!anchorVenueId || !dexVenueId) {

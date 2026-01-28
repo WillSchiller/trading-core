@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { NormalizedQuote, Chain } from '../types/index.js';
 import { BinanceConnector, CoinbaseConnector, BybitConnector } from './cex/index.js';
 import { UniswapV3Connector, type PoolConfig } from './dex/index.js';
+import { LstRateOracle, BASE_LST_TOKENS, MAINNET_LST_TOKENS, type LstConfig } from './protocol/index.js';
 import { QuoteCache, type QuoteCacheConfig } from '../state/index.js';
 import { ChainProvider, BlockWatcher, type RpcEndpoint } from '../chain/index.js';
 import { QuotePersistence, HealthPersistence, type QuotePersistenceConfig } from '../persistence/index.js';
@@ -37,6 +38,12 @@ export interface CollectorOrchestratorConfig {
       };
     };
   };
+  protocol?: {
+    lstOracle?: {
+      enabled: boolean;
+      pollIntervalMs: number;
+    };
+  };
   quoteCache: QuoteCacheConfig;
   quotePersistence: QuotePersistenceConfig;
 }
@@ -50,6 +57,7 @@ export class CollectorOrchestrator extends EventEmitter {
   private healthPersistence: HealthPersistence;
   private cexConnectors: Map<string, BinanceConnector | CoinbaseConnector | BybitConnector>;
   private dexConnectors: Map<string, UniswapV3Connector>;
+  private protocolConnectors: Map<string, LstRateOracle>;
   private chainProviders: Map<Chain, ChainProvider>;
   private blockWatchers: Map<Chain, BlockWatcher>;
   private venueIdMap: Map<string, number>;
@@ -65,6 +73,7 @@ export class CollectorOrchestrator extends EventEmitter {
     this.healthPersistence = new HealthPersistence(pool);
     this.cexConnectors = new Map();
     this.dexConnectors = new Map();
+    this.protocolConnectors = new Map();
     this.chainProviders = new Map();
     this.blockWatchers = new Map();
     this.venueIdMap = new Map();
@@ -79,6 +88,7 @@ export class CollectorOrchestrator extends EventEmitter {
     await this.startChainProviders();
     await this.startCexConnectors();
     await this.startDexConnectors();
+    await this.startProtocolConnectors();
 
     this.quotePersistence.startRollups();
 
@@ -93,6 +103,10 @@ export class CollectorOrchestrator extends EventEmitter {
     }
 
     for (const connector of this.dexConnectors.values()) {
+      await connector.stop();
+    }
+
+    for (const connector of this.protocolConnectors.values()) {
       await connector.stop();
     }
 
@@ -265,6 +279,61 @@ export class CollectorOrchestrator extends EventEmitter {
         this.logger.info({ chain, pools: initializedPools.length }, 'Uniswap V3 connector started');
       }
     }
+  }
+
+  private async startProtocolConnectors(): Promise<void> {
+    if (!this.config.protocol?.lstOracle?.enabled) {
+      this.logger.info('LST rate oracle disabled');
+      return;
+    }
+
+    const pollIntervalMs = this.config.protocol.lstOracle.pollIntervalMs || 10000;
+
+    for (const [chain, provider] of this.chainProviders.entries()) {
+      const tokens: LstConfig[] = chain === 'base' ? BASE_LST_TOKENS : MAINNET_LST_TOKENS;
+
+      if (tokens.length === 0) {
+        continue;
+      }
+
+      const client = provider.getPublicClient();
+      const oracle = new LstRateOracle(
+        {
+          chain,
+          tokens,
+          pollIntervalMs,
+        },
+        client
+      );
+
+      oracle.on('quote', (quote: NormalizedQuote) => {
+        this.handleProtocolQuote(quote);
+      });
+
+      oracle.on('connected', (data: { venue: string; chain: Chain }) => {
+        this.logger.info({ venue: data.venue, chain: data.chain }, 'Protocol oracle connected');
+      });
+
+      await oracle.start();
+      this.protocolConnectors.set(`lst:${chain}`, oracle);
+
+      this.logger.info({ chain, tokens: tokens.map((t) => t.symbol) }, 'LST rate oracle started');
+    }
+  }
+
+  private handleProtocolQuote(quote: NormalizedQuote): void {
+    const venueId = this.venueIdMap.get('protocol');
+    const pairId = this.pairIdMap.get(quote.pair);
+
+    this.quoteCache.updateQuote(quote);
+
+    if (venueId && pairId) {
+      this.quotePersistence.insertRawQuote(quote, venueId, pairId).catch((err) => {
+        this.logger.error({ error: (err as Error).message, pair: quote.pair }, 'Failed to persist protocol quote');
+      });
+    }
+
+    this.emit('protocolQuote', quote);
   }
 
   private setupCexConnector(

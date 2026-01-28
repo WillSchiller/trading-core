@@ -68,6 +68,9 @@
     "dex": {
       "uniswap_v3": { "enabled": true, "chains": ["base", "mainnet"] },
       "aerodrome": { "enabled": true, "chains": ["base"] }
+    },
+    "protocol": {
+      "lstOracle": { "enabled": true, "pollIntervalMs": 10000 }
     }
   },
   "chains": {
