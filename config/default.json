@@ -89,8 +89,14 @@
       "positionSizeUsd": 100,
       "regimeGating": {
         "enabled": true,
-        "pc1MomentumLookback": 10,
-        "pc1MomentumThreshold": 0
+        "ewmaSpan": 10,
+        "regimeThreshold": 0.5,
+        "hysteresisTicks": 3
+      },
+      "exposureLimits": {
+        "maxPositionsLong": 3,
+        "maxPositionsShort": 5,
+        "maxPositionsTotal": 6
       },
       "long": {
         "entryZScore": 2.5,

@@ -7,8 +7,15 @@ export type ExitReason = 'zscore' | 'time_stop' | 'trailing_stop';
 
 export interface RegimeGatingConfig {
   enabled: boolean;
-  pc1MomentumLookback: number;
-  pc1MomentumThreshold: number;
+  ewmaSpan: number;
+  regimeThreshold: number;
+  hysteresisTicks: number;
+}
+
+export interface ExposureLimitsConfig {
+  maxPositionsLong: number;
+  maxPositionsShort: number;
+  maxPositionsTotal: number;
 }
 
 export interface LongConfig {
@@ -44,6 +51,7 @@ export interface PCAConfig {
   pcaRefreshPeriods: number;
   positionSizeUsd: number;
   regimeGating?: RegimeGatingConfig;
+  exposureLimits?: ExposureLimitsConfig;
   long?: LongConfig;
   short?: ShortConfig;
 }
@@ -62,8 +70,14 @@ const DEFAULT_CONFIG: PCAConfig = {
   positionSizeUsd: 100,
   regimeGating: {
     enabled: true,
-    pc1MomentumLookback: 10,
-    pc1MomentumThreshold: 0,
+    ewmaSpan: 10,
+    regimeThreshold: 0.5,
+    hysteresisTicks: 3,
+  },
+  exposureLimits: {
+    maxPositionsLong: 3,
+    maxPositionsShort: 5,
+    maxPositionsTotal: 6,
   },
   long: {
     entryZScore: 2.5,
@@ -153,6 +167,10 @@ export class PCAStatArbMonitor extends EventEmitter {
   private pc1ReturnHistory: number[] = [];
   private regimeState: RegimeState = 'neutral';
   private pc1Momentum: number = 0;
+  private ewmaMean: number = 0;
+  private ewmaVar: number = 0;
+  private pendingRegime: RegimeState = 'neutral';
+  private regimeTickCount: number = 0;
 
   constructor(config: Partial<PCAConfig>) {
     super();
@@ -650,21 +668,48 @@ export class PCAStatArbMonitor extends EventEmitter {
     const gating = this.config.regimeGating;
     if (!gating?.enabled) return;
 
-    const lookback = gating.pc1MomentumLookback;
-    if (this.pc1ReturnHistory.length < lookback) return;
+    const alpha = 2 / (gating.ewmaSpan + 1);
+    this.ewmaMean = alpha * pc1Return + (1 - alpha) * this.ewmaMean;
+    this.ewmaVar = alpha * Math.pow(pc1Return, 2) + (1 - alpha) * this.ewmaVar;
 
-    const recentReturns = this.pc1ReturnHistory.slice(-lookback);
-    this.pc1Momentum = recentReturns.reduce((a, b) => a + b, 0);
+    const ewmaStd = Math.sqrt(Math.max(this.ewmaVar - Math.pow(this.ewmaMean, 2), 0.0000001));
+    this.pc1Momentum = this.ewmaMean / ewmaStd;
 
-    const threshold = gating.pc1MomentumThreshold;
-    const absThreshold = Math.abs(threshold) + 0.0001;
-    if (this.pc1Momentum > absThreshold) {
-      this.regimeState = 'bullish';
-    } else if (this.pc1Momentum < -absThreshold) {
-      this.regimeState = 'bearish';
+    const threshold = gating.regimeThreshold;
+    let candidateRegime: RegimeState;
+    if (this.pc1Momentum > threshold) {
+      candidateRegime = 'bullish';
+    } else if (this.pc1Momentum < -threshold) {
+      candidateRegime = 'bearish';
     } else {
-      this.regimeState = 'neutral';
+      candidateRegime = 'neutral';
     }
+
+    if (candidateRegime === this.pendingRegime) {
+      this.regimeTickCount++;
+    } else {
+      this.pendingRegime = candidateRegime;
+      this.regimeTickCount = 1;
+    }
+
+    if (this.regimeTickCount >= gating.hysteresisTicks && this.regimeState !== this.pendingRegime) {
+      const oldState = this.regimeState;
+      this.regimeState = this.pendingRegime;
+      this.logger.info(
+        { oldState, newState: this.regimeState, pc1Momentum: this.pc1Momentum.toFixed(3), ticksInState: this.regimeTickCount },
+        'Regime state changed'
+      );
+    }
+  }
+
+  private countPositionsByDirection(): { long: number; short: number; total: number } {
+    let longCount = 0;
+    let shortCount = 0;
+    for (const pos of this.activePositions.values()) {
+      if (pos.direction === 'long') longCount++;
+      else shortCount++;
+    }
+    return { long: longCount, short: shortCount, total: longCount + shortCount };
   }
 
   private shouldEnterLong(zScore: number): boolean {
@@ -677,13 +722,30 @@ export class PCAStatArbMonitor extends EventEmitter {
         return false;
       }
     }
+
+    const limits = this.config.exposureLimits;
+    if (limits) {
+      const counts = this.countPositionsByDirection();
+      if (counts.long >= limits.maxPositionsLong) return false;
+      if (counts.total >= limits.maxPositionsTotal) return false;
+    }
+
     return true;
   }
 
   private shouldEnterShort(zScore: number): boolean {
     const shortConfig = this.config.short;
     const threshold = shortConfig?.entryZScore ?? this.config.entryZScore;
-    return zScore >= threshold;
+    if (zScore < threshold) return false;
+
+    const limits = this.config.exposureLimits;
+    if (limits) {
+      const counts = this.countPositionsByDirection();
+      if (counts.short >= limits.maxPositionsShort) return false;
+      if (counts.total >= limits.maxPositionsTotal) return false;
+    }
+
+    return true;
   }
 
   private checkExitConditions(
@@ -695,7 +757,6 @@ export class PCAStatArbMonitor extends EventEmitter {
     const holdTimeMs = now - position.timestamp;
     const direction = position.direction;
     const dirConfig = direction === 'long' ? this.config.long : this.config.short;
-    const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
     const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
 
     let currentPnlBps = 0;
@@ -711,8 +772,11 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    if (Math.abs(currentZScore) < exitZScore) {
-      return { shouldExit: true, reason: 'zscore' };
+    if (direction === 'long') {
+      const exitZScore = this.config.long?.exitZScore ?? this.config.exitZScore;
+      if (Math.abs(currentZScore) < exitZScore) {
+        return { shouldExit: true, reason: 'zscore' };
+      }
     }
 
     if (direction === 'short' && this.config.short?.trailingExit?.enabled) {
