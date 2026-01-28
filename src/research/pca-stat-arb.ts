@@ -307,12 +307,14 @@ export class PCAStatArbMonitor extends EventEmitter {
   private tick(): void {
     const now = Date.now();
     this.tickCount++;
+    this.logger.info({ tickCount: this.tickCount, activePositions: this.activePositions.size }, 'Tick started');
 
     // CRITICAL: Check time-stops for ALL active positions FIRST
     // This must run even when signal data is incomplete
     this.checkAllPositionExits(now);
 
     const returns = this.computeReturns(now);
+    this.logger.info({ returnsCount: Object.keys(returns).length, required: this.config.assets.length }, 'Returns computed');
     if (Object.keys(returns).length < this.config.assets.length) {
       const priceHistorySizes: Record<string, number> = {};
       for (const asset of this.config.assets) {
@@ -351,9 +353,22 @@ export class PCAStatArbMonitor extends EventEmitter {
   }
 
   private checkAllPositionExits(now: number): void {
+    if (this.activePositions.size > 0) {
+      const positionSummary = Array.from(this.activePositions.entries()).map(([asset, pos]) => ({
+        asset,
+        dir: pos.direction,
+        holdMin: ((now - pos.timestamp) / 60000).toFixed(1),
+        hasPrice: this.getCurrentPrice(asset) > 0,
+      }));
+      this.logger.info({ positions: positionSummary }, 'Checking positions for time-stop');
+    }
+
     for (const [asset, position] of this.activePositions) {
       const currentPrice = this.getCurrentPrice(asset);
-      if (currentPrice <= 0) continue;
+      if (currentPrice <= 0) {
+        this.logger.warn({ asset, direction: position.direction }, 'Cannot check exit - no price data');
+        continue;
+      }
 
       const holdTimeMs = now - position.timestamp;
       const dirConfig = position.direction === 'long' ? this.config.long : this.config.short;
