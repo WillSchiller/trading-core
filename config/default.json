@@ -70,7 +70,7 @@
       "aerodrome": { "enabled": true, "chains": ["base"] }
     },
     "protocol": {
-      "lstOracle": { "enabled": true, "pollIntervalMs": 10000 }
+      "lstOracle": { "enabled": false, "pollIntervalMs": 10000 }
     }
   },
   "research": {
