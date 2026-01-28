@@ -464,16 +464,27 @@ export class ExecutionManager {
 
         if (!directionConsistent) {
           const reason = `Direction reversed: ${opportunity.direction} but fresh spread ${freshSpreadBps.toFixed(1)} bps (tolerance: ${directionToleranceBps} bps)`;
+          const detectionToValidationMs = Date.now() - opportunity.detectedAt.getTime();
           this.logger.info(
             {
               opportunityId: opportunity.id?.toString(),
               strategy,
               direction: opportunity.direction,
-              freshSpreadBps,
-              directionToleranceBps,
               originalSpreadBps: opportunity.spreadBps,
+              freshSpreadBps,
+              spreadSwingBps: opportunity.spreadBps - freshSpreadBps,
+              directionToleranceBps,
+              originalAnchorMid: opportunity.anchorMid,
+              freshAnchorMid,
+              anchorPriceChange: ((freshAnchorMid - opportunity.anchorMid) / opportunity.anchorMid * 10000).toFixed(2) + ' bps',
+              originalDexMid: opportunity.dexMid,
+              freshDexPrice,
+              dexPriceChange: ((freshDexPrice - opportunity.dexMid) / opportunity.dexMid * 10000).toFixed(2) + ' bps',
+              anchorAgeMs: freshAnchorQuote.staleDurationMs,
+              detectionToValidationMs,
+              quoteLatencyMs,
             },
-            'Direction validation failed (rank_space)'
+            'Direction validation failed (rank_space) - REVERSAL DIAGNOSTIC'
           );
           this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
           return;
@@ -510,22 +521,36 @@ export class ExecutionManager {
       }
     } else {
       if (Math.abs(freshSpreadBps) < requiredSpreadBps) {
+        const directionReversed = (opportunity.spreadBps > 0 && freshSpreadBps < 0) ||
+                                   (opportunity.spreadBps < 0 && freshSpreadBps > 0);
+        const detectionToValidationMs = Date.now() - opportunity.detectedAt.getTime();
         const reason = `Fresh spread ${Math.abs(freshSpreadBps).toFixed(1)} bps < required ${requiredSpreadBps.toFixed(1)} bps (original: ${Math.abs(opportunity.spreadBps).toFixed(1)} bps, decay: ${spreadDecay.toFixed(1)} bps)`;
         this.logger.info(
           {
             opportunityId: opportunity.id?.toString(),
             strategy,
+            direction: opportunity.direction,
+            directionReversed,
+            originalSpreadBps: opportunity.spreadBps,
             freshSpreadBps,
+            spreadSwingBps: opportunity.spreadBps - freshSpreadBps,
             requiredSpreadBps,
             feeTierBps,
             slippageBps: quote.slippageBps,
             gasBps,
+            originalAnchorMid: opportunity.anchorMid,
+            freshAnchorMid,
+            anchorPriceChangeBps: ((freshAnchorMid - opportunity.anchorMid) / opportunity.anchorMid * 10000).toFixed(2),
+            originalDexMid: opportunity.dexMid,
+            freshDexPrice,
+            dexPriceChangeBps: ((freshDexPrice - opportunity.dexMid) / opportunity.dexMid * 10000).toFixed(2),
+            anchorAgeMs: freshAnchorQuote.staleDurationMs,
+            detectionToValidationMs,
             quoteLatencyMs,
             gasEstimateLatencyMs,
-            riskCheckLatencyMs,
             totalLatencyMs,
           },
-          'Below break-even threshold (fresh spread)'
+          directionReversed ? 'DIRECTION REVERSED - spread flipped sign' : 'Below break-even threshold (fresh spread)'
         );
         this.statusQueue.enqueue(opportunity.id!, 'skipped', reason);
         return;
