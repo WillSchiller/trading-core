@@ -76,8 +76,7 @@ export class PCAPersistence {
        SET resolved = true, exit_timestamp = $1, exit_z_score = $2, hold_time_ms = $3,
            exit_price = $5, pnl_bps = $6, exit_reason = $7, peak_pnl_bps = $8, trough_pnl_bps = $9, pnl_usd = $10,
            pc1_pnl_bps = $11, residual_pnl_bps = $12, pc1_pct_of_total = $13
-       WHERE asset = $4 AND resolved = false
-       ORDER BY timestamp DESC LIMIT 1`,
+       WHERE id = (SELECT id FROM pca_signals WHERE asset = $4 AND resolved = false ORDER BY timestamp DESC LIMIT 1)`,
       [
         event.exitTimestamp,
         event.exitZScore,
@@ -256,7 +255,7 @@ export class PCAPersistence {
     const assets = Object.keys(prices);
     if (assets.length === 0) return;
 
-    const cases = assets.map((_asset, i) => `WHEN asset = $${i + 1} THEN $${assets.length + i + 1}`).join(' ');
+    const cases = assets.map((_asset, i) => `WHEN asset = $${i + 1} THEN $${assets.length + i + 1}::numeric`).join(' ');
     const params = [...assets, ...assets.map(a => prices[a])];
 
     await this.pool.query(
