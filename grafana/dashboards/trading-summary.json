@@ -123,7 +123,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT o.detected_at as \"Time\", p.canonical as \"Pair\", o.chain as \"Chain\", ROUND(CASE WHEN e.direction = 'buy_dex' THEN e.input_amount_human ELSE e.input_amount_human * e.quoted_price END::numeric, 2) as \"Size ($)\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id LEFT JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY o.detected_at DESC LIMIT 20",
+        "rawSql": "SELECT o.detected_at as \"Time\", p.canonical as \"Pair\", o.chain as \"Chain\", COALESCE(ROUND(CASE WHEN e.direction = 'buy_dex' THEN e.input_amount_human ELSE e.input_amount_human * e.quoted_price END::numeric, 0)::text, '-') as \"Size ($)\", ROUND(o.spread_bps::numeric, 2) as \"Spread (bps)\", o.status as \"Status\", ROUND(o.estimated_profit_usd::numeric, 4) as \"Est Profit\", COALESCE(ROUND(e.realized_pnl_usd::numeric, 4), NULL) as \"Simulated P&L\", o.skip_reason as \"Skip Reason\" FROM opportunities o LEFT JOIN executions e ON e.opportunity_id = o.id LEFT JOIN pairs p ON p.id = o.pair_id WHERE o.detected_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY o.detected_at DESC LIMIT 20",
         "format": "table"
       }],
       "fieldConfig": {
