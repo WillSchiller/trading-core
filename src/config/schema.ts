@@ -51,6 +51,7 @@ export const riskConfigSchema = z.object({
   cooldownSeconds: z.number().int().min(0),
   maxGasGwei: z.number().positive(),
   haltOnConsecutiveReverts: z.number().int().positive(),
+  minProfitUsd: z.number().min(0).optional(),
   skipProfitCheckForTesting: z.boolean().optional(),
   chainOverrides: z.object({
     mainnet: chainRiskOverridesSchema.optional(),

@@ -4,7 +4,7 @@ import { alertSystemHalt, alertConsecutiveReverts } from '../utils/alerts.js';
 import type { Chain } from '../types/index.js';
 import type { RiskConfig } from '../config/types.js';
 
-const MIN_PROFIT_ABOVE_GAS_USD = 0.50;
+const DEFAULT_MIN_PROFIT_USD = 0.01;
 
 interface EffectiveRiskLimits {
   maxTradeSizeUsd: number;
@@ -219,12 +219,13 @@ export class RiskManager {
       return { allowed: true };
     }
 
-    const minRequiredProfit = estimatedGasUsd + MIN_PROFIT_ABOVE_GAS_USD;
+    const minProfitAboveGas = this.config.minProfitUsd ?? DEFAULT_MIN_PROFIT_USD;
+    const minRequiredProfit = estimatedGasUsd + minProfitAboveGas;
 
     if (estimatedProfitUsd < minRequiredProfit) {
       return {
         allowed: false,
-        reason: `Unprofitable: profit $${estimatedProfitUsd.toFixed(4)} < min required $${minRequiredProfit.toFixed(4)} (gas $${estimatedGasUsd.toFixed(4)} + $${MIN_PROFIT_ABOVE_GAS_USD})`,
+        reason: `Unprofitable: profit $${estimatedProfitUsd.toFixed(4)} < min required $${minRequiredProfit.toFixed(4)} (gas $${estimatedGasUsd.toFixed(4)} + $${minProfitAboveGas})`,
       };
     }
     return { allowed: true };

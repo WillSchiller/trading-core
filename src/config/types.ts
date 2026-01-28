@@ -57,6 +57,7 @@ export interface RiskConfig {
   cooldownSeconds: number;
   maxGasGwei: number;
   haltOnConsecutiveReverts: number;
+  minProfitUsd?: number;
   skipProfitCheckForTesting?: boolean;
   chainOverrides?: {
     mainnet?: ChainRiskOverrides;

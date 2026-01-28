@@ -34,8 +34,7 @@
     "edgeBufferBps": 5,
     "deadlineSeconds": 60,
     "gasBufferPercent": 20,
-    "simulateBeforeSend": true,
-    "minProfitUsd": 0.01
+    "simulateBeforeSend": true
   },
   "risk": {
     "maxTradeSizeUsd": 200,
@@ -44,6 +43,7 @@
     "cooldownSeconds": 30,
     "maxGasGwei": 10,
     "haltOnConsecutiveReverts": 3,
+    "minProfitUsd": 0.01,
     "chainOverrides": {
       "mainnet": {
         "maxTradeSizeUsd": 500,
