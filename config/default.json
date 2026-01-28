@@ -110,13 +110,13 @@
       "long": {
         "entryZScore": 2.5,
         "exitZScore": 0.3,
-        "maxHoldTimeMs": 1800000,
+        "maxHoldTimeMs": 900000,
         "requireRegimeConfirmation": true
       },
       "short": {
         "entryZScore": 2.0,
         "exitZScore": 0.5,
-        "maxHoldTimeMs": 7200000,
+        "maxHoldTimeMs": 3600000,
         "trailingExit": {
           "enabled": true,
           "activationPnlBps": 20,
