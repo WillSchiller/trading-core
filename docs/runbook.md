@@ -208,6 +208,37 @@ docker-compose -f docker/docker-compose.prod.yml up -d
 docker-compose -f docker/docker-compose.prod.yml ps
 ```
 
+### Configuration Management
+
+**Important:** Configuration files (`config/default.json`, `config/pairs.json`) are baked into the Docker image at build time. They are NOT volume-mounted from the host.
+
+**Why?**
+- Ensures config and code are always in sync
+- Prevents crash-loops from config/code version mismatch
+- Config changes require a new deployment (intentional - provides audit trail)
+
+**To update configuration:**
+1. Edit config files in the git repository
+2. Commit and push to `main`
+3. CI/CD will build a new image with the updated config
+4. New container starts with matching code + config
+
+**What IS volume-mounted:**
+- `sql/` - Database migrations (for flexibility)
+- `grafana/` - Dashboard definitions (for quick iteration)
+
+**Emergency config change (not recommended):**
+If you must change config without a full deployment:
+```bash
+# SSH to instance
+ssh ubuntu@<EC2_PUBLIC_IP>
+
+# Edit config inside running container (temporary - lost on restart)
+docker exec -it dislocation-trader-app sh -c "cat /app/config/default.json"
+
+# For persistent change, trigger a new deployment instead
+```
+
 ---
 
 ## Monitoring and Alerts

@@ -40,8 +40,10 @@ services:
       ENABLE_EXECUTION: ${ENABLE_EXECUTION:-true}
       ENABLE_BASE: ${ENABLE_BASE:-true}
       ENABLE_MAINNET: ${ENABLE_MAINNET:-false}
+    # Config is baked into the Docker image (not volume-mounted) to ensure
+    # config and code are always in sync. The Dockerfile COPY includes config/.
+    # SQL migrations are still mounted for flexibility.
     volumes:
-      - ../config:/app/config:ro
       - ../sql:/app/sql:ro
     networks:
       - app-network

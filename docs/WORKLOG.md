@@ -853,3 +853,56 @@ Look for log messages:
 - Spreads & Opportunities: http://3.1.140.199:3000/d/spreads
 
 ---
+
+## 2026-01-28
+
+### DevOps/Platform Agent
+
+**DONE** - Fixed config sync issue causing crash-loops on deployment
+
+**Problem:**
+- App crashed with ZodError because `pairs.json` had `"minSpreadBps": 0` instead of `"minSpreadBps": 1`
+- Root cause: Config files were volume-mounted from host (`/home/ubuntu/app/config`)
+- Host config was synced via S3 separately from Docker image
+- Race condition: New Docker image (with new config expectations) vs old host config files
+
+**Solution:**
+Bake config into Docker image, remove volume mount. This ensures config and code are ALWAYS in sync.
+
+**Files Changed:**
+1. `/Users/will/dev/blockhelix/docker/docker-compose.prod.yml`
+   - Removed `../config:/app/config:ro` volume mount
+   - Added comment explaining the design decision
+
+2. `/Users/will/dev/blockhelix/.github/workflows/deploy.yml`
+   - Removed `aws s3 sync config/` line
+   - Added comment explaining config is baked into image
+
+3. `/Users/will/dev/blockhelix/scripts/deploy.sh`
+   - Removed `aws s3 sync ... config/` line
+   - Removed `config` from `mkdir -p` command
+   - Added comment explaining the design decision
+
+4. `/Users/will/dev/blockhelix/docs/runbook.md`
+   - Added "Configuration Management" section explaining:
+     - Config is baked into image (not volume-mounted)
+     - Why this prevents crash-loops
+     - How to update config (via git commit)
+     - What IS still volume-mounted (sql/, grafana/)
+
+**Design Rationale:**
+- Config changes now require a deployment (provides audit trail)
+- Eliminates race condition between code and config versions
+- SQL migrations still mounted for flexibility
+- Grafana dashboards still mounted for quick iteration
+
+**What remains volume-mounted:**
+- `sql/` - For migration flexibility
+- `grafana/` - For dashboard hot-reload
+
+**Testing:**
+- Next deployment will use baked-in config
+- If crash-loop recurs, check Docker logs for Zod validation errors
+- Rollback: `docker-compose up -d --force-recreate` with previous IMAGE_TAG
+
+---

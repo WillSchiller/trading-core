@@ -104,7 +104,8 @@ jobs:
           aws s3 cp scripts/deploy.sh s3://blockhelixasia/deploy/deploy.sh
           aws s3 sync grafana/ s3://blockhelixasia/deploy/grafana/ --delete
           aws s3 sync sql/ s3://blockhelixasia/deploy/sql/ --delete
-          aws s3 sync config/ s3://blockhelixasia/deploy/config/ --delete
+          # NOTE: config/ is NOT synced to S3 - it is baked into the Docker image
+          # to ensure config and code are always in sync. See docker/Dockerfile.
 
       - name: Deploy via SSM
         env:

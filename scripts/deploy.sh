@@ -4,12 +4,13 @@ set -e
 cd /home/ubuntu/app
 
 echo "=== Fetching deployment files ==="
-mkdir -p docker scripts grafana/provisioning grafana/dashboards sql config
+mkdir -p docker scripts grafana/provisioning grafana/dashboards sql
 aws s3 cp s3://blockhelixasia/deploy/docker-compose.prod.yml docker/docker-compose.prod.yml
 aws s3 cp s3://blockhelixasia/deploy/fetch-secrets.sh scripts/fetch-secrets.sh
 aws s3 sync s3://blockhelixasia/deploy/grafana/ grafana/ --delete
 aws s3 sync s3://blockhelixasia/deploy/sql/ sql/ --delete
-aws s3 sync s3://blockhelixasia/deploy/config/ config/ --delete
+# NOTE: config/ is NOT synced - it is baked into the Docker image to ensure
+# config and code are always in sync. This prevents crash-loops from config/code mismatch.
 chmod +x scripts/*.sh
 echo "=== Grafana files ==="
 find grafana -type f | head -20
