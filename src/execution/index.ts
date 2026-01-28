@@ -259,6 +259,11 @@ export class ExecutionManager {
   }
 
   private async handleOpportunity(opportunity: Opportunity): Promise<void> {
+    // Skip opportunities for other chains silently
+    if (opportunity.chain !== this.chain) {
+      return;
+    }
+
     const startTime = Date.now();
     let quoteLatencyMs = 0;
     let gasEstimateLatencyMs = 0;
@@ -276,9 +281,7 @@ export class ExecutionManager {
 
     const pairConfig = this.pairsConfig.find((p) => {
       const canonical = `${p.base}/${p.quote}`;
-      return (
-        this.getPairIdFromConfig(canonical) === opportunity.pairId && p.chain === opportunity.chain
-      );
+      return this.getPairIdFromConfig(canonical) === opportunity.pairId;
     });
 
     if (!pairConfig) {
