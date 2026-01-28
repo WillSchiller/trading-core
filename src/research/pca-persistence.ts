@@ -219,13 +219,19 @@ export class PCAPersistence {
       id: number;
       timestamp: number;
       asset: string;
-      direction: string;
+      direction: 'long' | 'short';
       zScore: number;
       residual: number;
+      entryPrice: number;
+      positionSizeUsd: number;
+      pc1Return: number;
+      pc2Return: number;
+      confidence: number;
     }>
   > {
     const result = await this.pool.query(
-      `SELECT id, timestamp, asset, direction, z_score, residual
+      `SELECT id, timestamp, asset, direction, z_score, residual, entry_price,
+              position_size_usd, pc1_return, pc2_return, confidence
        FROM pca_signals
        WHERE resolved = false
        ORDER BY timestamp DESC`
@@ -235,9 +241,14 @@ export class PCAPersistence {
       id: row.id,
       timestamp: parseInt(row.timestamp),
       asset: row.asset,
-      direction: row.direction,
+      direction: row.direction as 'long' | 'short',
       zScore: parseFloat(row.z_score),
       residual: parseFloat(row.residual),
+      entryPrice: parseFloat(row.entry_price) || 0,
+      positionSizeUsd: parseFloat(row.position_size_usd) || 100,
+      pc1Return: parseFloat(row.pc1_return) || 0,
+      pc2Return: parseFloat(row.pc2_return) || 0,
+      confidence: parseFloat(row.confidence) || 0,
     }));
   }
 

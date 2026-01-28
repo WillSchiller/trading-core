@@ -248,6 +248,43 @@ export class PCAStatArbMonitor extends EventEmitter {
     this.logger.info('PCA stat-arb monitor stopped');
   }
 
+  loadPositions(positions: Array<{
+    timestamp: number;
+    asset: string;
+    direction: 'long' | 'short';
+    zScore: number;
+    residual: number;
+    entryPrice: number;
+    positionSizeUsd: number;
+    pc1Return: number;
+    pc2Return: number;
+    confidence: number;
+  }>): void {
+    for (const pos of positions) {
+      const activePos: ActivePosition = {
+        timestamp: pos.timestamp,
+        asset: pos.asset,
+        direction: pos.direction,
+        zScore: pos.zScore,
+        residual: pos.residual,
+        confidence: pos.confidence,
+        entryPrice: pos.entryPrice,
+        positionSizeUsd: pos.positionSizeUsd,
+        factorContext: { pc1Return: pos.pc1Return, pc2Return: pos.pc2Return },
+        allAssetResiduals: {},
+        peakPnlBps: 0,
+        troughPnlBps: 0,
+        lastPnlBps: 0,
+        trailingActivated: false,
+        cumulativePC1Return: 0,
+        entryPC1Loading: this.getPC1Loading(pos.asset),
+      };
+      this.activePositions.set(pos.asset, activePos);
+      this.activeSignals.set(pos.asset, activePos);
+    }
+    this.logger.info({ count: positions.length }, 'Loaded active positions from database');
+  }
+
   updatePrice(asset: string, price: number): void {
     if (!this.config.assets.includes(asset)) return;
 

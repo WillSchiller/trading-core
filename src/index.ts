@@ -560,6 +560,17 @@ async function main() {
       }
     });
 
+    // Load existing open positions from database before starting
+    try {
+      const activePositions = await pcaPersistence.getActiveSignals();
+      if (activePositions.length > 0) {
+        pcaMonitor.loadPositions(activePositions);
+        logger.info({ count: activePositions.length }, 'Loaded active PCA positions from database');
+      }
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, 'Failed to load active PCA positions');
+    }
+
     pcaMonitor.start();
 
     // Update open signal prices every 30 seconds
