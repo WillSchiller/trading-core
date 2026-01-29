@@ -161,7 +161,7 @@
       "type": "stat",
       "title": "Total P&L (bps)",
       "description": "Sum of realized P&L from closed signals",
-      "gridPos": {"x": 0, "y": 4, "w": 4, "h": 4},
+      "gridPos": {"x": 0, "y": 4, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -181,11 +181,35 @@
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
+      "id": 21,
+      "type": "stat",
+      "title": "Realized P&L ($)",
+      "description": "Total profit from closed signals",
+      "gridPos": {"x": 3, "y": 4, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Realized\" FROM pca_signals WHERE resolved = true AND timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
       "id": 15,
       "type": "stat",
       "title": "Win Rate",
       "description": "% of closed signals with positive P&L",
-      "gridPos": {"x": 4, "y": 4, "w": 4, "h": 4},
+      "gridPos": {"x": 7, "y": 4, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -209,7 +233,7 @@
       "id": 16,
       "type": "stat",
       "title": "Avg P&L (bps)",
-      "gridPos": {"x": 8, "y": 4, "w": 4, "h": 4},
+      "gridPos": {"x": 10, "y": 4, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -229,35 +253,11 @@
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
     {
-      "id": 18,
-      "type": "stat",
-      "title": "Unrealized P&L (bps)",
-      "description": "Mark-to-market P&L of open positions",
-      "gridPos": {"x": 12, "y": 4, "w": 4, "h": 4},
-      "targets": [{
-        "refId": "A",
-        "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM(CASE direction WHEN 'long' THEN ((current_price - entry_price) / NULLIF(entry_price, 0)) * 10000 WHEN 'short' THEN ((entry_price - current_price) / NULLIF(entry_price, 0)) * 10000 END), 0)::numeric, 1) as \"Unrealized\" FROM pca_signals WHERE resolved = false AND entry_price > 0 AND current_price > 0",
-        "format": "table"
-      }],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [
-            {"value": null, "color": "red"},
-            {"value": 0, "color": "green"}
-          ]}
-        }
-      },
-      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
-    },
-    {
       "id": 19,
       "type": "stat",
       "title": "Capital Deployed",
       "description": "Total notional USD in open positions",
-      "gridPos": {"x": 16, "y": 4, "w": 4, "h": 4},
+      "gridPos": {"x": 13, "y": 4, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -269,6 +269,30 @@
           "unit": "currencyUSD",
           "color": {"mode": "thresholds"},
           "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Unrealized P&L (bps)",
+      "description": "Position-weighted unrealized return of open positions",
+      "gridPos": {"x": 17, "y": 4, "w": 3, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(CASE WHEN entry_price > 0 AND current_price > 0 THEN position_size_usd * (CASE direction WHEN 'long' THEN (current_price - entry_price) / entry_price WHEN 'short' THEN (entry_price - current_price) / entry_price END) ELSE 0 END) / NULLIF(SUM(position_size_usd), 0) * 10000, 0)::numeric, 1) as \"Unrealized\" FROM pca_signals WHERE resolved = false",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
         }
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
