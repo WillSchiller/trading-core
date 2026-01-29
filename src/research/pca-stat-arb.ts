@@ -3,7 +3,7 @@ import * as math from 'mathjs';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 
 export type RegimeState = 'bullish' | 'bearish' | 'neutral';
-export type ExitReason = 'zscore' | 'time_stop' | 'trailing_stop';
+export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop';
 
 export interface PnLAttribution {
   totalPnlBps: number;
@@ -43,6 +43,8 @@ export interface LongConfig {
   entryZScore: number;
   exitZScore: number;
   maxHoldTimeMs: number;
+  minHoldTimeMs: number;
+  zeroCrossExit: boolean;
   requireRegimeConfirmation: boolean;
 }
 
@@ -56,6 +58,8 @@ export interface ShortConfig {
   entryZScore: number;
   exitZScore: number;
   maxHoldTimeMs: number;
+  minHoldTimeMs: number;
+  zeroCrossExit: boolean;
   trailingExit: TrailingExitConfig;
 }
 
@@ -111,15 +115,19 @@ const DEFAULT_CONFIG: PCAConfig = {
     maxPortfolioPC1ExposureUsd: 150,
   },
   long: {
-    entryZScore: 2.5,
-    exitZScore: 0.3,
+    entryZScore: 2.8,
+    exitZScore: 0.0,
     maxHoldTimeMs: 1800000,
+    minHoldTimeMs: 1200000,
+    zeroCrossExit: true,
     requireRegimeConfirmation: true,
   },
   short: {
-    entryZScore: 2.0,
-    exitZScore: 0.5,
+    entryZScore: 2.2,
+    exitZScore: 0.0,
     maxHoldTimeMs: 7200000,
+    minHoldTimeMs: 1200000,
+    zeroCrossExit: true,
     trailingExit: {
       enabled: true,
       activationPnlBps: 20,
@@ -1076,6 +1084,8 @@ export class PCAStatArbMonitor extends EventEmitter {
     const direction = position.direction;
     const dirConfig = direction === 'long' ? this.config.long : this.config.short;
     const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
+    const minHoldTimeMs = dirConfig?.minHoldTimeMs ?? 0;
+    const useZeroCrossExit = dirConfig?.zeroCrossExit ?? false;
 
     let currentPnlBps = 0;
     if (position.entryPrice > 0 && currentPrice > 0) {
@@ -1090,13 +1100,32 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    // Z-score exit for both directions (strict mode)
-    const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
-    if (Math.abs(currentZScore) < exitZScore) {
-      return { shouldExit: true, reason: 'zscore' };
+    const passedMinHold = holdTimeMs >= minHoldTimeMs;
+
+    if (useZeroCrossExit) {
+      const entrySign = position.zScore > 0 ? 1 : -1;
+      const currentSign = currentZScore > 0 ? 1 : -1;
+      const zeroCrossed = entrySign !== currentSign;
+      if (zeroCrossed) {
+        if (passedMinHold) {
+          return { shouldExit: true, reason: 'zero_cross' };
+        }
+        this.logger.debug({
+          asset: position.asset,
+          holdMin: (holdTimeMs / 60000).toFixed(1),
+          minHoldMin: (minHoldTimeMs / 60000).toFixed(0),
+          entryZ: position.zScore.toFixed(2),
+          currentZ: currentZScore.toFixed(2),
+        }, 'Zero-cross detected but minHold not met');
+      }
+    } else {
+      const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
+      if (Math.abs(currentZScore) < exitZScore && passedMinHold) {
+        return { shouldExit: true, reason: 'zscore' };
+      }
     }
 
-    // Trailing stop for shorts (only if enabled)
+    // Trailing stop for shorts (only if enabled) - can fire before minHold
     if (direction === 'short' && this.config.short?.trailingExit?.enabled) {
       const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
