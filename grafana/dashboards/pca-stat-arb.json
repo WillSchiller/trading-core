@@ -394,10 +394,14 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY asset ORDER BY \"Count\" DESC",
+        "rawSql": "SELECT asset as \"Asset\", COUNT(*)::float as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY asset ORDER BY \"Count\" DESC",
         "format": "table"
       }],
-      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+      "options": {
+        "legend": {"displayMode": "list", "placement": "right"},
+        "pieType": "pie",
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^Count$/"}
+      }
     },
     {
       "id": 11,
@@ -407,7 +411,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT direction as \"Direction\", COUNT(*) as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY direction",
+        "rawSql": "SELECT direction as \"Direction\", COUNT(*)::float as \"Count\" FROM pca_signals WHERE timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY direction",
         "format": "table"
       }],
       "fieldConfig": {
@@ -416,7 +420,11 @@
           {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
         ]
       },
-      "options": {"legend": {"displayMode": "list", "placement": "right"}}
+      "options": {
+        "legend": {"displayMode": "list", "placement": "right"},
+        "pieType": "pie",
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^Count$/"}
+      }
     },
     {
       "id": 12,
