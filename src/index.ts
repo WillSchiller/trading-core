@@ -569,6 +569,13 @@ async function main() {
       logger.error({ error: (err as Error).message }, 'Failed to load price history');
     }
 
+    // Cleanup orphaned positions (multiple unresolved per asset) before loading
+    try {
+      await pcaPersistence.cleanupOrphanedPositions();
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, 'Failed to cleanup orphaned positions');
+    }
+
     // Load existing open positions from database before starting
     try {
       const activePositions = await pcaPersistence.getActiveSignals();

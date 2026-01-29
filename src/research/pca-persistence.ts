@@ -213,6 +213,26 @@ export class PCAPersistence {
     }));
   }
 
+  async cleanupOrphanedPositions(): Promise<number> {
+    const result = await this.pool.query(
+      `WITH ranked AS (
+         SELECT id, asset, timestamp,
+                ROW_NUMBER() OVER (PARTITION BY asset ORDER BY timestamp DESC) as rn
+         FROM pca_signals
+         WHERE resolved = false
+       )
+       UPDATE pca_signals
+       SET resolved = true, exit_timestamp = $1, exit_reason = 'orphaned'
+       WHERE id IN (SELECT id FROM ranked WHERE rn > 1)
+       RETURNING id`,
+      [Date.now()]
+    );
+    if (result.rowCount && result.rowCount > 0) {
+      this.logger.info({ count: result.rowCount }, 'Cleaned up orphaned positions');
+    }
+    return result.rowCount ?? 0;
+  }
+
   async getActiveSignals(): Promise<
     Array<{
       id: number;
