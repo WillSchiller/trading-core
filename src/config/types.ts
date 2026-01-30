@@ -140,6 +140,62 @@ export interface PairConfig {
   thresholds: PairThresholds;
 }
 
+export interface PCATrailingExitConfig {
+  enabled: boolean;
+  activationPnlBps: number;
+  trailStopBps: number;
+}
+
+export interface PCARegimeGatingConfig {
+  enabled: boolean;
+  ewmaSpan: number;
+  regimeThreshold: number;
+  hysteresisTicks: number;
+}
+
+export interface PCAExposureLimitsConfig {
+  maxPositionsLong: number;
+  maxPositionsShort: number;
+  maxPositionsTotal: number;
+}
+
+export interface PCASizingConfig {
+  mode: 'flat' | 'vol_adjusted' | 'factor_neutral';
+  baseNotionalUsd: number;
+  minPositionUsd: number;
+  maxPositionUsd: number;
+  targetVolBps?: number;
+  loadingSmoothingSpan?: number;
+  maxPortfolioPC1ExposureUsd?: number;
+}
+
+export interface PCALongConfig {
+  enabled: boolean;
+  entryZScore: number;
+  exitZScore: number;
+  maxHoldTimeMs: number;
+  minHoldTimeMs: number;
+  zeroCrossExit: boolean;
+  stopLossBps: number;
+  requireRegimeConfirmation: boolean;
+}
+
+export interface PCAShortConfig {
+  entryZScore: number;
+  exitZScore: number;
+  maxHoldTimeMs: number;
+  minHoldTimeMs: number;
+  zeroCrossExit: boolean;
+  zscoreExit: boolean;
+  stopLossBps: number;
+  stopLossIgnoresMinHold: boolean;
+  trailingExit: PCATrailingExitConfig;
+}
+
+export interface PCAOrphanCleanupConfig {
+  maxStaleMs: number;
+}
+
 export interface PCAStatArbConfig {
   enabled: boolean;
   assets: string[];
@@ -152,6 +208,13 @@ export interface PCAStatArbConfig {
   exitZScore: number;
   tickIntervalMs: number;
   pcaRefreshPeriods: number;
+  positionSizeUsd: number;
+  regimeGating: PCARegimeGatingConfig;
+  exposureLimits: PCAExposureLimitsConfig;
+  sizing: PCASizingConfig;
+  long: PCALongConfig;
+  short: PCAShortConfig;
+  orphanCleanup?: PCAOrphanCleanupConfig;
 }
 
 export interface ResearchConfig {

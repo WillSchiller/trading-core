@@ -1,7 +1,7 @@
 {
   "id": null,
   "uid": "pca-stat-arb",
-  "title": "PCA Statistical Arbitrage",
+  "title": "Dislocation-Triggered Short Momentum",
   "tags": ["dislocation-trader", "research"],
   "timezone": "utc",
   "schemaVersion": 38,
@@ -321,11 +321,209 @@
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
     },
+
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Profit & P&L",
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 101,
+      "type": "stat",
+      "title": "All-Time P&L (USD)",
+      "description": "Sum of realized P&L from all resolved signals",
+      "gridPos": {"x": 0, "y": 9, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"All-Time P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 102,
+      "type": "stat",
+      "title": "Today's P&L (USD)",
+      "description": "Sum of realized P&L for today (UTC)",
+      "gridPos": {"x": 5, "y": 9, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Today P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 103,
+      "type": "bargauge",
+      "title": "P&L by Direction",
+      "description": "Total USD P&L split by long vs short",
+      "gridPos": {"x": 10, "y": 9, "w": 14, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT direction as \"Direction\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY direction ORDER BY direction",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "long"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/P&L/"},
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "namePlacement": "auto"
+      },
+      "transformations": [{
+        "id": "rowsToFields",
+        "options": {"mappings": [{"fieldName": "Direction", "handlerKey": "field.name"}, {"fieldName": "P&L ($)", "handlerKey": "field.value"}]}
+      }]
+    },
+    {
+      "id": 104,
+      "type": "timeseries",
+      "title": "Cumulative P&L (USD)",
+      "description": "Running total of USD P&L over time",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp / 1000) as time, SUM(pnl_usd) OVER (ORDER BY timestamp) as \"Cumulative P&L ($)\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL ORDER BY timestamp",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "pointSize": 3, "showPoints": "auto", "gradientMode": "scheme"},
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
+      }
+    },
+    {
+      "id": 105,
+      "type": "table",
+      "title": "Daily P&L Table",
+      "description": "Daily breakdown of P&L with trade counts and win rate",
+      "gridPos": {"x": 0, "y": 21, "w": 10, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_char(to_timestamp(timestamp / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD') as \"Day\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg P&L ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY 1 ORDER BY 1 DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win Rate %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      }
+    },
+    {
+      "id": 106,
+      "type": "table",
+      "title": "P&L by Asset",
+      "description": "Total USD P&L per asset sorted by P&L",
+      "gridPos": {"x": 10, "y": 21, "w": 7, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY asset ORDER BY SUM(pnl_usd) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]}
+        ]
+      }
+    },
+    {
+      "id": 107,
+      "type": "table",
+      "title": "P&L by Exit Reason",
+      "description": "Performance breakdown by exit type",
+      "gridPos": {"x": 17, "y": 21, "w": 7, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY exit_reason ORDER BY SUM(pnl_usd) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      }
+    },
+
     {
       "id": 7,
       "type": "timeseries",
       "title": "Z-Scores Over Time",
-      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 29, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -344,7 +542,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Residuals Over Time",
-      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 29, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -363,7 +561,7 @@
       "id": 9,
       "type": "table",
       "title": "Recent Signals",
-      "gridPos": {"x": 0, "y": 16, "w": 16, "h": 8},
+      "gridPos": {"x": 0, "y": 37, "w": 16, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -390,7 +588,7 @@
       "id": 10,
       "type": "piechart",
       "title": "Signals by Asset",
-      "gridPos": {"x": 16, "y": 16, "w": 4, "h": 8},
+      "gridPos": {"x": 16, "y": 37, "w": 4, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -407,7 +605,7 @@
       "id": 11,
       "type": "piechart",
       "title": "Signals by Direction",
-      "gridPos": {"x": 20, "y": 16, "w": 4, "h": 8},
+      "gridPos": {"x": 20, "y": 37, "w": 4, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -430,7 +628,7 @@
       "id": 12,
       "type": "table",
       "title": "Signal Performance by Asset",
-      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 6},
+      "gridPos": {"x": 0, "y": 45, "w": 12, "h": 6},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -443,7 +641,7 @@
       "type": "table",
       "title": "Latest Factor Loadings (PC1)",
       "description": "Current PC1 loadings for each asset - represents market sensitivity",
-      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 6},
+      "gridPos": {"x": 12, "y": 45, "w": 12, "h": 6},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -455,7 +653,7 @@
       "id": 30,
       "type": "row",
       "title": "Risk & Sustainability",
-      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 51, "w": 24, "h": 1},
       "collapsed": false,
       "panels": []
     },
@@ -464,7 +662,7 @@
       "type": "stat",
       "title": "Daily Sharpe Ratio",
       "description": "Avg daily return / stddev of daily returns (annualized = x sqrt(365))",
-      "gridPos": {"x": 0, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 0, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -489,7 +687,7 @@
       "type": "stat",
       "title": "Max Drawdown (bps)",
       "description": "Worst peak-to-trough decline in cumulative P&L",
-      "gridPos": {"x": 4, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 4, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -516,7 +714,7 @@
       "type": "stat",
       "title": "Profit Factor",
       "description": "Sum of winning trades / abs(sum of losing trades). Want > 1.5",
-      "gridPos": {"x": 8, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 8, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -541,7 +739,7 @@
       "type": "stat",
       "title": "Win/Loss Ratio",
       "description": "Avg winning trade size / avg losing trade size",
-      "gridPos": {"x": 12, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 12, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -567,7 +765,7 @@
       "type": "stat",
       "title": "Longest Losing Streak",
       "description": "Max consecutive trades with pnl_bps <= 0",
-      "gridPos": {"x": 16, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 16, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -593,7 +791,7 @@
       "type": "stat",
       "title": "Time to Recovery",
       "description": "Minutes from max drawdown trough back to previous peak",
-      "gridPos": {"x": 20, "y": 31, "w": 4, "h": 4},
+      "gridPos": {"x": 20, "y": 52, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -620,7 +818,7 @@
       "type": "timeseries",
       "title": "Cumulative P&L & Drawdown",
       "description": "Cumulative P&L curve with drawdown from peak shown below",
-      "gridPos": {"x": 0, "y": 35, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 56, "w": 24, "h": 8},
       "targets": [
         {
           "refId": "A",
@@ -662,6 +860,112 @@
         "legend": {"displayMode": "list", "placement": "bottom"},
         "tooltip": {"mode": "multi", "sort": "none"}
       }
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Shadow Monitoring & MAE/MFE Analysis",
+      "gridPos": {"x": 0, "y": 64, "w": 24, "h": 1},
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 201,
+          "type": "table",
+          "title": "Shadow vs Real Exit Comparison",
+          "description": "Compare real exit P&L with shadow (hold-longer) P&L to evaluate if exits are premature",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "gridPos": {"x": 0, "y": 65, "w": 24, "h": 8},
+          "targets": [
+            {
+              "rawSql": "SELECT entry_time, asset, direction, exit_reason, real_pnl_bps, real_mfe_bps, real_mae_bps, real_hold_min, shadow_pnl_bps, shadow_mfe_bps, shadow_mae_bps, shadow_hold_min, shadow_exit_reason, shadow_vs_real_bps, shadow_better FROM v_pca_mae_mfe LIMIT 50",
+              "format": "table",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {"align": "auto", "filterable": true}
+            }
+          },
+          "options": {
+            "showHeader": true,
+            "footer": {"show": false},
+            "sortBy": [{"displayName": "signal_timestamp", "desc": true}]
+          }
+        },
+        {
+          "id": 202,
+          "type": "table",
+          "title": "Stop Analysis: Do Stopped Trades Recover?",
+          "description": "For trades exited by stop-loss, did the shadow position recover? Helps tune stop levels.",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "gridPos": {"x": 0, "y": 73, "w": 24, "h": 8},
+          "targets": [
+            {
+              "rawSql": "SELECT real_exit_reason, direction, total_trades, real_winners, real_win_pct, shadow_winners, shadow_win_pct, avg_real_pnl, avg_shadow_pnl, avg_improvement_bps, shadow_better_count, shadow_better_pct FROM v_pca_stop_analysis",
+              "format": "table",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {"align": "auto", "filterable": true}
+            }
+          },
+          "options": {
+            "showHeader": true,
+            "footer": {"show": false}
+          }
+        },
+        {
+          "id": 203,
+          "type": "table",
+          "title": "MAE Distribution (Real vs Shadow)",
+          "description": "Maximum Adverse Excursion bucketed by exit reason — how deep did trades go before exiting?",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "gridPos": {"x": 0, "y": 81, "w": 12, "h": 8},
+          "targets": [
+            {
+              "rawSql": "SELECT direction, exit_reason, trades, mae_0_25, mae_25_50, mae_50_100, mae_100_150, mae_gt_150, mae_p5_bps, mae_p25_bps, mae_p50_bps FROM v_pca_mae_distribution",
+              "format": "table",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {"align": "auto", "filterable": true}
+            }
+          },
+          "options": {
+            "showHeader": true,
+            "footer": {"show": false}
+          }
+        },
+        {
+          "id": 204,
+          "type": "table",
+          "title": "Shadow P&L Attribution",
+          "description": "How much P&L came from factor (PC1) vs residual in shadow positions",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "gridPos": {"x": 12, "y": 81, "w": 12, "h": 8},
+          "targets": [
+            {
+              "rawSql": "SELECT direction, real_exit_reason, shadow_exit_reason, trades, winner_pc1_bps, winner_residual_bps, loser_pc1_bps, loser_residual_bps, residual_driven_winners, pc1_driven_winners FROM v_pca_shadow_driver",
+              "format": "table",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {"align": "auto", "filterable": true}
+            }
+          },
+          "options": {
+            "showHeader": true,
+            "footer": {"show": false}
+          }
+        }
+      ]
     }
   ]
 }

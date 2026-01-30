@@ -34,15 +34,24 @@ const createTestConfig = (overrides: Partial<PCAConfig> = {}): Partial<PCAConfig
     maxPortfolioPC1ExposureUsd: 150,
   },
   long: {
+    enabled: true,
     entryZScore: 2.5,
     exitZScore: 0.3,
     maxHoldTimeMs: 30000,
+    minHoldTimeMs: 0,
+    zeroCrossExit: true,
+    stopLossBps: 150,
     requireRegimeConfirmation: true,
   },
   short: {
     entryZScore: 2.0,
     exitZScore: 0.5,
     maxHoldTimeMs: 60000,
+    minHoldTimeMs: 0,
+    zeroCrossExit: false,
+    zscoreExit: true,
+    stopLossBps: 150,
+    stopLossIgnoresMinHold: false,
     trailingExit: {
       enabled: true,
       activationPnlBps: 20,
@@ -398,9 +407,13 @@ describe('PCAStatArbMonitor', () => {
     it('triggers time stop for long after max hold time', () => {
       const monitor = new PCAStatArbMonitor(createTestConfig({
         long: {
+          enabled: true,
           entryZScore: 2.5,
           exitZScore: 0.3,
           maxHoldTimeMs: 10000,
+          minHoldTimeMs: 0,
+          zeroCrossExit: true,
+          stopLossBps: 150,
           requireRegimeConfirmation: true,
         },
       }));
@@ -426,6 +439,11 @@ describe('PCAStatArbMonitor', () => {
           entryZScore: 2.0,
           exitZScore: 0.5,
           maxHoldTimeMs: 20000,
+          minHoldTimeMs: 0,
+          zeroCrossExit: false,
+          zscoreExit: true,
+          stopLossBps: 150,
+          stopLossIgnoresMinHold: false,
           trailingExit: { enabled: true, activationPnlBps: 20, trailStopBps: 15 },
         },
       }));

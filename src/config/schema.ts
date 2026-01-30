@@ -136,6 +136,106 @@ export const pairConfigSchema = z.object({
   thresholds: pairThresholdsSchema,
 });
 
+const trailingExitConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  activationPnlBps: z.number().default(25),
+  trailStopBps: z.number().default(20),
+}).default({
+  enabled: true,
+  activationPnlBps: 25,
+  trailStopBps: 20,
+});
+
+const regimeGatingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  ewmaSpan: z.number().int().positive().default(10),
+  regimeThreshold: z.number().default(0.5),
+  hysteresisTicks: z.number().int().positive().default(3),
+}).default({
+  enabled: true,
+  ewmaSpan: 10,
+  regimeThreshold: 0.5,
+  hysteresisTicks: 3,
+});
+
+const exposureLimitsConfigSchema = z.object({
+  maxPositionsLong: z.number().int().nonnegative().default(3),
+  maxPositionsShort: z.number().int().nonnegative().default(5),
+  maxPositionsTotal: z.number().int().nonnegative().default(6),
+}).default({
+  maxPositionsLong: 3,
+  maxPositionsShort: 5,
+  maxPositionsTotal: 6,
+});
+
+const sizingConfigSchema = z.object({
+  mode: z.enum(['flat', 'vol_adjusted', 'factor_neutral']).default('factor_neutral'),
+  baseNotionalUsd: z.number().positive().default(100),
+  minPositionUsd: z.number().positive().default(25),
+  maxPositionUsd: z.number().positive().default(200),
+  targetVolBps: z.number().positive().optional(),
+  loadingSmoothingSpan: z.number().int().positive().optional(),
+  maxPortfolioPC1ExposureUsd: z.number().positive().optional(),
+}).default({
+  mode: 'factor_neutral',
+  baseNotionalUsd: 100,
+  minPositionUsd: 25,
+  maxPositionUsd: 200,
+  targetVolBps: 100,
+  loadingSmoothingSpan: 20,
+  maxPortfolioPC1ExposureUsd: 150,
+});
+
+const longConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  entryZScore: z.number().positive().default(3.0),
+  exitZScore: z.number().nonnegative().default(0.0),
+  maxHoldTimeMs: z.number().int().positive().default(21600000),
+  minHoldTimeMs: z.number().int().nonnegative().default(2700000),
+  zeroCrossExit: z.boolean().default(true),
+  stopLossBps: z.number().positive().default(150),
+  requireRegimeConfirmation: z.boolean().default(true),
+}).default({
+  enabled: true,
+  entryZScore: 3.0,
+  exitZScore: 0.0,
+  maxHoldTimeMs: 21600000,
+  minHoldTimeMs: 2700000,
+  zeroCrossExit: true,
+  stopLossBps: 150,
+  requireRegimeConfirmation: true,
+});
+
+const shortConfigSchema = z.object({
+  entryZScore: z.number().positive().default(2.5),
+  exitZScore: z.number().nonnegative().default(0.0),
+  maxHoldTimeMs: z.number().int().positive().default(43200000),
+  minHoldTimeMs: z.number().int().nonnegative().default(1800000),
+  zeroCrossExit: z.boolean().default(false),
+  zscoreExit: z.boolean().default(true),
+  stopLossBps: z.number().positive().default(150),
+  stopLossIgnoresMinHold: z.boolean().default(false),
+  trailingExit: trailingExitConfigSchema,
+}).default({
+  entryZScore: 2.5,
+  exitZScore: 0.0,
+  maxHoldTimeMs: 43200000,
+  minHoldTimeMs: 1800000,
+  zeroCrossExit: false,
+  zscoreExit: true,
+  stopLossBps: 150,
+  stopLossIgnoresMinHold: false,
+  trailingExit: {
+    enabled: true,
+    activationPnlBps: 25,
+    trailStopBps: 20,
+  },
+});
+
+const orphanCleanupConfigSchema = z.object({
+  maxStaleMs: z.number().int().positive().default(7200000),
+}).optional();
+
 export const pcaStatArbConfigSchema = z.object({
   enabled: z.boolean().default(true),
   assets: z.array(z.string()).default(['ETH', 'BTC', 'SOL', 'AVAX', 'MATIC', 'ARB']),
@@ -148,6 +248,13 @@ export const pcaStatArbConfigSchema = z.object({
   exitZScore: z.number().positive().default(0.5),
   tickIntervalMs: z.number().int().positive().default(60000),
   pcaRefreshPeriods: z.number().int().positive().default(15),
+  positionSizeUsd: z.number().positive().default(100),
+  regimeGating: regimeGatingConfigSchema,
+  exposureLimits: exposureLimitsConfigSchema,
+  sizing: sizingConfigSchema,
+  long: longConfigSchema,
+  short: shortConfigSchema,
+  orphanCleanup: orphanCleanupConfigSchema,
 });
 
 export const researchConfigSchema = z.object({

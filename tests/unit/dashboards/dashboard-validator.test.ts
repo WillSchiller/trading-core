@@ -452,6 +452,10 @@ describe('Grafana Dashboard Validation', () => {
         'v_pca_signal_performance',
         'v_pca_residual_stats',
         'v_pca_factor_history',
+        'v_pca_mae_mfe',
+        'v_pca_stop_analysis',
+        'v_pca_mae_distribution',
+        'v_pca_shadow_driver',
       ];
 
       for (const [file, dashboard] of dashboards) {

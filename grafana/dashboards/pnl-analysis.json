@@ -63,7 +63,7 @@
           {"text": "All", "value": "all", "selected": true},
           {"text": "Dislocation", "value": "dislocation", "selected": false},
           {"text": "Rank Space", "value": "rank_space", "selected": false},
-          {"text": "PCA Stat-Arb", "value": "pca_stat_arb", "selected": false}
+          {"text": "Short Momentum", "value": "pca_stat_arb", "selected": false}
         ],
         "current": {"text": "All", "value": "all"},
         "multi": false,

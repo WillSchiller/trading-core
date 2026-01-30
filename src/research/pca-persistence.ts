@@ -213,9 +213,8 @@ export class PCAPersistence {
     }));
   }
 
-  async cleanupOrphanedPositions(): Promise<number> {
+  async cleanupOrphanedPositions(maxStaleMs: number = 7200000): Promise<number> {
     const now = Date.now();
-    const maxStaleMs = 7200000;
 
     const result = await this.pool.query(
       `WITH duplicates AS (
@@ -238,12 +237,10 @@ export class PCAPersistence {
        RETURNING id, asset`,
       [now, maxStaleMs]
     );
-    if (result.rowCount && result.rowCount > 0) {
-      this.logger.info(
-        { count: result.rowCount, assets: result.rows.map((r: { asset: string }) => r.asset) },
-        'Cleaned up orphaned positions (duplicates + stale > 2h)'
-      );
-    }
+    this.logger.info(
+      { count: result.rowCount ?? 0, maxStaleMs, assets: result.rows.map((r: { asset: string }) => r.asset) },
+      'Orphan cleanup completed'
+    );
     return result.rowCount ?? 0;
   }
 

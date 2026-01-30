@@ -108,17 +108,26 @@
         "maxPortfolioPC1ExposureUsd": 150
       },
       "long": {
-        "entryZScore": 2.0,
+        "enabled": false,
+        "entryZScore": 3.5,
         "exitZScore": 0.5,
         "maxHoldTimeMs": 1800000,
-        "requireRegimeConfirmation": false
+        "minHoldTimeMs": 2700000,
+        "zeroCrossExit": true,
+        "stopLossBps": 75,
+        "requireRegimeConfirmation": true
       },
       "short": {
-        "entryZScore": 2.0,
+        "entryZScore": 2.5,
         "exitZScore": 0.5,
-        "maxHoldTimeMs": 1800000,
+        "maxHoldTimeMs": 14400000,
+        "minHoldTimeMs": 1800000,
+        "zeroCrossExit": false,
+        "zscoreExit": false,
+        "stopLossBps": 75,
+        "stopLossIgnoresMinHold": true,
         "trailingExit": {
-          "enabled": false,
+          "enabled": true,
           "activationPnlBps": 20,
           "trailStopBps": 15
         }

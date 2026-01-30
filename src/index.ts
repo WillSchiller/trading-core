@@ -581,7 +581,8 @@ async function main() {
 
     // Cleanup orphaned positions (multiple unresolved per asset) before loading
     try {
-      await pcaPersistence.cleanupOrphanedPositions();
+      const orphanMaxStaleMs = pcaConfig.orphanCleanup?.maxStaleMs ?? 7200000;
+      await pcaPersistence.cleanupOrphanedPositions(orphanMaxStaleMs);
     } catch (err) {
       logger.error({ error: (err as Error).message }, 'Failed to cleanup orphaned positions');
     }

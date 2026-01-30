@@ -73,6 +73,7 @@ export interface SizingConfig {
 }
 
 export interface LongConfig {
+  enabled: boolean;
   entryZScore: number;
   exitZScore: number;
   maxHoldTimeMs: number;
@@ -94,8 +95,14 @@ export interface ShortConfig {
   maxHoldTimeMs: number;
   minHoldTimeMs: number;
   zeroCrossExit: boolean;
+  zscoreExit: boolean;
   stopLossBps: number;
+  stopLossIgnoresMinHold: boolean;
   trailingExit: TrailingExitConfig;
+}
+
+export interface OrphanCleanupConfig {
+  maxStaleMs: number;
 }
 
 export interface PCAConfig {
@@ -110,11 +117,12 @@ export interface PCAConfig {
   tickIntervalMs: number;
   pcaRefreshPeriods: number;
   positionSizeUsd: number;
-  regimeGating?: RegimeGatingConfig;
-  exposureLimits?: ExposureLimitsConfig;
-  sizing?: SizingConfig;
-  long?: LongConfig;
-  short?: ShortConfig;
+  regimeGating: RegimeGatingConfig;
+  exposureLimits: ExposureLimitsConfig;
+  sizing: SizingConfig;
+  long: LongConfig;
+  short: ShortConfig;
+  orphanCleanup?: OrphanCleanupConfig;
 }
 
 const DEFAULT_CONFIG: PCAConfig = {
@@ -150,10 +158,11 @@ const DEFAULT_CONFIG: PCAConfig = {
     maxPortfolioPC1ExposureUsd: 150,
   },
   long: {
+    enabled: true,
     entryZScore: 3.0,
     exitZScore: 0.0,
-    maxHoldTimeMs: 21600000,    // 6 hours
-    minHoldTimeMs: 2700000,     // 45 min
+    maxHoldTimeMs: 21600000,
+    minHoldTimeMs: 2700000,
     zeroCrossExit: true,
     stopLossBps: 150,
     requireRegimeConfirmation: true,
@@ -161,10 +170,12 @@ const DEFAULT_CONFIG: PCAConfig = {
   short: {
     entryZScore: 2.5,
     exitZScore: 0.0,
-    maxHoldTimeMs: 43200000,    // 12 hours
-    minHoldTimeMs: 1800000,     // 30 min
-    zeroCrossExit: false,       // trailing stop only for shorts
+    maxHoldTimeMs: 43200000,
+    minHoldTimeMs: 1800000,
+    zeroCrossExit: false,
+    zscoreExit: true,
     stopLossBps: 150,
+    stopLossIgnoresMinHold: false,
     trailingExit: {
       enabled: true,
       activationPnlBps: 25,
@@ -279,6 +290,15 @@ export class PCAStatArbMonitor extends EventEmitter {
         numFactors: this.config.numFactors,
         entryZScore: this.config.entryZScore,
         tickIntervalMs: this.config.tickIntervalMs,
+        longEnabled: this.config.long.enabled,
+        shortEntryZScore: this.config.short.entryZScore,
+        shortTrailingEnabled: this.config.short.trailingExit.enabled,
+        shortZscoreExit: this.config.short.zscoreExit,
+        shortZeroCrossExit: this.config.short.zeroCrossExit,
+        shortStopLossBps: this.config.short.stopLossBps,
+        shortStopLossIgnoresMinHold: this.config.short.stopLossIgnoresMinHold,
+        shortMaxHoldTimeMs: this.config.short.maxHoldTimeMs,
+        longStopLossBps: this.config.long.stopLossBps,
       },
       'PCA stat-arb monitor started'
     );
@@ -429,9 +449,10 @@ export class PCAStatArbMonitor extends EventEmitter {
         holdMin: ((now - pos.timestamp) / 60000).toFixed(1),
         hasPrice: this.getCurrentPrice(asset) > 0,
       }));
-      this.logger.info({ positions: positionSummary }, 'Checking positions for time-stop');
+      this.logger.info({ positions: positionSummary }, 'Checking positions for price-based exits');
     }
 
+    const toRemove: string[] = [];
     for (const [asset, position] of this.activePositions) {
       const currentPrice = this.getCurrentPrice(asset);
       if (currentPrice <= 0) {
@@ -440,29 +461,64 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
 
       const holdTimeMs = now - position.timestamp;
-      const dirConfig = position.direction === 'long' ? this.config.long : this.config.short;
-      const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
+      const direction = position.direction;
+      const dirConfig = direction === 'long' ? this.config.long : this.config.short;
+      const maxHoldTimeMs = dirConfig.maxHoldTimeMs ?? Infinity;
+      const minHoldTimeMs = dirConfig.minHoldTimeMs ?? 0;
 
-      if (holdTimeMs >= maxHoldTimeMs) {
-        // Calculate P&L from prices (don't rely on tracked lastPnlBps which may be stale)
-        const entryPrice = position.entryPrice;
-        let pnlBps = 0;
-        if (entryPrice > 0) {
-          const priceChange = (currentPrice - entryPrice) / entryPrice;
-          pnlBps = position.direction === 'long' ? priceChange * 10000 : -priceChange * 10000;
+      const entryPrice = position.entryPrice;
+      let pnlBps = 0;
+      if (entryPrice > 0) {
+        const priceChange = (currentPrice - entryPrice) / entryPrice;
+        pnlBps = direction === 'long' ? priceChange * 10000 : -priceChange * 10000;
+      }
+      position.lastPnlBps = pnlBps;
+      position.peakPnlBps = Math.max(position.peakPnlBps, pnlBps);
+      position.troughPnlBps = Math.min(position.troughPnlBps, pnlBps);
+
+      let exitReason: ExitReason | null = null;
+
+      // 1. Hard stop-loss
+      const stopLossBps = dirConfig.stopLossBps ?? 100;
+      const ignoresMinHold = direction === 'short'
+        ? this.config.short.stopLossIgnoresMinHold
+        : false;
+      if (pnlBps <= -stopLossBps && (ignoresMinHold || holdTimeMs >= minHoldTimeMs)) {
+        exitReason = 'stop_loss';
+      }
+
+      // 2. Time stop
+      if (!exitReason && holdTimeMs >= maxHoldTimeMs) {
+        exitReason = 'time_stop';
+      }
+
+      // 3. Trailing stop
+      if (!exitReason && direction === 'short' && this.config.short.trailingExit.enabled) {
+        const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
+        if (pnlBps >= activationPnlBps) {
+          position.trailingActivated = true;
         }
+        if (position.trailingActivated) {
+          const drawdownFromPeak = position.peakPnlBps - pnlBps;
+          if (drawdownFromPeak >= trailStopBps) {
+            exitReason = 'trailing_stop';
+          }
+        }
+      }
 
+      if (exitReason) {
         this.logger.info(
           {
             asset,
-            direction: position.direction,
+            direction,
+            exitReason,
             holdTimeMin: (holdTimeMs / 60000).toFixed(1),
             maxHoldTimeMin: (maxHoldTimeMs / 60000).toFixed(1),
             entryPrice,
             exitPrice: currentPrice,
             pnlBps: pnlBps.toFixed(1),
           },
-          'Time-stop triggered'
+          'Price-based exit triggered'
         );
 
         const attribution = this.computeAttribution(position);
@@ -473,7 +529,7 @@ export class PCAStatArbMonitor extends EventEmitter {
           holdTimeMs,
           exitPrice: currentPrice,
           pnlBps,
-          exitReason: 'time_stop',
+          exitReason,
           peakPnlBps: position.peakPnlBps,
           troughPnlBps: position.troughPnlBps,
           regimeState: this.regimeState,
@@ -481,12 +537,16 @@ export class PCAStatArbMonitor extends EventEmitter {
         };
 
         this.emit('exit', exitEvent);
-        if (this.shouldShadow('time_stop', holdTimeMs)) {
-          this.addShadowPosition(position, now, 'time_stop');
+        if (this.shouldShadow(exitReason, holdTimeMs)) {
+          this.addShadowPosition(position, now, exitReason);
         }
-        this.activePositions.delete(asset);
-        this.activeSignals.delete(asset);
+        toRemove.push(asset);
       }
+    }
+
+    for (const asset of toRemove) {
+      this.activePositions.delete(asset);
+      this.activeSignals.delete(asset);
     }
   }
 
@@ -625,7 +685,7 @@ export class PCAStatArbMonitor extends EventEmitter {
 
   private updateSmoothedLoadings(): void {
     if (!this.factorModel) return;
-    const span = this.config.sizing?.loadingSmoothingSpan ?? 20;
+    const span = this.config.sizing.loadingSmoothingSpan ?? 20;
     const alpha = 2 / (span + 1);
 
     for (const [asset, betas] of this.factorModel.assetBetas) {
@@ -1060,7 +1120,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   }
 
   private wouldBreachPC1Exposure(asset: string, direction: 'long' | 'short'): boolean {
-    const maxExposure = this.config.sizing?.maxPortfolioPC1ExposureUsd;
+    const maxExposure = this.config.sizing.maxPortfolioPC1ExposureUsd;
     if (!maxExposure) return false;
 
     const currentExposure = this.computePortfolioPC1Exposure();
@@ -1081,22 +1141,22 @@ export class PCAStatArbMonitor extends EventEmitter {
   }
 
   private shouldEnterLong(zScore: number, asset: string): boolean {
+    if (this.config.long.enabled === false) return false;
+
     const longConfig = this.config.long;
-    const threshold = longConfig?.entryZScore ?? this.config.entryZScore;
+    const threshold = longConfig.entryZScore ?? this.config.entryZScore;
     if (zScore > -threshold) return false;
 
-    if (longConfig?.requireRegimeConfirmation && this.config.regimeGating?.enabled) {
+    if (longConfig.requireRegimeConfirmation && this.config.regimeGating.enabled) {
       if (this.regimeState === 'bearish') {
         return false;
       }
     }
 
     const limits = this.config.exposureLimits;
-    if (limits) {
-      const counts = this.countPositionsByDirection();
-      if (counts.long >= limits.maxPositionsLong) return false;
-      if (counts.total >= limits.maxPositionsTotal) return false;
-    }
+    const counts = this.countPositionsByDirection();
+    if (counts.long >= limits.maxPositionsLong) return false;
+    if (counts.total >= limits.maxPositionsTotal) return false;
 
     if (this.wouldBreachPC1Exposure(asset, 'long')) return false;
 
@@ -1105,15 +1165,13 @@ export class PCAStatArbMonitor extends EventEmitter {
 
   private shouldEnterShort(zScore: number, asset: string): boolean {
     const shortConfig = this.config.short;
-    const threshold = shortConfig?.entryZScore ?? this.config.entryZScore;
+    const threshold = shortConfig.entryZScore ?? this.config.entryZScore;
     if (zScore < threshold) return false;
 
     const limits = this.config.exposureLimits;
-    if (limits) {
-      const counts = this.countPositionsByDirection();
-      if (counts.short >= limits.maxPositionsShort) return false;
-      if (counts.total >= limits.maxPositionsTotal) return false;
-    }
+    const counts = this.countPositionsByDirection();
+    if (counts.short >= limits.maxPositionsShort) return false;
+    if (counts.total >= limits.maxPositionsTotal) return false;
 
     if (this.wouldBreachPC1Exposure(asset, 'short')) return false;
 
@@ -1129,9 +1187,8 @@ export class PCAStatArbMonitor extends EventEmitter {
     const holdTimeMs = now - position.timestamp;
     const direction = position.direction;
     const dirConfig = direction === 'long' ? this.config.long : this.config.short;
-    const maxHoldTimeMs = dirConfig?.maxHoldTimeMs ?? Infinity;
-    const minHoldTimeMs = dirConfig?.minHoldTimeMs ?? 0;
-    const useZeroCrossExit = dirConfig?.zeroCrossExit ?? false;
+    const maxHoldTimeMs = dirConfig.maxHoldTimeMs ?? Infinity;
+    const minHoldTimeMs = dirConfig.minHoldTimeMs ?? 0;
 
     let currentPnlBps = 0;
     if (position.entryPrice > 0 && currentPrice > 0) {
@@ -1142,42 +1199,22 @@ export class PCAStatArbMonitor extends EventEmitter {
     position.peakPnlBps = Math.max(position.peakPnlBps, currentPnlBps);
     position.troughPnlBps = Math.min(position.troughPnlBps, currentPnlBps);
 
+    // 1. Hard stop-loss — fires FIRST, bypasses minHold when stopLossIgnoresMinHold
+    const stopLossBps = dirConfig.stopLossBps ?? 100;
+    const ignoresMinHold = direction === 'short'
+      ? this.config.short.stopLossIgnoresMinHold
+      : false;
+    if (currentPnlBps <= -stopLossBps && (ignoresMinHold || holdTimeMs >= minHoldTimeMs)) {
+      return { shouldExit: true, reason: 'stop_loss' };
+    }
+
+    // 2. Time stop
     if (holdTimeMs >= maxHoldTimeMs) {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    const stopLossBps = dirConfig?.stopLossBps ?? 100;
-    if (currentPnlBps <= -stopLossBps) {
-      return { shouldExit: true, reason: 'stop_loss' };
-    }
-
-    const passedMinHold = holdTimeMs >= minHoldTimeMs;
-
-    if (useZeroCrossExit) {
-      const entrySign = position.zScore > 0 ? 1 : -1;
-      const currentSign = currentZScore > 0 ? 1 : -1;
-      const zeroCrossed = entrySign !== currentSign;
-      if (zeroCrossed) {
-        if (passedMinHold) {
-          return { shouldExit: true, reason: 'zero_cross' };
-        }
-        this.logger.debug({
-          asset: position.asset,
-          holdMin: (holdTimeMs / 60000).toFixed(1),
-          minHoldMin: (minHoldTimeMs / 60000).toFixed(0),
-          entryZ: position.zScore.toFixed(2),
-          currentZ: currentZScore.toFixed(2),
-        }, 'Zero-cross detected but minHold not met');
-      }
-    } else {
-      const exitZScore = dirConfig?.exitZScore ?? this.config.exitZScore;
-      if (Math.abs(currentZScore) < exitZScore && passedMinHold) {
-        return { shouldExit: true, reason: 'zscore' };
-      }
-    }
-
-    // Trailing stop for shorts (only after minHold to let trades breathe)
-    if (direction === 'short' && this.config.short?.trailingExit?.enabled && passedMinHold) {
+    // 3. Trailing stop — no min-hold gate so it can fire earlier
+    if (direction === 'short' && this.config.short.trailingExit.enabled) {
       const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
         position.trailingActivated = true;
@@ -1187,6 +1224,28 @@ export class PCAStatArbMonitor extends EventEmitter {
         if (drawdownFromPeak >= trailStopBps) {
           return { shouldExit: true, reason: 'trailing_stop' };
         }
+      }
+    }
+
+    // 4. Z-score / zero-cross exits — lowest priority, gated by direction config
+    const passedMinHold = holdTimeMs >= minHoldTimeMs;
+    const useZeroCrossExit = dirConfig.zeroCrossExit ?? false;
+    const useZscoreExit = direction === 'short'
+      ? this.config.short.zscoreExit
+      : true;
+
+    if (useZeroCrossExit && passedMinHold) {
+      const entrySign = position.zScore > 0 ? 1 : -1;
+      const currentSign = currentZScore > 0 ? 1 : -1;
+      if (entrySign !== currentSign) {
+        return { shouldExit: true, reason: 'zero_cross' };
+      }
+    }
+
+    if (useZscoreExit && passedMinHold) {
+      const exitZScore = dirConfig.exitZScore ?? this.config.exitZScore;
+      if (Math.abs(currentZScore) < exitZScore) {
+        return { shouldExit: true, reason: 'zscore' };
       }
     }
 
