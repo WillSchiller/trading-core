@@ -450,6 +450,218 @@
         "rawSql": "SELECT to_timestamp(timestamp / 1000) as \"Model Time\", num_factors as \"Factors\", ROUND((variance_explained[1] * 100)::numeric, 1) as \"PC1 Var %\", ROUND((variance_explained[2] * 100)::numeric, 1) as \"PC2 Var %\", pc1_loadings as \"PC1 Loadings\" FROM pca_factor_models ORDER BY timestamp DESC LIMIT 5",
         "format": "table"
       }]
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Risk & Sustainability",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Daily Sharpe Ratio",
+      "description": "Avg daily return / stddev of daily returns (annualized = x sqrt(365))",
+      "gridPos": {"x": 0, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH hourly AS (SELECT date_trunc('hour', to_timestamp(exit_timestamp / 1000)) AS hour, SUM(pnl_bps) AS hourly_pnl FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 GROUP BY 1), daily AS (SELECT date_trunc('day', hour) AS day, SUM(hourly_pnl) AS daily_pnl FROM hourly GROUP BY 1) SELECT ROUND(COALESCE(AVG(daily_pnl) / NULLIF(STDDEV(daily_pnl), 0), 0)::numeric, 2) AS \"Sharpe\" FROM daily",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0.5, "color": "yellow"},
+            {"value": 1.0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Max Drawdown (bps)",
+      "description": "Worst peak-to-trough decline in cumulative P&L",
+      "gridPos": {"x": 4, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH cum AS (SELECT exit_timestamp, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) AS cum_pnl FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000), dd AS (SELECT cum_pnl - MAX(cum_pnl) OVER (ORDER BY exit_timestamp) AS drawdown FROM cum) SELECT ROUND(COALESCE(MIN(drawdown), 0)::numeric, 1) AS \"Max DD\" FROM dd",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": -500, "color": "red"},
+            {"value": -200, "color": "orange"},
+            {"value": -50, "color": "yellow"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Profit Factor",
+      "description": "Sum of winning trades / abs(sum of losing trades). Want > 1.5",
+      "gridPos": {"x": 8, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_bps) FILTER (WHERE pnl_bps > 0) / NULLIF(ABS(SUM(pnl_bps) FILTER (WHERE pnl_bps < 0)), 0), 0)::numeric, 2) AS \"Profit Factor\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 1.0, "color": "orange"},
+            {"value": 1.5, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "Win/Loss Ratio",
+      "description": "Avg winning trade size / avg losing trade size",
+      "gridPos": {"x": 12, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(AVG(pnl_bps) FILTER (WHERE pnl_bps > 0) / NULLIF(ABS(AVG(pnl_bps) FILTER (WHERE pnl_bps < 0)), 0), 0)::numeric, 2) AS \"W/L Ratio\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0.8, "color": "orange"},
+            {"value": 1.0, "color": "yellow"},
+            {"value": 1.5, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 35,
+      "type": "stat",
+      "title": "Longest Losing Streak",
+      "description": "Max consecutive trades with pnl_bps <= 0",
+      "gridPos": {"x": 16, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH ordered AS (SELECT pnl_bps, ROW_NUMBER() OVER (ORDER BY exit_timestamp) AS rn, CASE WHEN pnl_bps <= 0 THEN 1 ELSE 0 END AS is_loss FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000), streaks AS (SELECT is_loss, rn - ROW_NUMBER() OVER (PARTITION BY is_loss ORDER BY rn) AS grp FROM ordered), streak_lengths AS (SELECT COUNT(*) AS streak_len FROM streaks WHERE is_loss = 1 GROUP BY grp) SELECT COALESCE(MAX(streak_len), 0) AS \"Streak\" FROM streak_lengths",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 5, "color": "yellow"},
+            {"value": 8, "color": "orange"},
+            {"value": 10, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 36,
+      "type": "stat",
+      "title": "Time to Recovery",
+      "description": "Minutes from max drawdown trough back to previous peak",
+      "gridPos": {"x": 20, "y": 31, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH cum AS (SELECT exit_timestamp, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) AS cum_pnl FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000), with_peak AS (SELECT exit_timestamp, cum_pnl, MAX(cum_pnl) OVER (ORDER BY exit_timestamp) AS peak, cum_pnl - MAX(cum_pnl) OVER (ORDER BY exit_timestamp) AS drawdown FROM cum), max_dd AS (SELECT MIN(drawdown) AS worst_dd FROM with_peak), trough_point AS (SELECT exit_timestamp AS trough_ts, peak AS trough_peak FROM with_peak, max_dd WHERE with_peak.drawdown = max_dd.worst_dd ORDER BY exit_timestamp LIMIT 1), recovery_point AS (SELECT MIN(c.exit_timestamp) AS recovery_ts FROM cum c, trough_point t WHERE c.exit_timestamp > t.trough_ts AND c.cum_pnl >= t.trough_peak) SELECT CASE WHEN (SELECT recovery_ts FROM recovery_point) IS NOT NULL THEN ROUND((((SELECT recovery_ts FROM recovery_point) - t.trough_ts) / 60000.0)::numeric, 1) ELSE NULL END AS \"Recovery\" FROM trough_point t",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "min",
+          "noValue": "In drawdown",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 60, "color": "yellow"},
+            {"value": 240, "color": "orange"},
+            {"value": 480, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 37,
+      "type": "timeseries",
+      "title": "Cumulative P&L & Drawdown",
+      "description": "Cumulative P&L curve with drawdown from peak shown below",
+      "gridPos": {"x": 0, "y": 35, "w": 24, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "WITH cum AS (SELECT to_timestamp(exit_timestamp / 1000) AS time, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) AS \"Cumulative P&L (bps)\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000) SELECT time, \"Cumulative P&L (bps)\" FROM cum ORDER BY time",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "WITH cum AS (SELECT to_timestamp(exit_timestamp / 1000) AS time, SUM(pnl_bps) OVER (ORDER BY exit_timestamp) AS cum_pnl FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000) SELECT time, cum_pnl - MAX(cum_pnl) OVER (ORDER BY time) AS \"Drawdown (bps)\" FROM cum ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "pointSize": 3, "showPoints": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Cumulative P&L (bps)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}},
+              {"id": "custom.fillOpacity", "value": 10}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Drawdown (bps)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+              {"id": "custom.fillOpacity", "value": 20},
+              {"id": "custom.fillBelowTo", "value": "Drawdown (bps)"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
     }
   ]
 }

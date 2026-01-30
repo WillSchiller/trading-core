@@ -3,7 +3,40 @@ import * as math from 'mathjs';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 
 export type RegimeState = 'bullish' | 'bearish' | 'neutral';
-export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop';
+export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop' | 'stop_loss';
+export type ShadowExitReason = 'zero_cross' | 'shadow_time_stop';
+
+export interface ShadowPosition {
+  signalTimestamp: number;
+  asset: string;
+  direction: 'long' | 'short';
+  entryPrice: number;
+  entryZScoreSign: number;
+  shadowStartTimestamp: number;
+  peakPnlBps: number;
+  troughPnlBps: number;
+  lastPnlBps: number;
+  cumulativePC1Return: number;
+  entryPC1Loading: number;
+  realExitReason: ExitReason;
+}
+
+export interface PCAShadowExitEvent {
+  signalTimestamp: number;
+  asset: string;
+  direction: 'long' | 'short';
+  entryPrice: number;
+  shadowExitTimestamp: number;
+  shadowExitPrice: number;
+  shadowPnlBps: number;
+  shadowPeakPnlBps: number;
+  shadowTroughPnlBps: number;
+  shadowHoldTimeMs: number;
+  shadowExitReason: ShadowExitReason;
+  shadowPC1PnlBps: number;
+  shadowResidualPnlBps: number;
+  realExitReason: ExitReason;
+}
 
 export interface PnLAttribution {
   totalPnlBps: number;
@@ -45,6 +78,7 @@ export interface LongConfig {
   maxHoldTimeMs: number;
   minHoldTimeMs: number;
   zeroCrossExit: boolean;
+  stopLossBps: number;
   requireRegimeConfirmation: boolean;
 }
 
@@ -60,6 +94,7 @@ export interface ShortConfig {
   maxHoldTimeMs: number;
   minHoldTimeMs: number;
   zeroCrossExit: boolean;
+  stopLossBps: number;
   trailingExit: TrailingExitConfig;
 }
 
@@ -115,23 +150,25 @@ const DEFAULT_CONFIG: PCAConfig = {
     maxPortfolioPC1ExposureUsd: 150,
   },
   long: {
-    entryZScore: 2.8,
+    entryZScore: 3.0,
     exitZScore: 0.0,
-    maxHoldTimeMs: 1800000,
-    minHoldTimeMs: 1200000,
+    maxHoldTimeMs: 21600000,    // 6 hours
+    minHoldTimeMs: 2700000,     // 45 min
     zeroCrossExit: true,
+    stopLossBps: 150,
     requireRegimeConfirmation: true,
   },
   short: {
-    entryZScore: 2.2,
+    entryZScore: 2.5,
     exitZScore: 0.0,
-    maxHoldTimeMs: 7200000,
-    minHoldTimeMs: 1200000,
-    zeroCrossExit: true,
+    maxHoldTimeMs: 43200000,    // 12 hours
+    minHoldTimeMs: 1800000,     // 30 min
+    zeroCrossExit: false,       // trailing stop only for shorts
+    stopLossBps: 150,
     trailingExit: {
       enabled: true,
-      activationPnlBps: 20,
-      trailStopBps: 15,
+      activationPnlBps: 25,
+      trailStopBps: 20,
     },
   },
 };
@@ -203,6 +240,8 @@ export class PCAStatArbMonitor extends EventEmitter {
   private residualHistory: Map<string, number[]> = new Map();
   private activeSignals: Map<string, PCASignalEvent> = new Map();
   private activePositions: Map<string, ActivePosition> = new Map();
+  private shadowPositions: Map<string, ShadowPosition[]> = new Map();
+  private static readonly SHADOW_MAX_HOLD_MS = 12 * 60 * 60 * 1000;
   private tickCount: number = 0;
   private tickInterval: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
@@ -374,6 +413,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     }
 
     this.processSignals(signals, now);
+    this.updateShadowPositions(signals, now);
     this.logSummary(returns, signals);
 
     if (signals.length > 0) {
@@ -441,6 +481,9 @@ export class PCAStatArbMonitor extends EventEmitter {
         };
 
         this.emit('exit', exitEvent);
+        if (this.shouldShadow('time_stop', holdTimeMs)) {
+          this.addShadowPosition(position, now, 'time_stop');
+        }
         this.activePositions.delete(asset);
         this.activeSignals.delete(asset);
       }
@@ -856,6 +899,9 @@ export class PCAStatArbMonitor extends EventEmitter {
           };
 
           this.emit('exit', exitEvent);
+          if (this.shouldShadow(reason, holdTime)) {
+            this.addShadowPosition(existingPosition, now, reason);
+          }
           this.activePositions.delete(signal.asset);
           this.activeSignals.delete(signal.asset);
         }
@@ -1100,6 +1146,11 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
+    const stopLossBps = dirConfig?.stopLossBps ?? 100;
+    if (currentPnlBps <= -stopLossBps) {
+      return { shouldExit: true, reason: 'stop_loss' };
+    }
+
     const passedMinHold = holdTimeMs >= minHoldTimeMs;
 
     if (useZeroCrossExit) {
@@ -1125,8 +1176,8 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
     }
 
-    // Trailing stop for shorts (only if enabled) - can fire before minHold
-    if (direction === 'short' && this.config.short?.trailingExit?.enabled) {
+    // Trailing stop for shorts (only after minHold to let trades breathe)
+    if (direction === 'short' && this.config.short?.trailingExit?.enabled && passedMinHold) {
       const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
         position.trailingActivated = true;
@@ -1142,6 +1193,117 @@ export class PCAStatArbMonitor extends EventEmitter {
     return { shouldExit: false, reason: 'zscore' };
   }
 
+  private shouldShadow(reason: ExitReason, holdTimeMs: number): boolean {
+    if (reason === 'zero_cross') return false;
+    if (reason === 'time_stop' && holdTimeMs >= PCAStatArbMonitor.SHADOW_MAX_HOLD_MS) return false;
+    return true;
+  }
+
+  private addShadowPosition(position: ActivePosition, exitTimestamp: number, exitReason: ExitReason): void {
+    const shadow: ShadowPosition = {
+      signalTimestamp: position.timestamp,
+      asset: position.asset,
+      direction: position.direction,
+      entryPrice: position.entryPrice,
+      entryZScoreSign: position.zScore > 0 ? 1 : -1,
+      shadowStartTimestamp: exitTimestamp,
+      peakPnlBps: position.peakPnlBps,
+      troughPnlBps: position.troughPnlBps,
+      lastPnlBps: position.lastPnlBps,
+      cumulativePC1Return: position.cumulativePC1Return,
+      entryPC1Loading: position.entryPC1Loading,
+      realExitReason: exitReason,
+    };
+    const existing = this.shadowPositions.get(position.asset) ?? [];
+    existing.push(shadow);
+    this.shadowPositions.set(position.asset, existing);
+    this.logger.info({ asset: position.asset, realExitReason: exitReason }, 'Position moved to shadow tracking');
+  }
+
+  private updateShadowPositions(signals: AssetSignal[], now: number): void {
+    const signalMap = new Map(signals.map(s => [s.asset, s]));
+
+    for (const [asset, shadows] of this.shadowPositions) {
+      const signal = signalMap.get(asset);
+      const currentPrice = this.getCurrentPrice(asset);
+      if (currentPrice <= 0) continue;
+
+      const toRemove: number[] = [];
+
+      for (let i = 0; i < shadows.length; i++) {
+        const shadow = shadows[i];
+        const priceChange = (currentPrice - shadow.entryPrice) / shadow.entryPrice;
+        const pnlBps = shadow.direction === 'long' ? priceChange * 10000 : -priceChange * 10000;
+        shadow.lastPnlBps = pnlBps;
+        shadow.peakPnlBps = Math.max(shadow.peakPnlBps, pnlBps);
+        shadow.troughPnlBps = Math.min(shadow.troughPnlBps, pnlBps);
+
+        if (signal) {
+          shadow.cumulativePC1Return += signal.factorReturns[0] ?? 0;
+        }
+
+        const totalHoldMs = now - shadow.signalTimestamp;
+        let shouldExit = false;
+        let shadowExitReason: ShadowExitReason = 'shadow_time_stop';
+
+        if (totalHoldMs >= PCAStatArbMonitor.SHADOW_MAX_HOLD_MS) {
+          shouldExit = true;
+          shadowExitReason = 'shadow_time_stop';
+        } else if (signal) {
+          const currentSign = signal.residualZScore > 0 ? 1 : -1;
+          if (currentSign !== shadow.entryZScoreSign) {
+            shouldExit = true;
+            shadowExitReason = 'zero_cross';
+          }
+        }
+
+        if (shouldExit) {
+          const attr = this.computeShadowAttribution(shadow);
+          const exitEvent: PCAShadowExitEvent = {
+            signalTimestamp: shadow.signalTimestamp,
+            asset: shadow.asset,
+            direction: shadow.direction,
+            entryPrice: shadow.entryPrice,
+            shadowExitTimestamp: now,
+            shadowExitPrice: currentPrice,
+            shadowPnlBps: pnlBps,
+            shadowPeakPnlBps: shadow.peakPnlBps,
+            shadowTroughPnlBps: shadow.troughPnlBps,
+            shadowHoldTimeMs: totalHoldMs,
+            shadowExitReason,
+            shadowPC1PnlBps: attr.pc1PnlBps,
+            shadowResidualPnlBps: attr.residualPnlBps,
+            realExitReason: shadow.realExitReason,
+          };
+          this.emit('shadow_exit', exitEvent);
+          toRemove.push(i);
+        }
+      }
+
+      for (let j = toRemove.length - 1; j >= 0; j--) {
+        shadows.splice(toRemove[j], 1);
+      }
+      if (shadows.length === 0) {
+        this.shadowPositions.delete(asset);
+      }
+    }
+  }
+
+  private computeShadowAttribution(shadow: ShadowPosition): { pc1PnlBps: number; residualPnlBps: number } {
+    const sign = shadow.direction === 'long' ? 1 : -1;
+    const pc1PnlBps = sign * shadow.entryPC1Loading * shadow.cumulativePC1Return * 10000;
+    const residualPnlBps = shadow.lastPnlBps - pc1PnlBps;
+    return { pc1PnlBps, residualPnlBps };
+  }
+
+  getShadowPositionCount(): number {
+    let count = 0;
+    for (const shadows of this.shadowPositions.values()) {
+      count += shadows.length;
+    }
+    return count;
+  }
+
   private logSummary(_returns: Record<string, number>, signals: AssetSignal[]): void {
     if (this.tickCount % 5 !== 0) return;
 
@@ -1153,6 +1315,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       {
         tick: this.tickCount,
         activeSignals: this.activePositions.size,
+        shadowPositions: this.getShadowPositionCount(),
         residuals: residualSummary,
         pc1Bps: signals[0] ? (signals[0].factorReturns[0] * 10000).toFixed(1) : 'N/A',
         regimeState: this.regimeState,

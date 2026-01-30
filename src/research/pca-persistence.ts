@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createChildLogger, type Logger } from '../utils/logger.js';
-import type { FactorModel, PCASignalEvent, PCAExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
+import type { FactorModel, PCASignalEvent, PCAExitEvent, PCAShadowExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
 
 export class PCAPersistence {
   private pool: Pool;
@@ -214,21 +214,35 @@ export class PCAPersistence {
   }
 
   async cleanupOrphanedPositions(): Promise<number> {
+    const now = Date.now();
+    const maxStaleMs = 7200000;
+
     const result = await this.pool.query(
-      `WITH ranked AS (
+      `WITH duplicates AS (
          SELECT id, asset, timestamp,
                 ROW_NUMBER() OVER (PARTITION BY asset ORDER BY timestamp DESC) as rn
          FROM pca_signals
          WHERE resolved = false
+       ),
+       stale AS (
+         SELECT id FROM pca_signals
+         WHERE resolved = false AND ($1 - timestamp) > $2
        )
        UPDATE pca_signals
        SET resolved = true, exit_timestamp = $1, exit_reason = 'orphaned'
-       WHERE id IN (SELECT id FROM ranked WHERE rn > 1)
-       RETURNING id`,
-      [Date.now()]
+       WHERE id IN (
+         SELECT id FROM duplicates WHERE rn > 1
+         UNION
+         SELECT id FROM stale
+       )
+       RETURNING id, asset`,
+      [now, maxStaleMs]
     );
     if (result.rowCount && result.rowCount > 0) {
-      this.logger.info({ count: result.rowCount }, 'Cleaned up orphaned positions');
+      this.logger.info(
+        { count: result.rowCount, assets: result.rows.map((r: { asset: string }) => r.asset) },
+        'Cleaned up orphaned positions (duplicates + stale > 2h)'
+      );
     }
     return result.rowCount ?? 0;
   }
@@ -365,5 +379,40 @@ export class PCAPersistence {
     }
 
     return history;
+  }
+
+  async resolveShadow(event: PCAShadowExitEvent): Promise<void> {
+    await this.pool.query(
+      `UPDATE pca_signals
+       SET shadow_exit_timestamp = $1,
+           shadow_pnl_bps = $2,
+           shadow_peak_pnl_bps = $3,
+           shadow_trough_pnl_bps = $4,
+           shadow_hold_time_ms = $5,
+           shadow_exit_reason = $6,
+           shadow_exit_price = $7,
+           shadow_pc1_pnl_bps = $8,
+           shadow_residual_pnl_bps = $9
+       WHERE asset = $10
+         AND timestamp = $11
+         AND resolved = true`,
+      [
+        event.shadowExitTimestamp,
+        event.shadowPnlBps,
+        event.shadowPeakPnlBps,
+        event.shadowTroughPnlBps,
+        event.shadowHoldTimeMs,
+        event.shadowExitReason,
+        event.shadowExitPrice,
+        event.shadowPC1PnlBps,
+        event.shadowResidualPnlBps,
+        event.asset,
+        event.signalTimestamp,
+      ]
+    );
+    this.logger.debug(
+      { asset: event.asset, realExit: event.realExitReason, shadowExit: event.shadowExitReason, shadowPnlBps: event.shadowPnlBps.toFixed(1) },
+      'Shadow position resolved'
+    );
   }
 }

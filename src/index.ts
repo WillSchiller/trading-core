@@ -536,6 +536,16 @@ async function main() {
       }
     });
 
+    pcaMonitor.on('shadow_exit', async (event) => {
+      try {
+        if (pcaPersistence) {
+          await pcaPersistence.resolveShadow(event);
+        }
+      } catch (err) {
+        logger.error({ error: (err as Error).message }, 'Failed to resolve shadow position');
+      }
+    });
+
     pcaMonitor.on('factorModel', async (model) => {
       try {
         if (pcaPersistence) {
