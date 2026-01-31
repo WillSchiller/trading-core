@@ -1,0 +1,481 @@
+import type { Pool } from 'pg';
+import { createChildLogger } from '../../utils/logger.js';
+import { sendAlert } from '../../utils/alerts.js';
+import { BinanceFuturesClient } from './binance-client.js';
+import { PerpsPersistence } from './perps-persistence.js';
+import { PositionTracker } from './position-tracker.js';
+import { KillSwitch } from './kill-switch.js';
+import {
+  assetToSymbol,
+  directionToSide,
+  closingSide,
+  makeClientOrderId,
+} from './types.js';
+import type {
+  PerpsExecutionConfig,
+  PerpsPosition,
+  PerpsMode,
+  BinanceOrderResponse,
+} from './types.js';
+import { toMicros, fromMicros, mulDiv } from './money.js';
+import type { PCASignalEvent, PCAExitEvent } from '../../research/pca-stat-arb.js';
+
+export class PerpsExecutor {
+  private readonly client: BinanceFuturesClient;
+  private readonly persistence: PerpsPersistence;
+  private readonly tracker: PositionTracker;
+  private readonly killSwitch: KillSwitch;
+  private readonly config: PerpsExecutionConfig;
+  private readonly runId: string;
+  private readonly mode: PerpsMode;
+  private readonly log;
+
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private lastTradeAt = 0;
+  private running = false;
+  private exitLocks = new Set<string>();
+  private priceCallback: ((quote: { venue: string; pair: string; mid: number }) => void) | null = null;
+
+  constructor(config: PerpsExecutionConfig, pool: Pool, apiKey: string, apiSecret: string, runId: string) {
+    this.config = config;
+    this.runId = runId;
+    this.mode = config.paperMode ? 'paper' : 'live';
+    this.log = createChildLogger({ component: 'perps-executor', runId, mode: this.mode });
+    this.client = new BinanceFuturesClient({
+      apiKey,
+      apiSecret,
+      paperMode: config.paperMode,
+      paperFill: config.paperFill,
+    });
+    this.persistence = new PerpsPersistence(pool, runId, this.mode);
+    this.tracker = new PositionTracker(this.client, this.persistence);
+    this.killSwitch = new KillSwitch(config.killSwitch, this.client, this.persistence, this.tracker);
+  }
+
+  async start(): Promise<void> {
+    this.log.info({
+      paperMode: this.config.paperMode,
+      leverage: this.config.leverage,
+      marginType: this.config.marginType,
+      enableLongs: this.config.enableLongs,
+      enableShorts: this.config.enableShorts,
+      maxPositions: this.config.maxConcurrentPositions,
+      maxPositionSizeUsd: this.config.maxPositionSizeUsd,
+      runId: this.runId,
+      mode: this.mode,
+    }, 'Starting perps executor');
+
+    await this.client.refreshPrecisionCache();
+
+    if (!this.config.paperMode) {
+      const assets = ['ETH', 'BTC', 'SOL', 'AVAX', 'ARB', 'OP', 'LINK', 'UNI', 'AAVE', 'ATOM', 'SUI', 'DOT'];
+      for (const asset of assets) {
+        const symbol = assetToSymbol(asset);
+        try {
+          await this.client.setLeverage(symbol, this.config.leverage);
+          await this.client.setMarginType(symbol, this.config.marginType);
+        } catch (err) {
+          this.log.warn({ symbol, error: (err as Error).message }, 'Failed to configure symbol (may not exist or already set)');
+        }
+      }
+    }
+
+    await this.tracker.reconcileOnStartup();
+    this.tracker.startPeriodicSync(this.config.positionSyncIntervalMs);
+
+    this.heartbeatTimer = setInterval(() => {
+      this.onHeartbeat().catch(err =>
+        this.log.error({ error: (err as Error).message }, 'Heartbeat error')
+      );
+    }, this.config.heartbeatIntervalMs);
+
+    this.running = true;
+    this.log.info('Perps executor started');
+
+    sendAlert(
+      `📊 *Perps Executor Started*\nMode: ${this.mode}\nRun: ${this.runId.slice(0, 8)}\nLeverage: ${this.config.leverage}x\nMax positions: ${this.config.maxConcurrentPositions}`,
+      'info'
+    ).catch(() => {});
+  }
+
+  async stop(): Promise<void> {
+    this.running = false;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.tracker.stopPeriodicSync();
+    this.log.info({ openPositions: this.tracker.getOpenCount() }, 'Perps executor stopped');
+  }
+
+  async handleSignal(event: PCASignalEvent): Promise<void> {
+    if (!this.running) return;
+
+    const { asset, direction, timestamp: signalTimestamp } = event;
+    const symbol = assetToSymbol(asset);
+    const side = directionToSide(direction);
+    const clientOrderId = makeClientOrderId(signalTimestamp, asset, side);
+
+    if (direction === 'short' && !this.config.enableShorts) return;
+    if (direction === 'long' && !this.config.enableLongs) return;
+
+    const existing = await this.persistence.getExecutionByClientOrderId(clientOrderId);
+    if (existing) {
+      this.log.debug({ clientOrderId, status: existing.status }, 'Signal already processed (idempotent skip)');
+      return;
+    }
+
+    if (this.tracker.hasPosition(asset)) {
+      this.log.debug({ asset }, 'Already have open position for asset');
+      return;
+    }
+
+    const killCheck = await this.killSwitch.check();
+    if (!killCheck.safe) {
+      this.log.warn({ asset, reason: killCheck.reason }, 'Kill switch prevents new trade');
+      return;
+    }
+
+    if (this.tracker.getOpenCount() >= this.config.maxConcurrentPositions) {
+      this.log.debug({ asset, openCount: this.tracker.getOpenCount() }, 'Max concurrent positions reached');
+      return;
+    }
+
+    const totalExposure = this.tracker.getTotalExposureUsd();
+    const positionSizeUsd = Math.min(event.positionSizeUsd, this.config.maxPositionSizeUsd);
+    if (positionSizeUsd < this.config.minPositionSizeUsd) {
+      this.log.debug({ asset, positionSizeUsd }, 'Position size below minimum');
+      return;
+    }
+    if (totalExposure + positionSizeUsd > this.config.maxTotalExposureUsd) {
+      this.log.debug({ asset, totalExposure, positionSizeUsd }, 'Would exceed max total exposure');
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastTradeAt < this.config.cooldownMs) {
+      this.log.debug({ asset, cooldownRemaining: this.config.cooldownMs - (now - this.lastTradeAt) }, 'In cooldown');
+      return;
+    }
+
+    const quantity = positionSizeUsd / event.entryPrice;
+    const roundedQty = this.client.roundQuantity(symbol, quantity);
+    if (roundedQty <= 0) {
+      this.log.warn({ asset, quantity, roundedQty }, 'Quantity rounds to zero');
+      return;
+    }
+
+    const pendingId = await this.persistence.saveExecution({
+      symbol,
+      asset,
+      direction,
+      side,
+      entryPrice: String(event.entryPrice),
+      exitPrice: null,
+      quantity: String(roundedQty),
+      notionalUsd: String(event.entryPrice * roundedQty),
+      realizedPnl: null,
+      unrealizedPnl: null,
+      clientOrderId,
+      entryOrderId: null,
+      exitOrderId: null,
+      status: 'pending_open',
+      isPaperTrade: this.config.paperMode,
+      signalTimestamp,
+      zScore: event.zScore,
+      residual: event.residual,
+      confidence: event.confidence,
+      exitReason: null,
+      leverage: this.config.leverage,
+      marginType: this.config.marginType,
+    });
+
+    if (pendingId === -1) {
+      this.log.debug({ clientOrderId }, 'Duplicate pending_open (idempotent skip)');
+      return;
+    }
+
+    let orderResponse: BinanceOrderResponse;
+    try {
+      orderResponse = await this.client.placeOrder({
+        symbol,
+        side,
+        quantity: roundedQty,
+        clientOrderId,
+        markPrice: event.entryPrice,
+      });
+    } catch (err) {
+      this.log.error({ asset, symbol, error: (err as Error).message }, 'Failed to place entry order');
+      await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
+      return;
+    }
+
+    this.lastTradeAt = Date.now();
+
+    const entryPriceStr = orderResponse.avgPrice !== '0'
+      ? orderResponse.avgPrice
+      : String(event.entryPrice);
+    const entryPrice = Number(entryPriceStr);
+    const notionalUsd = entryPrice * roundedQty;
+
+    await this.persistence.updateExecutionEntry(clientOrderId, {
+      status: 'open',
+      entryPrice: entryPriceStr,
+      quantity: String(roundedQty),
+      notionalUsd: String(notionalUsd),
+      entryOrderId: String(orderResponse.orderId),
+    });
+
+    const position: PerpsPosition = {
+      symbol,
+      asset,
+      direction,
+      side,
+      quantity: roundedQty,
+      entryPrice,
+      markPrice: entryPrice,
+      unrealizedPnl: 0,
+      notionalUsd,
+      leverage: this.config.leverage,
+      marginType: this.config.marginType,
+      clientOrderId,
+      openedAt: signalTimestamp,
+    };
+
+    await this.tracker.openPosition(position);
+
+    this.log.info({
+      asset, symbol, direction, side, quantity: roundedQty,
+      entryPrice, notionalUsd: notionalUsd.toFixed(2),
+      zScore: event.zScore.toFixed(2), clientOrderId,
+      mode: this.mode, runId: this.runId,
+    }, 'Perps position opened');
+  }
+
+  async handleExit(event: PCAExitEvent): Promise<void> {
+    const { asset, direction, exitReason, exitPrice, pnlBps } = event;
+    const position = this.tracker.getPosition(asset);
+
+    if (!position) {
+      this.log.debug({ asset }, 'No tracked position to exit');
+      return;
+    }
+
+    if (this.exitLocks.has(asset)) {
+      this.log.debug({ asset }, 'Exit already in progress (lock held)');
+      return;
+    }
+    this.exitLocks.add(asset);
+
+    try {
+      const claimed = await this.persistence.claimClose(position.clientOrderId);
+      if (!claimed) {
+        this.log.debug({ asset, clientOrderId: position.clientOrderId }, 'Position already closing/closed (CAS failed)');
+        return;
+      }
+
+      const closeSide = closingSide(direction);
+      const closeOrderId = `pca_close_${Date.now()}_${asset}_${closeSide}`;
+
+      let closeResponse: BinanceOrderResponse;
+      try {
+        closeResponse = await this.client.placeOrder({
+          symbol: position.symbol,
+          side: closeSide,
+          quantity: position.quantity,
+          clientOrderId: closeOrderId,
+          reduceOnly: true,
+          markPrice: exitPrice,
+        });
+      } catch (err) {
+        this.log.error({ asset, error: (err as Error).message }, 'Failed to place exit order');
+        await this.persistence.updateExecution(position.clientOrderId, { status: 'open' });
+        return;
+      }
+
+      const exitPriceStr = closeResponse.avgPrice !== '0'
+        ? closeResponse.avgPrice
+        : String(exitPrice);
+      const actualExitPrice = Number(exitPriceStr);
+
+      const entryMicros = toMicros(String(position.entryPrice));
+      const exitMicros = toMicros(exitPriceStr);
+      const qtyMicros = toMicros(String(position.quantity));
+      const priceDiffMicros = direction === 'short'
+        ? entryMicros - exitMicros
+        : exitMicros - entryMicros;
+      const realizedPnlMicros = mulDiv(priceDiffMicros, qtyMicros);
+      const realizedPnl = fromMicros(realizedPnlMicros);
+      const realizedPnlNum = Number(realizedPnl);
+
+      await this.tracker.closePosition(asset);
+      await this.persistence.updateExecution(position.clientOrderId, {
+        status: 'closed',
+        exitPrice: exitPriceStr,
+        exitOrderId: closeOrderId,
+        realizedPnl,
+        exitReason: exitReason,
+      });
+
+      this.log.info({
+        asset, direction, exitReason,
+        entryPrice: position.entryPrice,
+        exitPrice: actualExitPrice,
+        realizedPnl,
+        pnlBps: pnlBps?.toFixed(1),
+        holdTimeMs: Date.now() - position.openedAt,
+        mode: this.mode,
+      }, 'Perps position closed');
+
+      if (Math.abs(realizedPnlNum) > 1) {
+        sendAlert(
+          `${realizedPnlNum > 0 ? '✅' : '❌'} *Perps ${direction.toUpperCase()} ${asset}* [${this.mode}]\nPnL: $${realizedPnlNum.toFixed(2)}\nReason: ${exitReason}\nEntry: $${position.entryPrice.toFixed(2)} → Exit: $${actualExitPrice.toFixed(2)}`,
+          realizedPnlNum > 0 ? 'info' : 'warn'
+        ).catch(() => {});
+      }
+    } finally {
+      this.exitLocks.delete(asset);
+    }
+  }
+
+  private async onHeartbeat(): Promise<void> {
+    await this.killSwitch.check();
+
+    const positions = this.tracker.getOpenPositions();
+    if (positions.length === 0) return;
+
+    let totalUnrealized = 0;
+    for (const pos of positions) {
+      totalUnrealized += pos.unrealizedPnl;
+
+      const holdTimeMs = Date.now() - pos.openedAt;
+      const maxHoldTimeMs = pos.direction === 'short'
+        ? this.config.maxHoldTimeMsShort
+        : this.config.maxHoldTimeMsLong;
+
+      if (holdTimeMs > maxHoldTimeMs) {
+        this.log.warn({ asset: pos.asset, holdTimeMs, maxHoldTimeMs }, 'Heartbeat time-stop triggered');
+        await this.forceClosePosition(pos, 'time_stop');
+        continue;
+      }
+
+      if (pos.entryPrice > 0) {
+        const pnlBps = pos.direction === 'short'
+          ? ((pos.entryPrice - pos.markPrice) / pos.entryPrice) * 10000
+          : ((pos.markPrice - pos.entryPrice) / pos.entryPrice) * 10000;
+
+        const stopLossBps = this.config.killSwitch.dailyDrawdownLimitUsd > 0 ? 75 : 150;
+        if (pnlBps < -stopLossBps) {
+          this.log.warn({ asset: pos.asset, pnlBps: pnlBps.toFixed(1), stopLossBps }, 'Heartbeat stop-loss triggered');
+          await this.forceClosePosition(pos, 'stop_loss');
+        }
+      }
+    }
+
+    if (positions.length > 0) {
+      this.log.debug({
+        openPositions: positions.length,
+        totalUnrealizedPnl: totalUnrealized.toFixed(4),
+        totalExposureUsd: this.tracker.getTotalExposureUsd().toFixed(2),
+      }, 'Heartbeat');
+    }
+  }
+
+  private async forceClosePosition(pos: PerpsPosition, reason: string): Promise<void> {
+    if (this.exitLocks.has(pos.asset)) return;
+    this.exitLocks.add(pos.asset);
+
+    try {
+      const claimed = await this.persistence.claimClose(pos.clientOrderId);
+      if (!claimed) return;
+
+      const side = closingSide(pos.direction);
+      const closeOrderId = `hb_close_${Date.now()}_${pos.asset}_${side}`;
+
+      let closeResponse: BinanceOrderResponse;
+      try {
+        closeResponse = await this.client.placeOrder({
+          symbol: pos.symbol,
+          side,
+          quantity: pos.quantity,
+          clientOrderId: closeOrderId,
+          reduceOnly: true,
+          markPrice: pos.markPrice,
+        });
+      } catch (err) {
+        this.log.error({ asset: pos.asset, error: (err as Error).message }, 'Heartbeat force-close failed');
+        await this.persistence.updateExecution(pos.clientOrderId, { status: 'open' });
+        return;
+      }
+
+      const exitPriceStr = closeResponse.avgPrice !== '0'
+        ? closeResponse.avgPrice
+        : String(pos.markPrice);
+
+      const entryMicros = toMicros(String(pos.entryPrice));
+      const exitMicros = toMicros(exitPriceStr);
+      const qtyMicros = toMicros(String(pos.quantity));
+      const priceDiffMicros = pos.direction === 'short'
+        ? entryMicros - exitMicros
+        : exitMicros - entryMicros;
+      const realizedPnlMicros = mulDiv(priceDiffMicros, qtyMicros);
+      const realizedPnl = fromMicros(realizedPnlMicros);
+
+      await this.tracker.closePosition(pos.asset);
+      await this.persistence.updateExecution(pos.clientOrderId, {
+        status: 'closed',
+        exitPrice: exitPriceStr,
+        exitOrderId: closeOrderId,
+        realizedPnl,
+        exitReason: reason,
+      });
+
+      this.log.info({ asset: pos.asset, reason, exitPrice: exitPriceStr, realizedPnl }, 'Heartbeat force-closed position');
+    } finally {
+      this.exitLocks.delete(pos.asset);
+    }
+  }
+
+  updateMarkPrice(asset: string, price: number): void {
+    this.tracker.updateMarkPrice(asset, price);
+  }
+
+  getPriceCallback(): (quote: { venue: string; pair: string; mid: number }) => void {
+    if (!this.priceCallback) {
+      const pairToAsset: Record<string, string> = {
+        'ETH/USDC': 'ETH', 'WETH/USDC': 'ETH', 'BTC/USDC': 'BTC', 'cbBTC/USDC': 'BTC',
+        'SOL/USDC': 'SOL', 'AVAX/USDC': 'AVAX', 'ARB/USDC': 'ARB', 'OP/USDC': 'OP',
+        'LINK/USDC': 'LINK', 'UNI/USDC': 'UNI', 'AAVE/USDC': 'AAVE', 'ATOM/USDC': 'ATOM',
+        'SUI/USDC': 'SUI', 'DOT/USDC': 'DOT',
+      };
+      this.priceCallback = (quote) => {
+        if (quote.venue !== 'binance') return;
+        const asset = pairToAsset[quote.pair];
+        if (asset && this.tracker.hasPosition(asset)) {
+          this.tracker.updateMarkPrice(asset, quote.mid);
+        }
+      };
+    }
+    return this.priceCallback;
+  }
+
+  getTracker(): PositionTracker {
+    return this.tracker;
+  }
+
+  getKillSwitch(): KillSwitch {
+    return this.killSwitch;
+  }
+
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  getRunId(): string {
+    return this.runId;
+  }
+
+  getMode(): PerpsMode {
+    return this.mode;
+  }
+}

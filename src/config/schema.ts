@@ -257,6 +257,63 @@ export const pcaStatArbConfigSchema = z.object({
   orphanCleanup: orphanCleanupConfigSchema,
 });
 
+export const killSwitchConfigSchema = z.object({
+  dailyDrawdownLimitUsd: z.number().positive().default(100),
+  maxTotalLossUsd: z.number().positive().default(500),
+  maxConsecutiveLosses: z.number().int().positive().default(5),
+  checkIntervalMs: z.number().int().positive().default(60000),
+}).default({
+  dailyDrawdownLimitUsd: 100,
+  maxTotalLossUsd: 500,
+  maxConsecutiveLosses: 5,
+  checkIntervalMs: 60000,
+});
+
+export const paperFillConfigSchema = z.object({
+  spreadBps: z.number().nonnegative().default(2),
+  slippageBps: z.number().nonnegative().default(5),
+  takerFeeBps: z.number().nonnegative().default(2),
+  maxSlippageBps: z.number().nonnegative().default(20),
+}).default({});
+
+export const perpsRunConfigSchema = z.object({
+  runId: z.string().min(1),
+  paperMode: z.boolean(),
+  leverage: z.number().int().min(1).max(20).optional(),
+  marginType: z.enum(['ISOLATED', 'CROSSED']).optional(),
+  enableLongs: z.boolean().optional(),
+  enableShorts: z.boolean().optional(),
+  maxConcurrentPositions: z.number().int().positive().optional(),
+  maxPositionSizeUsd: z.number().positive().optional(),
+  minPositionSizeUsd: z.number().positive().optional(),
+  maxTotalExposureUsd: z.number().positive().optional(),
+  cooldownMs: z.number().int().nonnegative().optional(),
+  maxHoldTimeMsShort: z.number().int().positive().optional(),
+  maxHoldTimeMsLong: z.number().int().positive().optional(),
+  killSwitch: killSwitchConfigSchema.optional(),
+  paperFill: paperFillConfigSchema.optional(),
+});
+
+export const perpsExecutionConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  leverage: z.number().int().min(1).max(20).default(1),
+  marginType: z.enum(['ISOLATED', 'CROSSED']).default('ISOLATED'),
+  enableLongs: z.boolean().default(false),
+  enableShorts: z.boolean().default(true),
+  maxConcurrentPositions: z.number().int().positive().default(5),
+  maxPositionSizeUsd: z.number().positive().default(150),
+  minPositionSizeUsd: z.number().positive().default(10),
+  maxTotalExposureUsd: z.number().positive().default(750),
+  cooldownMs: z.number().int().nonnegative().default(30000),
+  heartbeatIntervalMs: z.number().int().positive().default(5000),
+  positionSyncIntervalMs: z.number().int().positive().default(60000),
+  maxHoldTimeMsShort: z.number().int().positive().default(14400000),
+  maxHoldTimeMsLong: z.number().int().positive().default(21600000),
+  killSwitch: killSwitchConfigSchema,
+  paperFill: paperFillConfigSchema,
+  runs: z.array(perpsRunConfigSchema).default([]),
+}).optional();
+
 export const researchConfigSchema = z.object({
   pcaStatArb: pcaStatArbConfigSchema.optional(),
 });
@@ -271,6 +328,7 @@ export const appConfigSchema = z.object({
   venues: venuesConfigSchema,
   chains: z.record(chainConfigSchema),
   research: researchConfigSchema.optional(),
+  perpsExecution: perpsExecutionConfigSchema,
 });
 
 export const pairsFileSchema = z.object({
@@ -317,6 +375,10 @@ export const envConfigSchema = z.object({
     bybitApiKey: z.string().optional(),
     bybitApiSecret: z.string().optional(),
   }),
+  binanceFutures: z.object({
+    apiKey: z.string().optional(),
+    apiSecret: z.string().optional(),
+  }).default({}),
   executorPrivateKey: z.string().optional(),
   paperMode: z.coerce.boolean().default(true),
   enableExecution: z.coerce.boolean().default(false),

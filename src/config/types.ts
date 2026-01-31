@@ -217,6 +217,58 @@ export interface PCAStatArbConfig {
   orphanCleanup?: PCAOrphanCleanupConfig;
 }
 
+export interface KillSwitchConfig {
+  dailyDrawdownLimitUsd: number;
+  maxTotalLossUsd: number;
+  maxConsecutiveLosses: number;
+  checkIntervalMs: number;
+}
+
+export interface PaperFillConfig {
+  spreadBps: number;
+  slippageBps: number;
+  takerFeeBps: number;
+  maxSlippageBps: number;
+}
+
+export interface PerpsRunConfig {
+  runId: string;
+  paperMode: boolean;
+  leverage?: number;
+  marginType?: 'ISOLATED' | 'CROSSED';
+  enableLongs?: boolean;
+  enableShorts?: boolean;
+  maxConcurrentPositions?: number;
+  maxPositionSizeUsd?: number;
+  minPositionSizeUsd?: number;
+  maxTotalExposureUsd?: number;
+  cooldownMs?: number;
+  maxHoldTimeMsShort?: number;
+  maxHoldTimeMsLong?: number;
+  killSwitch?: KillSwitchConfig;
+  paperFill?: PaperFillConfig;
+}
+
+export interface PerpsExecutionConfig {
+  enabled: boolean;
+  leverage: number;
+  marginType: 'ISOLATED' | 'CROSSED';
+  enableLongs: boolean;
+  enableShorts: boolean;
+  maxConcurrentPositions: number;
+  maxPositionSizeUsd: number;
+  minPositionSizeUsd: number;
+  maxTotalExposureUsd: number;
+  cooldownMs: number;
+  heartbeatIntervalMs: number;
+  positionSyncIntervalMs: number;
+  maxHoldTimeMsShort: number;
+  maxHoldTimeMsLong: number;
+  killSwitch: KillSwitchConfig;
+  paperFill: PaperFillConfig;
+  runs: PerpsRunConfig[];
+}
+
 export interface ResearchConfig {
   pcaStatArb?: PCAStatArbConfig;
 }
@@ -231,6 +283,7 @@ export interface AppConfig {
   venues: VenuesConfig;
   chains: Record<string, ChainConfig>;
   research?: ResearchConfig;
+  perpsExecution?: PerpsExecutionConfig;
 }
 
 export interface EnvConfig {
@@ -273,6 +326,10 @@ export interface EnvConfig {
     coinbasePassphrase?: string;
     bybitApiKey?: string;
     bybitApiSecret?: string;
+  };
+  binanceFutures: {
+    apiKey?: string;
+    apiSecret?: string;
   };
   executorPrivateKey?: string;
   paperMode: boolean;

@@ -434,7 +434,7 @@
         "rawSql": "SELECT direction as metric, SUM(realized_pnl_usd) as value FROM executions WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() AND (${pair} = 0 OR pair_id = ${pair}) AND ('${strategy}' = 'all' OR strategy = '${strategy}') AND realized_pnl_usd IS NOT NULL GROUP BY direction",
         "format": "table"
       }],
-      "options": {"pieType": "pie", "displayLabels": ["name", "percent"], "legend": {"showLegend": true, "placement": "right"}}
+      "options": {"pieType": "pie", "displayLabels": ["name", "percent"], "legend": {"showLegend": true, "placement": "right"}, "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^value$/"}}
     },
     {
       "id": 29,

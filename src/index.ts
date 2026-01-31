@@ -11,6 +11,7 @@ import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence } from './research/index.js';
+import { PerpsExecutor } from './execution/perps/index.js';
 import type { Chain } from './types/index.js';
 import type { RpcEndpoint } from './chain/provider-pool.js';
 import type { PoolConfig } from './config/types.js';
@@ -634,6 +635,75 @@ async function main() {
     );
   }
 
+  // Perps Execution Layer — supports multiple runs (paper + live side-by-side)
+  const perpsExecutors: PerpsExecutor[] = [];
+
+  if (config.app.perpsExecution?.enabled && pcaMonitor) {
+    const perpsConfig = config.app.perpsExecution;
+    const futuresKey = config.env.binanceFutures.apiKey;
+    const futuresSecret = config.env.binanceFutures.apiSecret;
+
+    if (!futuresKey || !futuresSecret) {
+      logger.warn('Perps execution enabled but BINANCE_FUTURES_API_KEY/SECRET not set, skipping');
+    } else if (perpsConfig.runs.length === 0) {
+      logger.warn('Perps execution enabled but no runs configured in perpsExecution.runs[]');
+    } else {
+      for (const run of perpsConfig.runs) {
+        const resolvedConfig = {
+          enabled: perpsConfig.enabled,
+          paperMode: run.paperMode,
+          leverage: run.leverage ?? perpsConfig.leverage,
+          marginType: run.marginType ?? perpsConfig.marginType,
+          enableLongs: run.enableLongs ?? perpsConfig.enableLongs,
+          enableShorts: run.enableShorts ?? perpsConfig.enableShorts,
+          maxConcurrentPositions: run.maxConcurrentPositions ?? perpsConfig.maxConcurrentPositions,
+          maxPositionSizeUsd: run.maxPositionSizeUsd ?? perpsConfig.maxPositionSizeUsd,
+          minPositionSizeUsd: run.minPositionSizeUsd ?? perpsConfig.minPositionSizeUsd,
+          maxTotalExposureUsd: run.maxTotalExposureUsd ?? perpsConfig.maxTotalExposureUsd,
+          cooldownMs: run.cooldownMs ?? perpsConfig.cooldownMs,
+          heartbeatIntervalMs: perpsConfig.heartbeatIntervalMs,
+          positionSyncIntervalMs: perpsConfig.positionSyncIntervalMs,
+          maxHoldTimeMsShort: run.maxHoldTimeMsShort ?? perpsConfig.maxHoldTimeMsShort,
+          maxHoldTimeMsLong: run.maxHoldTimeMsLong ?? perpsConfig.maxHoldTimeMsLong,
+          killSwitch: run.killSwitch ?? perpsConfig.killSwitch,
+          paperFill: run.paperFill ?? perpsConfig.paperFill,
+        };
+
+        const executor = new PerpsExecutor(resolvedConfig, pool, futuresKey, futuresSecret, run.runId);
+        perpsExecutors.push(executor);
+        logger.info({ runId: run.runId, paperMode: run.paperMode }, 'Configured perps run');
+      }
+
+      pcaMonitor.on('signal', async (event) => {
+        const results = await Promise.allSettled(
+          perpsExecutors.map(ex => ex.handleSignal(event))
+        );
+        for (const [i, result] of results.entries()) {
+          if (result.status === 'rejected') {
+            logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutors[i].getRunId() }, 'Perps handleSignal error');
+          }
+        }
+      });
+
+      pcaMonitor.on('exit', async (event) => {
+        const results = await Promise.allSettled(
+          perpsExecutors.map(ex => ex.handleExit(event))
+        );
+        for (const [i, result] of results.entries()) {
+          if (result.status === 'rejected') {
+            logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutors[i].getRunId() }, 'Perps handleExit error');
+          }
+        }
+      });
+
+      for (const ex of perpsExecutors) {
+        await ex.start();
+        orchestrator.on('quote', ex.getPriceCallback());
+        logger.info({ mode: ex.getMode(), runId: ex.getRunId() }, 'Perps executor started');
+      }
+    }
+  }
+
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
 
@@ -643,9 +713,15 @@ async function main() {
     rankSpaceDetector.stop();
     logger.info('RankSpace detector stopped');
 
+    // C2: Stop PCA first (stops emitting new signals/exits), then executor
     if (pcaMonitor) {
       pcaMonitor.stop();
       logger.info('PCA stat-arb monitor stopped');
+    }
+
+    for (const ex of perpsExecutors) {
+      await ex.stop();
+      logger.info({ runId: ex.getRunId(), mode: ex.getMode() }, 'Perps executor stopped');
     }
 
     for (const calibrator of slippageCalibrators) {

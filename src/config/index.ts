@@ -58,6 +58,10 @@ function loadEnvConfig(): EnvConfig {
       bybitApiKey: process.env.BYBIT_API_KEY,
       bybitApiSecret: process.env.BYBIT_API_SECRET,
     },
+    binanceFutures: {
+      apiKey: process.env.BINANCE_FUTURES_API_KEY,
+      apiSecret: process.env.BINANCE_FUTURES_API_SECRET,
+    },
     executorPrivateKey: process.env.EXECUTOR_PRIVATE_KEY,
     paperMode: process.env.PAPER_MODE,
     enableExecution: process.env.ENABLE_EXECUTION,

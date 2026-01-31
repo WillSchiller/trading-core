@@ -405,7 +405,7 @@
         ]
       },
       "options": {
-        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/P&L/"},
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^(long|short)$/"},
         "orientation": "horizontal",
         "displayMode": "gradient",
         "showUnfilled": true,

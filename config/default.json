@@ -134,6 +134,35 @@
       }
     }
   },
+  "perpsExecution": {
+    "enabled": false,
+    "leverage": 1,
+    "marginType": "ISOLATED",
+    "enableLongs": false,
+    "enableShorts": true,
+    "maxConcurrentPositions": 5,
+    "maxPositionSizeUsd": 150,
+    "minPositionSizeUsd": 10,
+    "maxTotalExposureUsd": 750,
+    "cooldownMs": 30000,
+    "heartbeatIntervalMs": 5000,
+    "positionSyncIntervalMs": 60000,
+    "maxHoldTimeMsShort": 14400000,
+    "maxHoldTimeMsLong": 21600000,
+    "killSwitch": {
+      "dailyDrawdownLimitUsd": 100,
+      "maxTotalLossUsd": 500,
+      "maxConsecutiveLosses": 5,
+      "checkIntervalMs": 60000
+    },
+    "paperFill": {
+      "spreadBps": 2,
+      "slippageBps": 5,
+      "takerFeeBps": 2,
+      "maxSlippageBps": 20
+    },
+    "runs": []
+  },
   "chains": {
     "mainnet": {
       "enabled": false,

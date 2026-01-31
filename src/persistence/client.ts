@@ -1,7 +1,10 @@
 import pg from 'pg';
 import { logger } from '../utils/logger.js';
 
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// Force NUMERIC (OID 1700) to return as string, never float
+types.setTypeParser(1700, (val: string) => val);
 
 let pool: pg.Pool | null = null;
 

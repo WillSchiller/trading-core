@@ -25,6 +25,7 @@ export const logger: PinoLogger = pino({
       'BINANCE_API_SECRET',
       'COINBASE_API_SECRET',
       'EXECUTOR_PRIVATE_KEY',
+      'BINANCE_FUTURES_API_SECRET',
     ],
     censor: '[REDACTED]',
   },
