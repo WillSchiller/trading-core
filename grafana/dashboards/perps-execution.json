@@ -57,7 +57,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Total PnL\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Total PnL\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
         "format": "table"
       }],
       "fieldConfig": {
@@ -82,7 +82,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Today PnL\" FROM perps_executions WHERE status = 'closed' AND DATE(created_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Today PnL\" FROM perps_executions WHERE status = 'closed' AND DATE(created_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
         "format": "table"
       }],
       "fieldConfig": {
@@ -107,7 +107,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win Rate\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win Rate\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
         "format": "table"
       }],
       "fieldConfig": {
@@ -133,7 +133,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM perps_executions WHERE status IN ('pending_open', 'open', 'closing') AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
+        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM perps_executions WHERE status IN ('pending_open', 'open', 'closing') AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
         "format": "table"
       }],
       "fieldConfig": {
@@ -158,7 +158,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) AS \"Trades\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
+        "rawSql": "SELECT COUNT(*) AS \"Trades\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
         "format": "table"
       }],
       "fieldConfig": {
@@ -191,7 +191,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT updated_at AS time, mode AS metric, SUM(realized_pnl) OVER (PARTITION BY mode ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND $__timeFilter(updated_at) AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY time",
+          "rawSql": "SELECT updated_at AS time, mode AS metric, SUM(realized_pnl) OVER (PARTITION BY mode ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND $__timeFilter(updated_at) AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
           "format": "time_series"
         }
       ],
@@ -238,7 +238,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT trade_date AS time, SUM(total_pnl) AS \"Daily PnL\" FROM v_perps_daily_pnl WHERE ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') GROUP BY trade_date ORDER BY trade_date",
+        "rawSql": "SELECT trade_date AS time, SUM(total_pnl) AS \"Daily PnL\" FROM v_perps_daily_pnl WHERE ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY trade_date ORDER BY trade_date",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -282,7 +282,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT run_id AS \"Run\", mode AS \"Mode\", asset AS \"Asset\", direction AS \"Direction\", side AS \"Side\", ROUND(entry_price::numeric, 4) AS \"Entry Price\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized PnL ($)\", leverage AS \"Leverage\", ROUND((hold_time_ms / 60000.0)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z-Score\", created_at AS \"Opened\" FROM v_perps_open_positions WHERE ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC",
+        "rawSql": "SELECT run_id AS \"Run\", mode AS \"Mode\", asset AS \"Asset\", direction AS \"Direction\", side AS \"Side\", ROUND(entry_price::numeric, 4) AS \"Entry Price\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized PnL ($)\", leverage AS \"Leverage\", ROUND((hold_time_ms / 60000.0)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z-Score\", created_at AS \"Opened\" FROM v_perps_open_positions WHERE ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC",
         "format": "table"
       }],
       "options": {
@@ -352,7 +352,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT asset AS \"Asset\", SUM(total_trades) AS \"Trades\", SUM(wins) AS \"Wins\", SUM(losses) AS \"Losses\", ROUND(SUM(total_pnl)::numeric, 4) AS \"Total PnL ($)\", ROUND((SUM(total_pnl) / NULLIF(SUM(total_trades), 0))::numeric, 4) AS \"Avg PnL ($)\", CASE WHEN SUM(total_trades) > 0 THEN ROUND(100.0 * SUM(wins) / SUM(total_trades), 1) ELSE 0 END AS \"Win Rate %\" FROM v_perps_performance_by_asset WHERE ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') GROUP BY asset ORDER BY SUM(total_pnl) DESC",
+        "rawSql": "SELECT asset AS \"Asset\", SUM(total_trades) AS \"Trades\", SUM(wins) AS \"Wins\", SUM(losses) AS \"Losses\", ROUND(SUM(total_pnl)::numeric, 4) AS \"Total PnL ($)\", ROUND((SUM(total_pnl) / NULLIF(SUM(total_trades), 0))::numeric, 4) AS \"Avg PnL ($)\", CASE WHEN SUM(total_trades) > 0 THEN ROUND(100.0 * SUM(wins) / SUM(total_trades), 1) ELSE 0 END AS \"Win Rate %\" FROM v_perps_performance_by_asset WHERE ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY asset ORDER BY SUM(total_pnl) DESC",
         "format": "table"
       }],
       "options": {
@@ -397,7 +397,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN realized_pnl > 0 THEN 'Win' WHEN realized_pnl < 0 THEN 'Loss' ELSE 'Breakeven' END AS \"Outcome\", COUNT(*)::float AS \"Count\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') GROUP BY 1",
+        "rawSql": "SELECT CASE WHEN realized_pnl > 0 THEN 'Win' WHEN realized_pnl < 0 THEN 'Loss' ELSE 'Breakeven' END AS \"Outcome\", COUNT(*)::float AS \"Count\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY 1",
         "format": "table"
       }],
       "fieldConfig": {
@@ -424,7 +424,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT direction AS \"Direction\", ROUND(SUM(realized_pnl)::numeric, 4) AS \"PnL ($)\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') GROUP BY direction ORDER BY direction",
+        "rawSql": "SELECT direction AS \"Direction\", ROUND(SUM(realized_pnl)::numeric, 4) AS \"PnL ($)\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY direction ORDER BY direction",
         "format": "table"
       }],
       "fieldConfig": {
@@ -475,7 +475,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT run_id AS \"Run\", mode AS \"Mode\", asset AS \"Asset\", direction AS \"Direction\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", exit_reason AS \"Exit Reason\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z-Score\", leverage AS \"Lev\", created_at AS \"Opened\", updated_at AS \"Closed\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY updated_at DESC LIMIT 50",
+        "rawSql": "SELECT run_id AS \"Run\", mode AS \"Mode\", asset AS \"Asset\", direction AS \"Direction\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", exit_reason AS \"Exit Reason\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z-Score\", leverage AS \"Lev\", created_at AS \"Opened\", updated_at AS \"Closed\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY updated_at DESC LIMIT 50",
         "format": "table"
       }],
       "options": {
@@ -558,7 +558,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 4) AS \"Daily PnL ($)\", ROUND(total_pnl::numeric, 4) AS \"Total PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Positions Closed\" FROM perps_kill_switch_events WHERE ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC LIMIT 100",
+        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 4) AS \"Daily PnL ($)\", ROUND(total_pnl::numeric, 4) AS \"Total PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Positions Closed\" FROM perps_kill_switch_events WHERE (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC LIMIT 100",
         "format": "table"
       }],
       "options": {

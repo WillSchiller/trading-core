@@ -564,7 +564,7 @@ describe('Grafana Dashboard Validation', () => {
         const queries = extractQueries(dashboard);
         for (const { panelTitle, query } of queries) {
           for (const varName of includeAllVars) {
-            const hasVariable = query.includes(`\${${varName}}`);
+            const hasVariable = query.includes(`\${${varName}}`) || query.includes(`\${${varName}:sqlstring}`);
             if (hasVariable) {
               const queryLower = query.toLowerCase();
               const hasConditional =
@@ -614,12 +614,16 @@ describe('Grafana Dashboard Validation', () => {
           const preparedQuery = query
             .replace(/\$__timeFrom\(\)/g, "'2024-01-01 00:00:00'::timestamptz")
             .replace(/\$__timeTo\(\)/g, "'2024-01-01 01:00:00'::timestamptz")
+            .replace(/\$__timeFilter\((\w+)\)/g, "$1 BETWEEN '2024-01-01 00:00:00'::timestamptz AND '2024-01-01 01:00:00'::timestamptz")
             .replace(/\$\{pair\}/g, '1')
             .replace(/\$\{strategy\}/g, "'all'")
             .replace(/\$\{venue_id\}/g, '1')
             .replace(/\$\{chain\}/g, "'base'")
             .replace(/\$\{direction\}/g, "'buy_dex'")
-            .replace(/\$\{status\}/g, "'detected'");
+            .replace(/\$\{status\}/g, "'detected'")
+            .replace(/\$\{mode\}/g, 'All')
+            .replace(/\$\{run_id:sqlstring\}/g, "'hl_live'")
+            .replace(/\$\{run_id\}/g, "'hl_live'");
 
           try {
             await pool.query(`PREPARE test_query AS ${preparedQuery}`);
