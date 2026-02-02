@@ -26,6 +26,7 @@ export class PerpsExecutor {
   private readonly tracker: PositionTracker;
   private readonly killSwitch: KillSwitch;
   private readonly config: PerpsExecutionConfig;
+  private readonly excludeAssets: Set<string>;
   private readonly runId: string;
   private readonly mode: PerpsMode;
   private readonly log;
@@ -42,6 +43,7 @@ export class PerpsExecutor {
 
   constructor(config: PerpsExecutionConfig, pool: Pool, client: PerpsExchangeClient, runId: string) {
     this.config = config;
+    this.excludeAssets = new Set((config as any).excludeAssets ?? []);
     this.runId = runId;
     this.mode = config.paperMode ? 'paper' : 'live';
     this.log = createChildLogger({ component: 'perps-executor', runId, mode: this.mode, exchange: client.exchange });
@@ -129,6 +131,7 @@ export class PerpsExecutor {
 
     if (direction === 'short' && !this.config.enableShorts) return;
     if (direction === 'long' && !this.config.enableLongs) return;
+    if (this.excludeAssets.has(asset)) return;
 
     const existing = await this.persistence.getExecutionByClientOrderId(clientOrderId);
     if (existing) {

@@ -246,6 +246,7 @@ export interface PerpsRunConfig {
   cooldownMs?: number;
   maxHoldTimeMsShort?: number;
   maxHoldTimeMsLong?: number;
+  excludeAssets?: string[];
   killSwitch?: KillSwitchConfig;
   paperFill?: PaperFillConfig;
 }

@@ -698,6 +698,7 @@ async function main() {
           maxHoldTimeMsLong: run.maxHoldTimeMsLong ?? perpsConfig.maxHoldTimeMsLong,
           killSwitch: run.killSwitch ?? perpsConfig.killSwitch,
           paperFill: run.paperFill ?? perpsConfig.paperFill,
+          excludeAssets: run.excludeAssets,
         };
 
         const executor = new PerpsExecutor(resolvedConfig, pool, client, run.runId);
