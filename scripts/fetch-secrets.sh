@@ -17,11 +17,30 @@ fetch_secret() {
     --query 'SecretString' \
     --output text 2>/dev/null || echo "")
 
-  if [ -n "$value" ]; then
+  if [ -n "$value" ] && [ "$value" != "{}" ]; then
     export "$env_var_name=$value"
-    echo "$env_var_name set from $secret_name"
+    echo "$env_var_name set from $secret_name ($(echo -n "$value" | wc -c | tr -d ' ') chars)"
   else
-    echo "Warning: Secret $secret_name not found or empty"
+    export "$env_var_name="
+    echo "WARNING: $secret_name not found, empty, or placeholder"
+  fi
+}
+
+fetch_secret_optional() {
+  local secret_name="$1"
+  local env_var_name="$2"
+
+  value=$(aws secretsmanager get-secret-value \
+    --region "$REGION" \
+    --secret-id "$PROJECT_NAME/$secret_name" \
+    --query 'SecretString' \
+    --output text 2>/dev/null || echo "")
+
+  if [ -n "$value" ] && [ "$value" != "{}" ]; then
+    export "$env_var_name=$value"
+    echo "$env_var_name set from $secret_name ($(echo -n "$value" | wc -c | tr -d ' ') chars)"
+  else
+    export "$env_var_name="
   fi
 }
 
@@ -32,6 +51,8 @@ fetch_secret "rpc-mainnet-http" "RPC_MAINNET_HTTP"
 fetch_secret "rpc-mainnet-ws" "RPC_MAINNET_WS"
 fetch_secret "binance-api-key" "BINANCE_API_KEY"
 fetch_secret "binance-api-secret" "BINANCE_API_SECRET"
+fetch_secret_optional "binance-futures-api-key" "BINANCE_FUTURES_API_KEY"
+fetch_secret_optional "binance-futures-api-secret" "BINANCE_FUTURES_API_SECRET"
 fetch_secret "coinbase-api-key" "COINBASE_API_KEY"
 fetch_secret "coinbase-api-secret" "COINBASE_API_SECRET"
 fetch_secret "coinbase-passphrase" "COINBASE_PASSPHRASE"
@@ -53,6 +74,8 @@ RPC_MAINNET_HTTP=$RPC_MAINNET_HTTP
 RPC_MAINNET_WS=$RPC_MAINNET_WS
 BINANCE_API_KEY=$BINANCE_API_KEY
 BINANCE_API_SECRET=$BINANCE_API_SECRET
+BINANCE_FUTURES_API_KEY=$BINANCE_FUTURES_API_KEY
+BINANCE_FUTURES_API_SECRET=$BINANCE_FUTURES_API_SECRET
 COINBASE_API_KEY=$COINBASE_API_KEY
 COINBASE_API_SECRET=$COINBASE_API_SECRET
 COINBASE_PASSPHRASE=$COINBASE_PASSPHRASE

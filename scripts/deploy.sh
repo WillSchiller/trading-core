@@ -17,12 +17,9 @@ find grafana -type f | head -20
 echo "=== SQL files ==="
 ls -la sql/
 
-echo "=== Fetching secrets ==="
+echo "=== Logging into ECR ==="
 export AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 export PROJECT_NAME="${PROJECT_NAME:-dislocation-trader}"
-bash scripts/fetch-secrets.sh export
-
-echo "=== Logging into ECR ==="
 export ECR_REGISTRY="${ECR_REGISTRY:-386166838496.dkr.ecr.ap-southeast-1.amazonaws.com}"
 export ECR_REPOSITORY_URL="${ECR_REPOSITORY_URL:-$ECR_REGISTRY/dislocation-trader-production}"
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
@@ -31,34 +28,42 @@ echo "=== Getting Public IP ==="
 PUBLIC_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo "3.1.140.199")
 echo "PUBLIC_IP: $PUBLIC_IP"
 
-# Create .env file for docker-compose
+echo "=== Fetching secrets from AWS Secrets Manager ==="
+bash scripts/fetch-secrets.sh export
+
+if [ ! -f .env.secrets ]; then
+  echo "FATAL: fetch-secrets.sh did not create .env.secrets"
+  exit 1
+fi
+
+echo "=== Building .env file ==="
 cat > .env << EOF
 ECR_REPOSITORY_URL=${ECR_REPOSITORY_URL}
 IMAGE_TAG=${IMAGE_TAG:-latest}
 PUBLIC_IP=${PUBLIC_IP}
 GRAFANA_ADMIN_PASSWORD=admin123
-TELEGRAM_CHAT_ID=
 EOF
 
-# Append secrets
-if [ -f .env.secrets ]; then
-  cat .env.secrets >> .env
+cat .env.secrets >> .env
+
+echo "=== Validating secrets in .env ==="
+MISSING=""
+for KEY in POSTGRES_PASSWORD RPC_BASE_HTTP BINANCE_API_KEY; do
+  VAL=$(grep "^${KEY}=" .env | tail -1 | cut -d= -f2-)
+  if [ -z "$VAL" ] || [ "$VAL" = "{}" ]; then
+    MISSING="${MISSING} ${KEY}"
+    echo "WARNING: ${KEY} is empty or placeholder"
+  else
+    echo "OK: ${KEY} has $(echo -n "$VAL" | wc -c | tr -d ' ') chars"
+  fi
+done
+if [ -n "$MISSING" ]; then
+  echo "WARNING: Missing secrets:${MISSING}"
+  echo "Continuing deployment -- check AWS Secrets Manager values"
 fi
 
 echo "=== Environment file ==="
 cat .env | sed 's/=.*/=***REDACTED***/'
-
-echo "=== Current directory ==="
-pwd
-
-echo "=== Check .env.secrets ==="
-ls -la .env.secrets || echo "No .env.secrets file!"
-cat .env.secrets 2>/dev/null | sed 's/=.*/=***/' || echo "Cannot read .env.secrets"
-
-echo "=== Check .env ==="
-ls -la .env || echo "No .env file!"
-wc -l .env
-cat .env | sed 's/=.*/=***/'
 
 echo "=== Stopping existing services ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/null || true
