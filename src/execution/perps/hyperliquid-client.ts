@@ -44,7 +44,8 @@ export class HyperliquidClient implements PerpsExchangeClient {
     this.paperFill = config.paperFill ?? { spreadBps: 2, slippageBps: 5, takerFeeBps: 2, maxSlippageBps: 20 };
     this.slippageBps = config.slippageBps ?? 50;
 
-    const account = privateKeyToAccount(config.privateKey as `0x${string}`);
+    const key = config.privateKey.startsWith('0x') ? config.privateKey : `0x${config.privateKey}`;
+    const account = privateKeyToAccount(key as `0x${string}`);
     this.walletAddress = account.address;
 
     const transport = new HttpTransport({ isTestnet: config.testnet ?? false });

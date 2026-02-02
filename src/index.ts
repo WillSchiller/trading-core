@@ -652,27 +652,32 @@ async function main() {
         const exchange = run.exchange ?? 'binance';
         let client: PerpsExchangeClient;
 
-        if (exchange === 'hyperliquid') {
-          if (!hlPrivateKey) {
-            logger.warn({ runId: run.runId }, 'Hyperliquid run but HYPERLIQUID_PRIVATE_KEY not set, skipping');
-            continue;
+        try {
+          if (exchange === 'hyperliquid') {
+            if (!hlPrivateKey) {
+              logger.warn({ runId: run.runId }, 'Hyperliquid run but HYPERLIQUID_PRIVATE_KEY not set, skipping');
+              continue;
+            }
+            client = new HyperliquidClient({
+              privateKey: hlPrivateKey,
+              paperMode: run.paperMode,
+              paperFill: run.paperFill ?? perpsConfig.paperFill,
+            });
+          } else {
+            if (!futuresKey || !futuresSecret) {
+              logger.warn({ runId: run.runId }, 'Binance run but BINANCE_FUTURES_API_KEY/SECRET not set, skipping');
+              continue;
+            }
+            client = new BinanceFuturesClient({
+              apiKey: futuresKey,
+              apiSecret: futuresSecret,
+              paperMode: run.paperMode,
+              paperFill: run.paperFill ?? perpsConfig.paperFill,
+            });
           }
-          client = new HyperliquidClient({
-            privateKey: hlPrivateKey,
-            paperMode: run.paperMode,
-            paperFill: run.paperFill ?? perpsConfig.paperFill,
-          });
-        } else {
-          if (!futuresKey || !futuresSecret) {
-            logger.warn({ runId: run.runId }, 'Binance run but BINANCE_FUTURES_API_KEY/SECRET not set, skipping');
-            continue;
-          }
-          client = new BinanceFuturesClient({
-            apiKey: futuresKey,
-            apiSecret: futuresSecret,
-            paperMode: run.paperMode,
-            paperFill: run.paperFill ?? perpsConfig.paperFill,
-          });
+        } catch (err) {
+          logger.error({ error: (err as Error).message, runId: run.runId, exchange }, 'Failed to create exchange client — skipping run');
+          continue;
         }
 
         const resolvedConfig = {
