@@ -79,11 +79,19 @@ export class PerpsExecutor {
       }
     }
 
-    await this.tracker.reconcileOnStartup();
+    try {
+      await this.tracker.reconcileOnStartup();
+    } catch (err) {
+      this.log.error({ error: (err as Error).message, runId: this.runId }, 'Failed to reconcile positions on startup — continuing without sync');
+    }
     this.tracker.startPeriodicSync(this.config.positionSyncIntervalMs);
 
     if (!this.config.paperMode) {
-      await this.checkMarginHealth();
+      try {
+        await this.checkMarginHealth();
+      } catch (err) {
+        this.log.error({ error: (err as Error).message, runId: this.runId }, 'Failed margin health check on startup — continuing');
+      }
     }
 
     this.heartbeatTimer = setInterval(() => {

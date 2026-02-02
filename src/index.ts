@@ -723,9 +723,13 @@ async function main() {
       });
 
       for (const ex of perpsExecutors) {
-        await ex.start();
-        orchestrator.on('quote', ex.getPriceCallback());
-        logger.info({ mode: ex.getMode(), runId: ex.getRunId() }, 'Perps executor started');
+        try {
+          await ex.start();
+          orchestrator.on('quote', ex.getPriceCallback());
+          logger.info({ mode: ex.getMode(), runId: ex.getRunId() }, 'Perps executor started');
+        } catch (err) {
+          logger.error({ error: (err as Error).message, runId: ex.getRunId() }, 'Perps executor failed to start — skipping run');
+        }
       }
     }
   }
