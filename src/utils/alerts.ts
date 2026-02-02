@@ -29,7 +29,8 @@ export async function sendAlert(message: string, level: AlertLevel = 'info'): Pr
     return;
   }
 
-  const text = `${prefix}\n\n${message}`;
+  const escaped = message.replace(/_/g, '\\_');
+  const text = `${prefix}\n\n${escaped}`;
 
   try {
     const response = await fetch(

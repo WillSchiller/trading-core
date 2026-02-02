@@ -162,7 +162,9 @@
       "maxSlippageBps": 20
     },
     "runs": [
-      { "runId": "hl_paper", "paperMode": true, "exchange": "hyperliquid" }
+      { "runId": "hl_paper", "paperMode": true, "exchange": "hyperliquid" },
+      { "runId": "hl_live", "paperMode": false, "exchange": "hyperliquid", "maxPositionSizeUsd": 75, "maxTotalExposureUsd": 375, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 250, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } },
+      { "runId": "hl_paper_match", "paperMode": true, "exchange": "hyperliquid", "maxPositionSizeUsd": 75, "maxTotalExposureUsd": 375, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 250, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } }
     ]
   },
   "chains": {
