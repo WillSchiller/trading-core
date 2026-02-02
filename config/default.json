@@ -135,7 +135,7 @@
     }
   },
   "perpsExecution": {
-    "enabled": false,
+    "enabled": true,
     "leverage": 1,
     "marginType": "ISOLATED",
     "enableLongs": false,
@@ -161,7 +161,10 @@
       "takerFeeBps": 2,
       "maxSlippageBps": 20
     },
-    "runs": []
+    "runs": [
+      { "runId": "live_1k", "paperMode": false },
+      { "runId": "paper_bench", "paperMode": true }
+    ]
   },
   "chains": {
     "mainnet": {

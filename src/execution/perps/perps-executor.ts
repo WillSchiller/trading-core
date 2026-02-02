@@ -35,6 +35,10 @@ export class PerpsExecutor {
   private running = false;
   private exitLocks = new Set<string>();
   private priceCallback: ((quote: { venue: string; pair: string; mid: number }) => void) | null = null;
+  private suspendUntil = 0;
+  private lastMarginCheckAt = 0;
+  private static readonly MARGIN_CHECK_INTERVAL_MS = 300_000;
+  private static readonly MARGIN_SUSPEND_MS = 300_000;
 
   constructor(config: PerpsExecutionConfig, pool: Pool, apiKey: string, apiSecret: string, runId: string) {
     this.config = config;
@@ -82,6 +86,10 @@ export class PerpsExecutor {
 
     await this.tracker.reconcileOnStartup();
     this.tracker.startPeriodicSync(this.config.positionSyncIntervalMs);
+
+    if (!this.config.paperMode) {
+      await this.checkMarginHealth();
+    }
 
     this.heartbeatTimer = setInterval(() => {
       this.onHeartbeat().catch(err =>
@@ -153,6 +161,11 @@ export class PerpsExecutor {
     }
 
     const now = Date.now();
+    if (now < this.suspendUntil) {
+      this.log.debug({ asset, resumesInMs: this.suspendUntil - now }, 'Trading suspended (insufficient margin)');
+      return;
+    }
+
     if (now - this.lastTradeAt < this.config.cooldownMs) {
       this.log.debug({ asset, cooldownRemaining: this.config.cooldownMs - (now - this.lastTradeAt) }, 'In cooldown');
       return;
@@ -205,8 +218,17 @@ export class PerpsExecutor {
         markPrice: event.entryPrice,
       });
     } catch (err) {
-      this.log.error({ asset, symbol, error: (err as Error).message }, 'Failed to place entry order');
+      const errMsg = (err as Error).message;
+      this.log.error({ asset, symbol, error: errMsg }, 'Failed to place entry order');
       await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
+      if (errMsg.includes('-2019') || errMsg.includes('Margin is insufficient')) {
+        this.suspendUntil = Date.now() + PerpsExecutor.MARGIN_SUSPEND_MS;
+        this.log.warn({ suspendMinutes: PerpsExecutor.MARGIN_SUSPEND_MS / 60000 }, 'Insufficient margin — suspending new entries');
+        sendAlert(
+          `⚠️ *Margin Insufficient* [${this.mode}/${this.runId.slice(0, 8)}]\nNew entries suspended for 5 min\nCheck Futures wallet balance`,
+          'warn'
+        ).catch(() => {});
+      }
       return;
     }
 
@@ -341,6 +363,13 @@ export class PerpsExecutor {
   private async onHeartbeat(): Promise<void> {
     await this.killSwitch.check();
 
+    if (!this.config.paperMode) {
+      const now = Date.now();
+      if (now - this.lastMarginCheckAt > PerpsExecutor.MARGIN_CHECK_INTERVAL_MS) {
+        await this.checkMarginHealth();
+      }
+    }
+
     const positions = this.tracker.getOpenPositions();
     if (positions.length === 0) return;
 
@@ -433,6 +462,39 @@ export class PerpsExecutor {
       this.log.info({ asset: pos.asset, reason, exitPrice: exitPriceStr, realizedPnl }, 'Heartbeat force-closed position');
     } finally {
       this.exitLocks.delete(pos.asset);
+    }
+  }
+
+  private async checkMarginHealth(): Promise<void> {
+    this.lastMarginCheckAt = Date.now();
+    try {
+      const account = await this.client.getAccountInfo();
+      const available = parseFloat(account.availableBalance);
+      const wallet = parseFloat(account.totalWalletBalance);
+      const unrealized = parseFloat(account.totalUnrealizedProfit);
+      const requiredUsd = this.config.maxTotalExposureUsd / this.config.leverage;
+      const buffer = requiredUsd * 1.1;
+
+      this.log.info({
+        availableBalance: available.toFixed(2),
+        walletBalance: wallet.toFixed(2),
+        unrealizedPnl: unrealized.toFixed(2),
+        requiredUsd: requiredUsd.toFixed(2),
+      }, 'Margin health check');
+
+      if (available < buffer) {
+        this.log.warn({
+          availableBalance: available.toFixed(2),
+          requiredWithBuffer: buffer.toFixed(2),
+          shortfall: (buffer - available).toFixed(2),
+        }, 'LOW MARGIN — available balance below required + 10% buffer');
+        sendAlert(
+          `⚠️ *Low Margin* [${this.mode}/${this.runId.slice(0, 8)}]\nAvailable: $${available.toFixed(2)}\nRequired: $${requiredUsd.toFixed(2)}\nWallet: $${wallet.toFixed(2)}`,
+          'warn'
+        ).catch(() => {});
+      }
+    } catch (err) {
+      this.log.warn({ error: (err as Error).message }, 'Failed to check margin health (API key/permissions issue?)');
     }
   }
 
