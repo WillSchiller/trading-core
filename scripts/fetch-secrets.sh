@@ -57,12 +57,13 @@ fetch_secret "coinbase-api-key" "COINBASE_API_KEY"
 fetch_secret "coinbase-api-secret" "COINBASE_API_SECRET"
 fetch_secret "coinbase-passphrase" "COINBASE_PASSPHRASE"
 fetch_secret "executor-private-key" "EXECUTOR_PRIVATE_KEY"
+fetch_secret_optional "hyperliquid-private-key" "HYPERLIQUID_PRIVATE_KEY"
 fetch_secret "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
 fetch_secret "telegram-chat-id" "TELEGRAM_CHAT_ID"
 
 echo "Secrets fetched successfully"
 
-env | grep -E '^(POSTGRES_PASSWORD|RPC_|BINANCE_|COINBASE_|EXECUTOR_|TELEGRAM_)' | sed 's/=.*/=***REDACTED***/'
+env | grep -E '^(POSTGRES_PASSWORD|RPC_|BINANCE_|COINBASE_|EXECUTOR_|TELEGRAM_|HYPERLIQUID_)' | sed 's/=.*/=***REDACTED***/'
 
 if [ "$1" = "export" ]; then
   echo "Exporting secrets to .env file..."
@@ -80,6 +81,7 @@ COINBASE_API_KEY=$COINBASE_API_KEY
 COINBASE_API_SECRET=$COINBASE_API_SECRET
 COINBASE_PASSPHRASE=$COINBASE_PASSPHRASE
 EXECUTOR_PRIVATE_KEY=$EXECUTOR_PRIVATE_KEY
+HYPERLIQUID_PRIVATE_KEY=$HYPERLIQUID_PRIVATE_KEY
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
 ALERTS_ENABLED=true
