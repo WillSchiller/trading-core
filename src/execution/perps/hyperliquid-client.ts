@@ -242,7 +242,7 @@ export class HyperliquidClient implements PerpsExchangeClient {
 
   roundPrice(_symbol: string, price: number): number {
     if (price === 0) return 0;
-    const sigFigs = 6;
+    const sigFigs = 5;
     const magnitude = Math.floor(Math.log10(Math.abs(price))) + 1;
     const decimals = Math.max(0, sigFigs - magnitude);
     return parseFloat(price.toFixed(decimals));
