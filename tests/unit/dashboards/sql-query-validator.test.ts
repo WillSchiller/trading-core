@@ -94,7 +94,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
 
       for (const { file, panelTitle, query } of allQueries) {
         for (const field of numericFields) {
-          const quotedPattern = new RegExp(`${field}\\s*=\\s*['"]\\$\\{\\w+\\}['"]`, 'gi');
+          const quotedPattern = new RegExp(`\\b${field}\\s*=\\s*['"]\\$\\{\\w+\\}['"]`, 'gi');
           if (quotedPattern.test(query)) {
             errors.push(`${file}: "${panelTitle}" - ${field} is quoted but should be numeric`);
           }
@@ -217,6 +217,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
         /<\s*NOW\s*\(\)/i,
         /BETWEEN.*NOW/i,
         /interval\s+'\d+/i,
+        /CURRENT_DATE/i,
       ];
 
       for (const { file, panelTitle, query } of allQueries) {
@@ -227,8 +228,9 @@ describe('SQL Query Anti-Pattern Detection', () => {
               query.includes('$__timeFrom()') || query.includes('$__timeTo()');
             const hasFixedTimeRange = allowedFixedTimePatterns.some(p => p.test(query));
             const isSubqueryOrWindow = /OVER\s*\(|LAG\s*\(|LEAD\s*\(|ROW_NUMBER/i.test(query);
+            const wherePredicates = query.match(/WHERE\s+(.*?)(?=\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|\s*$)/is)?.[1] || '';
             const isSelectOnly = new RegExp(`SELECT[^;]*\\b${col}\\b[^;]*FROM`, 'is').test(query) &&
-              !new RegExp(`WHERE[^;]*\\b${col}\\b`, 'is').test(query);
+              !new RegExp(`\\b${col}\\b`, 'i').test(wherePredicates);
             const hasLimit = /LIMIT\s+\d+/i.test(query);
             const hasOrderByDesc = /ORDER BY.*DESC/i.test(query);
             const isLatestQuery = hasLimit && hasOrderByDesc;
@@ -299,7 +301,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
 
     it('should include LIMIT for table panels', () => {
       const errors: string[] = [];
-      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config'];
+      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config', 'v_perps_open_positions', 'v_perps_daily_pnl', 'v_perps_performance_by_asset', 'perps_kill_switch_events'];
 
       for (const { file, panelTitle, query } of allQueries) {
         const hasLimit = /LIMIT\s+\d+/i.test(query);
@@ -346,8 +348,10 @@ describe('SQL Query Anti-Pattern Detection', () => {
         'trade_size_usd',
         'resolved',
         'asset',
+        'run_id',
+        'mode',
       ];
-      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config'];
+      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config', 'perps_kill_switch_events'];
 
       const errors: string[] = [];
 

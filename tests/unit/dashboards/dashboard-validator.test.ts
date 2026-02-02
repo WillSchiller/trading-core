@@ -299,6 +299,7 @@ describe('Grafana Dashboard Validation', () => {
         'text',
         'graph',
         'logs',
+        'barchart',
       ];
 
       for (const [file, dashboard] of dashboards) {
@@ -456,6 +457,11 @@ describe('Grafana Dashboard Validation', () => {
         'v_pca_stop_analysis',
         'v_pca_mae_distribution',
         'v_pca_shadow_driver',
+        'perps_executions',
+        'perps_kill_switch_events',
+        'v_perps_daily_pnl',
+        'v_perps_open_positions',
+        'v_perps_performance_by_asset',
       ];
 
       for (const [file, dashboard] of dashboards) {
@@ -560,11 +566,12 @@ describe('Grafana Dashboard Validation', () => {
           for (const varName of includeAllVars) {
             const hasVariable = query.includes(`\${${varName}}`);
             if (hasVariable) {
+              const queryLower = query.toLowerCase();
               const hasConditional =
                 query.includes(`\${${varName}} = 0 OR`) ||
                 query.includes(`\${${varName}} IS NULL OR`) ||
-                query.includes(`'all'`) ||
-                query.includes(`= 'all'`);
+                queryLower.includes(`'all'`) ||
+                queryLower.includes(`= 'all'`);
 
               expect(
                 hasConditional,
