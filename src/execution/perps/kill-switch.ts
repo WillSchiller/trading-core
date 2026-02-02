@@ -1,11 +1,10 @@
 import { createChildLogger } from '../../utils/logger.js';
 import { sendAlert } from '../../utils/alerts.js';
 import { toMicros, fromMicros, formatUsd, configToMicros, mulDiv } from './money.js';
-import { BinanceFuturesClient } from './binance-client.js';
 import { PerpsPersistence } from './perps-persistence.js';
 import { PositionTracker } from './position-tracker.js';
 import { closingSide } from './types.js';
-import type { KillSwitchConfig, PerpsPosition } from './types.js';
+import type { KillSwitchConfig, PerpsPosition, PerpsExchangeClient } from './types.js';
 
 const log = createChildLogger({ component: 'kill-switch' });
 
@@ -16,7 +15,7 @@ export class KillSwitch {
 
   constructor(
     private readonly config: KillSwitchConfig,
-    private readonly client: BinanceFuturesClient,
+    private readonly client: PerpsExchangeClient,
     private readonly persistence: PerpsPersistence,
     private readonly tracker: PositionTracker,
   ) {}

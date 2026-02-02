@@ -234,6 +234,7 @@ export interface PaperFillConfig {
 export interface PerpsRunConfig {
   runId: string;
   paperMode: boolean;
+  exchange?: 'binance' | 'hyperliquid';
   leverage?: number;
   marginType?: 'ISOLATED' | 'CROSSED';
   enableLongs?: boolean;
@@ -330,6 +331,9 @@ export interface EnvConfig {
   binanceFutures: {
     apiKey?: string;
     apiSecret?: string;
+  };
+  hyperliquid: {
+    privateKey?: string;
   };
   executorPrivateKey?: string;
   paperMode: boolean;

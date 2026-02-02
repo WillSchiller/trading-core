@@ -11,13 +11,19 @@ import type {
   PaperFillConfig,
   PerpsSide,
   MarginType,
+  PerpsExchangeClient,
+  ExchangeName,
+  OrderResult,
+  PositionInfo,
+  AccountInfo,
 } from './types.js';
 
 const log = createChildLogger({ component: 'binance-futures' });
 
 const FAPI_BASE = 'https://fapi.binance.com';
 
-export class BinanceFuturesClient {
+export class BinanceFuturesClient implements PerpsExchangeClient {
+  readonly exchange: ExchangeName = 'binance';
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly paperMode: boolean;
@@ -83,7 +89,7 @@ export class BinanceFuturesClient {
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
-  }): Promise<BinanceOrderResponse> {
+  }): Promise<OrderResult> {
     const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice } = params;
 
     const roundedQty = this.roundQuantity(symbol, quantity);
@@ -92,17 +98,11 @@ export class BinanceFuturesClient {
       const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, roundedQty);
       log.info({ symbol, side, quantity: roundedQty, clientOrderId, fillPrice: fillPrice.toFixed(4) }, 'PAPER order (simulated)');
       return {
-        orderId: Date.now(),
-        clientOrderId,
-        symbol,
-        side,
-        type: 'MARKET',
         status: 'FILLED',
         avgPrice: fillPrice > 0 ? fillPrice.toFixed(8) : '0',
-        executedQty: String(roundedQty),
-        cumQuote: (fillPrice * roundedQty).toFixed(2),
-        updateTime: Date.now(),
-      } satisfies BinanceOrderResponse;
+        filledQty: String(roundedQty),
+        exchangeOrderId: String(Date.now()),
+      };
     }
 
     const orderParams: Record<string, string | number> = {
@@ -114,11 +114,18 @@ export class BinanceFuturesClient {
     };
     if (reduceOnly) orderParams.reduceOnly = 'true';
 
-    return withRetry(
+    const resp = await withRetry(
       () => this.request<BinanceOrderResponse>('POST', '/fapi/v1/order', orderParams),
       { maxAttempts: 3, baseDelayMs: 500 },
       { symbol, side, clientOrderId }
     );
+    return {
+      status: resp.status === 'FILLED' ? 'FILLED' : 'CANCELED',
+      avgPrice: resp.avgPrice,
+      filledQty: resp.executedQty,
+      exchangeOrderId: String(resp.orderId),
+      raw: resp,
+    };
   }
 
   private simulatePaperFill(side: PerpsSide, markPrice: number, qty: number): number {
@@ -141,8 +148,34 @@ export class BinanceFuturesClient {
     return this.request<BinancePositionRisk[]>('GET', '/fapi/v2/positionRisk', params);
   }
 
-  async getAccountInfo(): Promise<BinanceAccountInfo> {
-    return this.request<BinanceAccountInfo>('GET', '/fapi/v2/account');
+  async getPositions(symbol?: string): Promise<PositionInfo[]> {
+    const raw = await this.getPositionRisk(symbol);
+    const result: PositionInfo[] = [];
+    for (const ep of raw) {
+      const amt = ep.positionAmt;
+      const isShort = amt.startsWith('-');
+      const qty = isShort ? amt.slice(1) : amt;
+      if (qty === '0' || qty === '0.00000000') continue;
+      result.push({
+        symbol: ep.symbol,
+        side: isShort ? 'SHORT' : 'LONG',
+        qty,
+        entryPrice: ep.entryPrice,
+        markPrice: ep.markPrice,
+        unrealizedPnl: ep.unRealizedProfit,
+        leverage: parseInt(ep.leverage, 10),
+      });
+    }
+    return result;
+  }
+
+  async getAccountInfo(): Promise<AccountInfo> {
+    const resp = await this.request<BinanceAccountInfo>('GET', '/fapi/v2/account');
+    return {
+      availableBalance: resp.availableBalance,
+      walletBalance: resp.totalWalletBalance,
+      unrealizedPnl: resp.totalUnrealizedProfit,
+    };
   }
 
   async setLeverage(symbol: string, leverage: number): Promise<void> {

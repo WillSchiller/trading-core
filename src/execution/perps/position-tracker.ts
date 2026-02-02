@@ -1,8 +1,7 @@
 import { createChildLogger } from '../../utils/logger.js';
-import { BinanceFuturesClient } from './binance-client.js';
 import { PerpsPersistence } from './perps-persistence.js';
 import { symbolToAsset, closingSide } from './types.js';
-import type { PerpsPosition } from './types.js';
+import type { PerpsPosition, PerpsExchangeClient } from './types.js';
 
 const log = createChildLogger({ component: 'position-tracker' });
 
@@ -12,37 +11,32 @@ export class PositionTracker {
   private mutex = false;
 
   constructor(
-    private readonly client: BinanceFuturesClient,
+    private readonly client: PerpsExchangeClient,
     private readonly persistence: PerpsPersistence,
   ) {}
 
   async reconcileOnStartup(): Promise<void> {
     await this.acquireMutex();
     try {
-      // C1: getOpenExecutions now returns pending_open, open, and closing
       const dbOpen = await this.persistence.getOpenExecutions();
-      const exchangePositions = await this.client.getPositionRisk();
+      const exchangePositions = await this.client.getPositions();
       const exchangeMap = new Map<string, typeof exchangePositions[0]>();
       for (const ep of exchangePositions) {
-        const amt = parseFloat(ep.positionAmt);
-        if (amt !== 0) {
-          exchangeMap.set(ep.symbol, ep);
-        }
+        exchangeMap.set(ep.symbol, ep);
       }
 
       for (const exec of dbOpen) {
         const ep = exchangeMap.get(exec.symbol);
 
-        // C3: Handle pending_open — check if order actually filled on exchange
         if (exec.status === 'pending_open') {
           if (ep && !this.client.isPaperMode()) {
             log.info({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'Adopting pending_open position (exchange confirms)');
-            const markPrice = parseFloat(ep.markPrice);
-            const amt = Math.abs(parseFloat(ep.positionAmt));
+            const markPrice = Number(ep.markPrice ?? exec.entryPrice);
+            const amt = Number(ep.qty);
             await this.persistence.updateExecutionEntry(exec.clientOrderId, {
               status: 'open',
-              entryPrice: ep.entryPrice,
-              quantity: String(amt),
+              entryPrice: ep.entryPrice ?? exec.entryPrice,
+              quantity: ep.qty,
               notionalUsd: String(markPrice * amt),
               entryOrderId: exec.entryOrderId ?? 'reconciled',
             });
@@ -52,9 +46,9 @@ export class PositionTracker {
               direction: exec.direction,
               side: exec.side,
               quantity: amt,
-              entryPrice: parseFloat(ep.entryPrice),
+              entryPrice: Number(ep.entryPrice ?? exec.entryPrice),
               markPrice,
-              unrealizedPnl: parseFloat(ep.unRealizedProfit),
+              unrealizedPnl: Number(ep.unrealizedPnl ?? 0),
               notionalUsd: markPrice * amt,
               leverage: exec.leverage,
               marginType: exec.marginType,
@@ -86,27 +80,27 @@ export class PositionTracker {
           continue;
         }
 
-        // C1: Handle closing status — needs to finish closing
         if (exec.status === 'closing') {
-          if (ep && parseFloat(ep.positionAmt) !== 0 && !this.client.isPaperMode()) {
+          if (ep && !this.client.isPaperMode()) {
             log.warn({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'Closing position still has exchange size, retrying close');
+            const markPrice = Number(ep.markPrice ?? exec.entryPrice);
+            const amt = Number(ep.qty);
             this.positions.set(exec.asset, {
               symbol: exec.symbol,
               asset: exec.asset,
               direction: exec.direction,
               side: exec.side,
-              quantity: Math.abs(parseFloat(ep.positionAmt)),
+              quantity: amt,
               entryPrice: Number(exec.entryPrice),
-              markPrice: parseFloat(ep.markPrice),
-              unrealizedPnl: parseFloat(ep.unRealizedProfit),
-              notionalUsd: Math.abs(parseFloat(ep.notional)),
+              markPrice,
+              unrealizedPnl: Number(ep.unrealizedPnl ?? 0),
+              notionalUsd: markPrice * amt,
               leverage: exec.leverage,
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
               openedAt: exec.signalTimestamp,
             });
             exchangeMap.delete(exec.symbol);
-            // Revert to open so the executor or kill switch can re-attempt close
             await this.persistence.updateExecution(exec.clientOrderId, { status: 'open' });
           } else {
             log.info({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'Closing position gone from exchange, marking closed');
@@ -119,7 +113,6 @@ export class PositionTracker {
           continue;
         }
 
-        // Normal open status
         if (!ep && !this.client.isPaperMode()) {
           log.warn({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'DB open but no exchange position, marking closed');
           await this.persistence.updateExecution(exec.clientOrderId, {
@@ -128,27 +121,24 @@ export class PositionTracker {
             realizedPnl: '0',
           });
         } else {
-          const markPrice = ep ? parseFloat(ep.markPrice) : Number(exec.entryPrice);
-          const amt = ep ? Math.abs(parseFloat(ep.positionAmt)) : Number(exec.quantity);
+          const markPrice = ep ? Number(ep.markPrice ?? exec.entryPrice) : Number(exec.entryPrice);
+          const amt = ep ? Number(ep.qty) : Number(exec.quantity);
 
-          // H1: Verify direction matches exchange
           if (ep && !this.client.isPaperMode()) {
-            const exchangeAmt = parseFloat(ep.positionAmt);
-            const exchangeIsLong = exchangeAmt > 0;
+            const exchangeIsLong = ep.side === 'LONG';
             const dbIsLong = exec.direction === 'long';
             if (exchangeIsLong !== dbIsLong) {
               log.error({
                 asset: exec.asset,
                 dbDirection: exec.direction,
-                exchangeAmt: ep.positionAmt,
+                exchangeSide: ep.side,
               }, 'RECONCILIATION ANOMALY: direction mismatch — flattening position');
-              // Flatten: close the exchange position, mark DB as closed
               try {
                 const side = closingSide(exchangeIsLong ? 'long' : 'short');
                 await this.client.placeOrder({
                   symbol: exec.symbol,
                   side,
-                  quantity: Math.abs(exchangeAmt),
+                  quantity: Number(ep.qty),
                   clientOrderId: `recon_${Date.now()}_${exec.asset}`,
                   reduceOnly: true,
                 });
@@ -163,13 +153,11 @@ export class PositionTracker {
               continue;
             }
 
-            // H1: Verify leverage matches
-            const exchangeLeverage = parseInt(ep.leverage, 10);
-            if (exchangeLeverage !== exec.leverage) {
+            if (ep.leverage !== undefined && ep.leverage !== exec.leverage) {
               log.warn({
                 asset: exec.asset,
                 dbLeverage: exec.leverage,
-                exchangeLeverage,
+                exchangeLeverage: ep.leverage,
               }, 'Leverage mismatch, adopting exchange value');
             }
           }
@@ -182,7 +170,7 @@ export class PositionTracker {
             quantity: amt,
             entryPrice: Number(exec.entryPrice),
             markPrice,
-            unrealizedPnl: ep ? parseFloat(ep.unRealizedProfit) : 0,
+            unrealizedPnl: ep ? Number(ep.unrealizedPnl ?? 0) : 0,
             notionalUsd: markPrice * amt,
             leverage: exec.leverage,
             marginType: exec.marginType,
@@ -193,11 +181,10 @@ export class PositionTracker {
         }
       }
 
-      // Warn about external positions but filter to managed symbols only
       for (const [symbol, ep] of exchangeMap) {
         const asset = symbolToAsset(symbol);
         if (asset) {
-          log.warn({ symbol, asset, positionAmt: ep.positionAmt }, 'Exchange position not in DB (external/unmanaged)');
+          log.warn({ symbol, asset, qty: ep.qty, side: ep.side }, 'Exchange position not in DB (external/unmanaged)');
         }
       }
 
@@ -224,10 +211,10 @@ export class PositionTracker {
     if (this.client.isPaperMode()) return;
     await this.acquireMutex();
     try {
-      const exchangePositions = await this.client.getPositionRisk();
+      const exchangePositions = await this.client.getPositions();
       for (const [asset, pos] of this.positions) {
         const ep = exchangePositions.find(p => p.symbol === pos.symbol);
-        if (!ep || parseFloat(ep.positionAmt) === 0) {
+        if (!ep) {
           log.warn({ asset, symbol: pos.symbol }, 'Tracked position no longer on exchange');
           this.positions.delete(asset);
           await this.persistence.updateExecution(pos.clientOrderId, {
@@ -237,12 +224,10 @@ export class PositionTracker {
           continue;
         }
 
-        // H1: Check direction hasn't flipped
-        const exchangeAmt = parseFloat(ep.positionAmt);
-        const exchangeIsLong = exchangeAmt > 0;
+        const exchangeIsLong = ep.side === 'LONG';
         const trackedIsLong = pos.direction === 'long';
         if (exchangeIsLong !== trackedIsLong) {
-          log.error({ asset, trackedDirection: pos.direction, exchangeAmt: ep.positionAmt }, 'Sync direction mismatch — removing from tracker');
+          log.error({ asset, trackedDirection: pos.direction, exchangeSide: ep.side }, 'Sync direction mismatch — removing from tracker');
           this.positions.delete(asset);
           await this.persistence.updateExecution(pos.clientOrderId, {
             status: 'closed',
@@ -251,10 +236,11 @@ export class PositionTracker {
           continue;
         }
 
-        pos.markPrice = parseFloat(ep.markPrice);
-        pos.unrealizedPnl = parseFloat(ep.unRealizedProfit);
-        pos.notionalUsd = Math.abs(parseFloat(ep.notional));
-        pos.quantity = Math.abs(exchangeAmt);
+        const qty = Number(ep.qty);
+        pos.markPrice = Number(ep.markPrice ?? pos.markPrice);
+        pos.unrealizedPnl = Number(ep.unrealizedPnl ?? 0);
+        pos.notionalUsd = pos.markPrice * qty;
+        pos.quantity = qty;
       }
     } finally {
       this.releaseMutex();

@@ -279,6 +279,7 @@ export const paperFillConfigSchema = z.object({
 export const perpsRunConfigSchema = z.object({
   runId: z.string().min(1),
   paperMode: z.boolean(),
+  exchange: z.enum(['binance', 'hyperliquid']).default('binance'),
   leverage: z.number().int().min(1).max(20).optional(),
   marginType: z.enum(['ISOLATED', 'CROSSED']).optional(),
   enableLongs: z.boolean().optional(),
@@ -378,6 +379,9 @@ export const envConfigSchema = z.object({
   binanceFutures: z.object({
     apiKey: z.string().optional(),
     apiSecret: z.string().optional(),
+  }).default({}),
+  hyperliquid: z.object({
+    privateKey: z.string().optional(),
   }).default({}),
   executorPrivateKey: z.string().optional(),
   paperMode: z.coerce.boolean().default(true),

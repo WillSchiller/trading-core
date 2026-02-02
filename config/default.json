@@ -162,8 +162,9 @@
       "maxSlippageBps": 20
     },
     "runs": [
-      { "runId": "live_1k", "paperMode": false },
-      { "runId": "paper_bench", "paperMode": true }
+      { "runId": "live_1k", "paperMode": false, "exchange": "binance" },
+      { "runId": "paper_bench", "paperMode": true, "exchange": "binance" },
+      { "runId": "hl_paper", "paperMode": true, "exchange": "hyperliquid" }
     ]
   },
   "chains": {

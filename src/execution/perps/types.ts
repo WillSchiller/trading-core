@@ -4,6 +4,52 @@ export type PerpsDirection = 'long' | 'short';
 export type PerpsSide = 'BUY' | 'SELL';
 export type PerpsExecutionStatus = 'pending_open' | 'open' | 'closing' | 'closed' | 'failed';
 export type MarginType = 'ISOLATED' | 'CROSSED';
+export type ExchangeName = 'binance' | 'hyperliquid';
+
+export interface OrderResult {
+  status: 'FILLED' | 'REJECTED' | 'CANCELED';
+  avgPrice: string;
+  filledQty: string;
+  exchangeOrderId?: string;
+  raw?: unknown;
+}
+
+export interface PositionInfo {
+  symbol: string;
+  side: 'LONG' | 'SHORT';
+  qty: string;
+  entryPrice?: string;
+  markPrice?: string;
+  unrealizedPnl?: string;
+  leverage?: number;
+}
+
+export interface AccountInfo {
+  availableBalance: string;
+  walletBalance?: string;
+  unrealizedPnl?: string;
+}
+
+export interface PerpsExchangeClient {
+  readonly exchange: ExchangeName;
+  refreshPrecisionCache(): Promise<void>;
+  setLeverage(symbol: string, leverage: number): Promise<void>;
+  setMarginType(symbol: string, marginType: MarginType): Promise<void>;
+  placeOrder(params: {
+    symbol: string;
+    side: PerpsSide;
+    quantity: number;
+    clientOrderId: string;
+    reduceOnly?: boolean;
+    markPrice?: number;
+  }): Promise<OrderResult>;
+  getPositions(symbol?: string): Promise<PositionInfo[]>;
+  getAccountInfo(): Promise<AccountInfo>;
+  roundQuantity(symbol: string, qty: number): number;
+  roundPrice(symbol: string, price: number): number;
+  isPaperMode(): boolean;
+  getPaperFillConfig(): PaperFillConfig;
+}
 
 export type PerpsMode = 'paper' | 'live';
 

@@ -11,7 +11,8 @@ import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence } from './research/index.js';
-import { PerpsExecutor } from './execution/perps/index.js';
+import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
+import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
 import type { RpcEndpoint } from './chain/provider-pool.js';
 import type { PoolConfig } from './config/types.js';
@@ -642,13 +643,38 @@ async function main() {
     const perpsConfig = config.app.perpsExecution;
     const futuresKey = config.env.binanceFutures.apiKey;
     const futuresSecret = config.env.binanceFutures.apiSecret;
+    const hlPrivateKey = config.env.hyperliquid.privateKey;
 
-    if (!futuresKey || !futuresSecret) {
-      logger.warn('Perps execution enabled but BINANCE_FUTURES_API_KEY/SECRET not set, skipping');
-    } else if (perpsConfig.runs.length === 0) {
+    if (perpsConfig.runs.length === 0) {
       logger.warn('Perps execution enabled but no runs configured in perpsExecution.runs[]');
     } else {
       for (const run of perpsConfig.runs) {
+        const exchange = run.exchange ?? 'binance';
+        let client: PerpsExchangeClient;
+
+        if (exchange === 'hyperliquid') {
+          if (!hlPrivateKey) {
+            logger.warn({ runId: run.runId }, 'Hyperliquid run but HYPERLIQUID_PRIVATE_KEY not set, skipping');
+            continue;
+          }
+          client = new HyperliquidClient({
+            privateKey: hlPrivateKey,
+            paperMode: run.paperMode,
+            paperFill: run.paperFill ?? perpsConfig.paperFill,
+          });
+        } else {
+          if (!futuresKey || !futuresSecret) {
+            logger.warn({ runId: run.runId }, 'Binance run but BINANCE_FUTURES_API_KEY/SECRET not set, skipping');
+            continue;
+          }
+          client = new BinanceFuturesClient({
+            apiKey: futuresKey,
+            apiSecret: futuresSecret,
+            paperMode: run.paperMode,
+            paperFill: run.paperFill ?? perpsConfig.paperFill,
+          });
+        }
+
         const resolvedConfig = {
           enabled: perpsConfig.enabled,
           paperMode: run.paperMode,
@@ -669,9 +695,9 @@ async function main() {
           paperFill: run.paperFill ?? perpsConfig.paperFill,
         };
 
-        const executor = new PerpsExecutor(resolvedConfig, pool, futuresKey, futuresSecret, run.runId);
+        const executor = new PerpsExecutor(resolvedConfig, pool, client, run.runId);
         perpsExecutors.push(executor);
-        logger.info({ runId: run.runId, paperMode: run.paperMode }, 'Configured perps run');
+        logger.info({ runId: run.runId, paperMode: run.paperMode, exchange }, 'Configured perps run');
       }
 
       pcaMonitor.on('signal', async (event) => {

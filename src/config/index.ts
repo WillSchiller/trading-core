@@ -62,6 +62,9 @@ function loadEnvConfig(): EnvConfig {
       apiKey: process.env.BINANCE_FUTURES_API_KEY ?? process.env.BINANCE_API_KEY,
       apiSecret: process.env.BINANCE_FUTURES_API_SECRET ?? process.env.BINANCE_API_SECRET,
     },
+    hyperliquid: {
+      privateKey: process.env.HYPERLIQUID_PRIVATE_KEY,
+    },
     executorPrivateKey: process.env.EXECUTOR_PRIVATE_KEY,
     paperMode: process.env.PAPER_MODE,
     enableExecution: process.env.ENABLE_EXECUTION,

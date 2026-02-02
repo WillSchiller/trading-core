@@ -1,7 +1,6 @@
 import type { Pool } from 'pg';
 import { createChildLogger } from '../../utils/logger.js';
 import { sendAlert } from '../../utils/alerts.js';
-import { BinanceFuturesClient } from './binance-client.js';
 import { PerpsPersistence } from './perps-persistence.js';
 import { PositionTracker } from './position-tracker.js';
 import { KillSwitch } from './kill-switch.js';
@@ -15,13 +14,14 @@ import type {
   PerpsExecutionConfig,
   PerpsPosition,
   PerpsMode,
-  BinanceOrderResponse,
+  PerpsExchangeClient,
+  OrderResult,
 } from './types.js';
 import { toMicros, fromMicros, mulDiv } from './money.js';
 import type { PCASignalEvent, PCAExitEvent } from '../../research/pca-stat-arb.js';
 
 export class PerpsExecutor {
-  private readonly client: BinanceFuturesClient;
+  private readonly client: PerpsExchangeClient;
   private readonly persistence: PerpsPersistence;
   private readonly tracker: PositionTracker;
   private readonly killSwitch: KillSwitch;
@@ -40,17 +40,12 @@ export class PerpsExecutor {
   private static readonly MARGIN_CHECK_INTERVAL_MS = 300_000;
   private static readonly MARGIN_SUSPEND_MS = 300_000;
 
-  constructor(config: PerpsExecutionConfig, pool: Pool, apiKey: string, apiSecret: string, runId: string) {
+  constructor(config: PerpsExecutionConfig, pool: Pool, client: PerpsExchangeClient, runId: string) {
     this.config = config;
     this.runId = runId;
     this.mode = config.paperMode ? 'paper' : 'live';
-    this.log = createChildLogger({ component: 'perps-executor', runId, mode: this.mode });
-    this.client = new BinanceFuturesClient({
-      apiKey,
-      apiSecret,
-      paperMode: config.paperMode,
-      paperFill: config.paperFill,
-    });
+    this.log = createChildLogger({ component: 'perps-executor', runId, mode: this.mode, exchange: client.exchange });
+    this.client = client;
     this.persistence = new PerpsPersistence(pool, runId, this.mode);
     this.tracker = new PositionTracker(this.client, this.persistence);
     this.killSwitch = new KillSwitch(config.killSwitch, this.client, this.persistence, this.tracker);
@@ -208,7 +203,7 @@ export class PerpsExecutor {
       return;
     }
 
-    let orderResponse: BinanceOrderResponse;
+    let orderResponse: OrderResult;
     try {
       orderResponse = await this.client.placeOrder({
         symbol,
@@ -219,7 +214,7 @@ export class PerpsExecutor {
       });
     } catch (err) {
       const errMsg = (err as Error).message;
-      this.log.error({ asset, symbol, error: errMsg }, 'Failed to place entry order');
+      this.log.error({ asset, symbol, error: errMsg, exchange: this.client.exchange }, 'Failed to place entry order');
       await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
       if (errMsg.includes('-2019') || errMsg.includes('Margin is insufficient')) {
         this.suspendUntil = Date.now() + PerpsExecutor.MARGIN_SUSPEND_MS;
@@ -232,20 +227,27 @@ export class PerpsExecutor {
       return;
     }
 
+    if (orderResponse.status !== 'FILLED' || orderResponse.filledQty === '0') {
+      this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order not filled');
+      await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
+      return;
+    }
+
     this.lastTradeAt = Date.now();
 
+    const actualQty = Number(orderResponse.filledQty);
     const entryPriceStr = orderResponse.avgPrice !== '0'
       ? orderResponse.avgPrice
       : String(event.entryPrice);
     const entryPrice = Number(entryPriceStr);
-    const notionalUsd = entryPrice * roundedQty;
+    const notionalUsd = entryPrice * actualQty;
 
     await this.persistence.updateExecutionEntry(clientOrderId, {
       status: 'open',
       entryPrice: entryPriceStr,
-      quantity: String(roundedQty),
+      quantity: orderResponse.filledQty,
       notionalUsd: String(notionalUsd),
-      entryOrderId: String(orderResponse.orderId),
+      entryOrderId: orderResponse.exchangeOrderId ?? 'unknown',
     });
 
     const position: PerpsPosition = {
@@ -253,7 +255,7 @@ export class PerpsExecutor {
       asset,
       direction,
       side,
-      quantity: roundedQty,
+      quantity: actualQty,
       entryPrice,
       markPrice: entryPrice,
       unrealizedPnl: 0,
@@ -267,10 +269,10 @@ export class PerpsExecutor {
     await this.tracker.openPosition(position);
 
     this.log.info({
-      asset, symbol, direction, side, quantity: roundedQty,
+      asset, symbol, direction, side, quantity: actualQty,
       entryPrice, notionalUsd: notionalUsd.toFixed(2),
       zScore: event.zScore.toFixed(2), clientOrderId,
-      mode: this.mode, runId: this.runId,
+      mode: this.mode, runId: this.runId, exchange: this.client.exchange,
     }, 'Perps position opened');
   }
 
@@ -299,7 +301,7 @@ export class PerpsExecutor {
       const closeSide = closingSide(direction);
       const closeOrderId = `pca_close_${Date.now()}_${asset}_${closeSide}`;
 
-      let closeResponse: BinanceOrderResponse;
+      let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
           symbol: position.symbol,
@@ -310,7 +312,7 @@ export class PerpsExecutor {
           markPrice: exitPrice,
         });
       } catch (err) {
-        this.log.error({ asset, error: (err as Error).message }, 'Failed to place exit order');
+        this.log.error({ asset, error: (err as Error).message, exchange: this.client.exchange }, 'Failed to place exit order');
         await this.persistence.updateExecution(position.clientOrderId, { status: 'open' });
         return;
       }
@@ -421,7 +423,7 @@ export class PerpsExecutor {
       const side = closingSide(pos.direction);
       const closeOrderId = `hb_close_${Date.now()}_${pos.asset}_${side}`;
 
-      let closeResponse: BinanceOrderResponse;
+      let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
           symbol: pos.symbol,
@@ -432,7 +434,7 @@ export class PerpsExecutor {
           markPrice: pos.markPrice,
         });
       } catch (err) {
-        this.log.error({ asset: pos.asset, error: (err as Error).message }, 'Heartbeat force-close failed');
+        this.log.error({ asset: pos.asset, error: (err as Error).message, exchange: this.client.exchange }, 'Heartbeat force-close failed');
         await this.persistence.updateExecution(pos.clientOrderId, { status: 'open' });
         return;
       }
@@ -470,8 +472,8 @@ export class PerpsExecutor {
     try {
       const account = await this.client.getAccountInfo();
       const available = parseFloat(account.availableBalance);
-      const wallet = parseFloat(account.totalWalletBalance);
-      const unrealized = parseFloat(account.totalUnrealizedProfit);
+      const wallet = parseFloat(account.walletBalance ?? '0');
+      const unrealized = parseFloat(account.unrealizedPnl ?? '0');
       const requiredUsd = this.config.maxTotalExposureUsd / this.config.leverage;
       const buffer = requiredUsd * 1.1;
 

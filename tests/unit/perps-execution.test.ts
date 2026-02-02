@@ -251,9 +251,8 @@ describe('BinanceFuturesClient', () => {
         clientOrderId: 'test_order_1',
       });
       expect(result.status).toBe('FILLED');
-      expect(result.clientOrderId).toBe('test_order_1');
-      expect(result.symbol).toBe('ETHUSDT');
-      expect(result.side).toBe('SELL');
+      expect(result.filledQty).toBe('0.1');
+      expect(result.exchangeOrderId).toBeDefined();
     });
 
     it('simulates adverse fill price with paper fill model', async () => {
@@ -351,12 +350,12 @@ describe('KillSwitch', () => {
   let KillSwitch: typeof import('../../src/execution/perps/kill-switch.js').KillSwitch;
 
   const mockOrderResponse = {
-    orderId: 1, clientOrderId: 'ks_1', status: 'FILLED', avgPrice: '2000',
-    executedQty: '0.1', cumQuote: '200', updateTime: 0, symbol: 'ETHUSDT',
-    side: 'BUY' as const, type: 'MARKET',
+    status: 'FILLED' as const, avgPrice: '2000',
+    filledQty: '0.1', exchangeOrderId: '1',
   };
 
   const mockClient = {
+    exchange: 'binance' as const,
     placeOrder: vi.fn().mockResolvedValue(mockOrderResponse),
     isPaperMode: () => true,
   };
@@ -521,9 +520,10 @@ describe('PositionTracker', () => {
   let PositionTracker: typeof import('../../src/execution/perps/position-tracker.js').PositionTracker;
 
   const mockClient = {
-    getPositionRisk: vi.fn().mockResolvedValue([]),
+    exchange: 'binance' as const,
+    getPositions: vi.fn().mockResolvedValue([]),
     isPaperMode: () => true,
-    placeOrder: vi.fn().mockResolvedValue({}),
+    placeOrder: vi.fn().mockResolvedValue({ status: 'FILLED', avgPrice: '0', filledQty: '0' }),
   };
 
   const mockPersistence = {
@@ -627,7 +627,7 @@ describe('PositionTracker', () => {
         status: 'open',
       },
     ]);
-    mockClient.getPositionRisk.mockResolvedValue([]);
+    mockClient.getPositions.mockResolvedValue([]);
 
     const tracker = new PositionTracker(mockClient as any, mockPersistence as any);
     await tracker.reconcileOnStartup();
@@ -637,11 +637,14 @@ describe('PositionTracker', () => {
 
 describe('PerpsExecutor', () => {
   let PerpsExecutor: typeof import('../../src/execution/perps/perps-executor.js').PerpsExecutor;
+  let BinanceFuturesClientForExec: typeof import('../../src/execution/perps/binance-client.js').BinanceFuturesClient;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     const mod = await import('../../src/execution/perps/perps-executor.js');
     PerpsExecutor = mod.PerpsExecutor;
+    const binMod = await import('../../src/execution/perps/binance-client.js');
+    BinanceFuturesClientForExec = binMod.BinanceFuturesClient;
   });
 
   const baseConfig = {
@@ -676,8 +679,12 @@ describe('PerpsExecutor', () => {
 
   const testRunId = 'test-run-001';
 
+  function makeClient() {
+    return new BinanceFuturesClientForExec({ apiKey: 'key', apiSecret: 'secret', paperMode: true });
+  }
+
   it('rejects long signals when longs disabled', async () => {
-    const executor = new PerpsExecutor(baseConfig, null as any, 'key', 'secret', testRunId);
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
     (executor as any).running = true;
     (executor as any).config.enableLongs = false;
 
@@ -701,7 +708,7 @@ describe('PerpsExecutor', () => {
   });
 
   it('processes exits even when executor is stopped', async () => {
-    const executor = new PerpsExecutor(baseConfig, null as any, 'key', 'secret', testRunId);
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
     (executor as any).running = false;
 
     const mockPosition = {
@@ -724,15 +731,15 @@ describe('PerpsExecutor', () => {
     };
     (executor as any).persistence = mockPersistence;
 
-    const mockClient = {
+    const mockExClient = {
+      exchange: 'binance' as const,
       placeOrder: vi.fn().mockResolvedValue({
-        orderId: 1, clientOrderId: 'close1', symbol: 'ETHUSDT', side: 'BUY',
-        type: 'MARKET', status: 'FILLED', avgPrice: '1950',
-        executedQty: '0.1', cumQuote: '195', updateTime: Date.now(),
+        status: 'FILLED' as const, avgPrice: '1950',
+        filledQty: '0.1', exchangeOrderId: '1',
       }),
       roundQuantity: vi.fn().mockReturnValue(0.1),
     };
-    (executor as any).client = mockClient;
+    (executor as any).client = mockExClient;
 
     await executor.handleExit({
       timestamp: Date.now() - 60000,
@@ -758,12 +765,12 @@ describe('PerpsExecutor', () => {
     });
 
     expect(mockPersistence.claimClose).toHaveBeenCalledWith('test1');
-    expect(mockClient.placeOrder).toHaveBeenCalled();
+    expect(mockExClient.placeOrder).toHaveBeenCalled();
     expect(mockTracker.closePosition).toHaveBeenCalledWith('ETH');
   });
 
   it('blocks duplicate exit when claimClose returns false', async () => {
-    const executor = new PerpsExecutor(baseConfig, null as any, 'key', 'secret', testRunId);
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
     (executor as any).running = true;
 
     const mockPosition = {
@@ -782,8 +789,8 @@ describe('PerpsExecutor', () => {
     };
     (executor as any).persistence = mockPersistence;
 
-    const mockClient = { placeOrder: vi.fn() };
-    (executor as any).client = mockClient;
+    const mockExClient2 = { exchange: 'binance' as const, placeOrder: vi.fn() };
+    (executor as any).client = mockExClient2;
 
     await executor.handleExit({
       timestamp: Date.now(),
@@ -808,11 +815,11 @@ describe('PerpsExecutor', () => {
       attribution: { totalPnlBps: 250, pc1PnlBps: 50, residualPnlBps: 200 },
     });
 
-    expect(mockClient.placeOrder).not.toHaveBeenCalled();
+    expect(mockExClient2.placeOrder).not.toHaveBeenCalled();
   });
 
   it('does not call setLeverage in paper mode during start', async () => {
-    const executor = new PerpsExecutor(baseConfig, null as any, 'key', 'secret', testRunId);
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
     const mockClient = (executor as any).client;
     const setLeverageSpy = vi.spyOn(mockClient, 'setLeverage');
     const setMarginSpy = vi.spyOn(mockClient, 'setMarginType');
@@ -828,14 +835,15 @@ describe('PerpsExecutor', () => {
   });
 
   it('exposes runId and mode', () => {
-    const executor = new PerpsExecutor(baseConfig, null as any, 'key', 'secret', testRunId);
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
     expect(executor.getRunId()).toBe(testRunId);
     expect(executor.getMode()).toBe('paper');
   });
 
   it('uses live mode when paperMode is false', () => {
     const liveConfig = { ...baseConfig, paperMode: false };
-    const executor = new PerpsExecutor(liveConfig, null as any, 'key', 'secret', 'live-run-1');
+    const liveClient = new BinanceFuturesClientForExec({ apiKey: 'key', apiSecret: 'secret', paperMode: false });
+    const executor = new PerpsExecutor(liveConfig, null as any, liveClient, 'live-run-1');
     expect(executor.getMode()).toBe('live');
   });
 });
