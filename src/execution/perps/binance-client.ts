@@ -85,22 +85,22 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
   async placeOrder(params: {
     symbol: string;
     side: PerpsSide;
-    quantity: number;
+    quantity: string;
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
   }): Promise<OrderResult> {
     const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice } = params;
 
-    const roundedQty = this.roundQuantity(symbol, quantity);
+    const qtyNum = parseFloat(quantity);
 
     if (this.paperMode) {
-      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, roundedQty);
-      log.info({ symbol, side, quantity: roundedQty, clientOrderId, fillPrice: fillPrice.toFixed(4) }, 'PAPER order (simulated)');
+      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum);
+      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4) }, 'PAPER order (simulated)');
       return {
         status: 'FILLED',
         avgPrice: fillPrice > 0 ? fillPrice.toFixed(8) : '0',
-        filledQty: String(roundedQty),
+        filledQty: quantity,
         exchangeOrderId: String(Date.now()),
       };
     }
@@ -109,7 +109,7 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
       symbol,
       side,
       type: 'MARKET',
-      quantity: roundedQty,
+      quantity: qtyNum,
       newClientOrderId: clientOrderId,
     };
     if (reduceOnly) orderParams.reduceOnly = 'true';
@@ -246,12 +246,12 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
     return { quantityPrecision: 3, pricePrecision: 2, minQty: 0.001, stepSize: 0.001, minNotional: 5 };
   }
 
-  roundQuantity(symbol: string, qty: number): number {
+  roundQuantity(symbol: string, qty: number): string {
     const { stepSize } = this.getPrecision(symbol);
-    if (stepSize <= 0) return qty;
+    if (stepSize <= 0) return String(qty);
     const precision = Math.max(0, Math.round(-Math.log10(stepSize)));
     const rounded = Math.floor(qty / stepSize) * stepSize;
-    return parseFloat(rounded.toFixed(precision));
+    return rounded.toFixed(precision);
   }
 
   roundPrice(symbol: string, price: number): number {

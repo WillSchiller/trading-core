@@ -152,7 +152,7 @@ export class PerpsExecutor {
       return;
     }
 
-    const totalExposure = this.tracker.getTotalExposureUsd();
+    const totalExposure = Number(this.tracker.getTotalExposureUsd());
     const positionSizeUsd = Math.min(event.positionSizeUsd, this.config.maxPositionSizeUsd);
     if (positionSizeUsd < this.config.minPositionSizeUsd) {
       this.log.debug({ asset, positionSizeUsd }, 'Position size below minimum');
@@ -176,11 +176,12 @@ export class PerpsExecutor {
 
     const quantity = positionSizeUsd / event.entryPrice;
     const roundedQty = this.client.roundQuantity(symbol, quantity);
-    if (roundedQty <= 0) {
+    if (parseFloat(roundedQty) <= 0) {
       this.log.warn({ asset, quantity, roundedQty }, 'Quantity rounds to zero');
       return;
     }
 
+    const notionalStr = String(event.entryPrice * parseFloat(roundedQty));
     const pendingId = await this.persistence.saveExecution({
       symbol,
       asset,
@@ -188,8 +189,8 @@ export class PerpsExecutor {
       side,
       entryPrice: String(event.entryPrice),
       exitPrice: null,
-      quantity: String(roundedQty),
-      notionalUsd: String(event.entryPrice * roundedQty),
+      quantity: roundedQty,
+      notionalUsd: notionalStr,
       realizedPnl: null,
       unrealizedPnl: null,
       clientOrderId,
@@ -235,26 +236,30 @@ export class PerpsExecutor {
       return;
     }
 
-    if (orderResponse.status !== 'FILLED' || orderResponse.filledQty === '0') {
-      this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order not filled');
+    if (orderResponse.status === 'REJECTED') {
+      this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order rejected');
       await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
+      return;
+    }
+    if (orderResponse.filledQty === '0' || orderResponse.filledQty === '0.0') {
+      this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order got no fill');
+      await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'no_fill' });
       return;
     }
 
     this.lastTradeAt = Date.now();
 
-    const actualQty = Number(orderResponse.filledQty);
+    const filledQty = orderResponse.filledQty;
     const entryPriceStr = orderResponse.avgPrice !== '0'
       ? orderResponse.avgPrice
       : String(event.entryPrice);
-    const entryPrice = Number(entryPriceStr);
-    const notionalUsd = entryPrice * actualQty;
+    const notionalUsd = String(Number(entryPriceStr) * Number(filledQty));
 
     await this.persistence.updateExecutionEntry(clientOrderId, {
       status: 'open',
       entryPrice: entryPriceStr,
-      quantity: orderResponse.filledQty,
-      notionalUsd: String(notionalUsd),
+      quantity: filledQty,
+      notionalUsd,
       entryOrderId: orderResponse.exchangeOrderId ?? 'unknown',
     });
 
@@ -263,10 +268,10 @@ export class PerpsExecutor {
       asset,
       direction,
       side,
-      quantity: actualQty,
-      entryPrice,
-      markPrice: entryPrice,
-      unrealizedPnl: 0,
+      quantity: filledQty,
+      entryPrice: entryPriceStr,
+      markPrice: entryPriceStr,
+      unrealizedPnl: '0',
       notionalUsd,
       leverage: this.config.leverage,
       marginType: this.config.marginType,
@@ -277,8 +282,8 @@ export class PerpsExecutor {
     await this.tracker.openPosition(position);
 
     this.log.info({
-      asset, symbol, direction, side, quantity: actualQty,
-      entryPrice, notionalUsd: notionalUsd.toFixed(2),
+      asset, symbol, direction, side, quantity: filledQty,
+      entryPrice: entryPriceStr, notionalUsd: Number(notionalUsd).toFixed(2),
       zScore: event.zScore.toFixed(2), clientOrderId,
       mode: this.mode, runId: this.runId, exchange: this.client.exchange,
     }, 'Perps position opened');
@@ -309,12 +314,33 @@ export class PerpsExecutor {
       const closeSide = closingSide(direction);
       const closeOrderId = `pca_close_${Date.now()}_${asset}_${closeSide}`;
 
+      let closeQty = position.quantity;
+      if (!this.client.isPaperMode()) {
+        try {
+          const exchangePositions = await this.client.getPositions(position.symbol);
+          const ep = exchangePositions.find(p => p.symbol === position.symbol);
+          if (!ep) {
+            this.log.info({ asset }, 'Position already gone from exchange, marking closed');
+            await this.tracker.closePosition(asset);
+            await this.persistence.updateExecution(position.clientOrderId, {
+              status: 'closed',
+              exitReason: exitReason,
+              realizedPnl: '0',
+            });
+            return;
+          }
+          closeQty = ep.qty;
+        } catch (err) {
+          this.log.warn({ asset, error: (err as Error).message }, 'Failed to verify exchange position size, using tracked qty');
+        }
+      }
+
       let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
           symbol: position.symbol,
           side: closeSide,
-          quantity: position.quantity,
+          quantity: closeQty,
           clientOrderId: closeOrderId,
           reduceOnly: true,
           markPrice: exitPrice,
@@ -328,11 +354,10 @@ export class PerpsExecutor {
       const exitPriceStr = closeResponse.avgPrice !== '0'
         ? closeResponse.avgPrice
         : String(exitPrice);
-      const actualExitPrice = Number(exitPriceStr);
 
-      const entryMicros = toMicros(String(position.entryPrice));
+      const entryMicros = toMicros(position.entryPrice);
       const exitMicros = toMicros(exitPriceStr);
-      const qtyMicros = toMicros(String(position.quantity));
+      const qtyMicros = toMicros(position.quantity);
       const priceDiffMicros = direction === 'short'
         ? entryMicros - exitMicros
         : exitMicros - entryMicros;
@@ -352,7 +377,7 @@ export class PerpsExecutor {
       this.log.info({
         asset, direction, exitReason,
         entryPrice: position.entryPrice,
-        exitPrice: actualExitPrice,
+        exitPrice: exitPriceStr,
         realizedPnl,
         pnlBps: pnlBps?.toFixed(1),
         holdTimeMs: Date.now() - position.openedAt,
@@ -361,7 +386,7 @@ export class PerpsExecutor {
 
       if (Math.abs(realizedPnlNum) > 1) {
         sendAlert(
-          `${realizedPnlNum > 0 ? '✅' : '❌'} *Perps ${direction.toUpperCase()} ${asset}* [${this.mode}]\nPnL: $${realizedPnlNum.toFixed(2)}\nReason: ${exitReason}\nEntry: $${position.entryPrice.toFixed(2)} → Exit: $${actualExitPrice.toFixed(2)}`,
+          `${realizedPnlNum > 0 ? '✅' : '❌'} *Perps ${direction.toUpperCase()} ${asset}* [${this.mode}]\nPnL: $${realizedPnlNum.toFixed(2)}\nReason: ${exitReason}\nEntry: $${Number(position.entryPrice).toFixed(2)} → Exit: $${Number(exitPriceStr).toFixed(2)}`,
           realizedPnlNum > 0 ? 'info' : 'warn'
         ).catch(() => {});
       }
@@ -385,7 +410,7 @@ export class PerpsExecutor {
 
     let totalUnrealized = 0;
     for (const pos of positions) {
-      totalUnrealized += pos.unrealizedPnl;
+      totalUnrealized += Number(pos.unrealizedPnl);
 
       const holdTimeMs = Date.now() - pos.openedAt;
       const maxHoldTimeMs = pos.direction === 'short'
@@ -398,14 +423,18 @@ export class PerpsExecutor {
         continue;
       }
 
-      if (pos.entryPrice > 0) {
-        const pnlBps = pos.direction === 'short'
-          ? ((pos.entryPrice - pos.markPrice) / pos.entryPrice) * 10000
-          : ((pos.markPrice - pos.entryPrice) / pos.entryPrice) * 10000;
+      const entryNum = Number(pos.entryPrice);
+      if (entryNum > 0) {
+        const entryMicros = toMicros(pos.entryPrice);
+        const markMicros = toMicros(pos.markPrice);
+        const diffMicros = pos.direction === 'short'
+          ? entryMicros - markMicros
+          : markMicros - entryMicros;
+        const pnlBps = Number((diffMicros * 10000n) / entryMicros);
 
         const stopLossBps = this.config.killSwitch.dailyDrawdownLimitUsd > 0 ? 75 : 150;
         if (pnlBps < -stopLossBps) {
-          this.log.warn({ asset: pos.asset, pnlBps: pnlBps.toFixed(1), stopLossBps }, 'Heartbeat stop-loss triggered');
+          this.log.warn({ asset: pos.asset, pnlBps, stopLossBps }, 'Heartbeat stop-loss triggered');
           await this.forceClosePosition(pos, 'stop_loss');
         }
       }
@@ -415,7 +444,7 @@ export class PerpsExecutor {
       this.log.debug({
         openPositions: positions.length,
         totalUnrealizedPnl: totalUnrealized.toFixed(4),
-        totalExposureUsd: this.tracker.getTotalExposureUsd().toFixed(2),
+        totalExposureUsd: Number(this.tracker.getTotalExposureUsd()).toFixed(2),
       }, 'Heartbeat');
     }
   }
@@ -431,15 +460,36 @@ export class PerpsExecutor {
       const side = closingSide(pos.direction);
       const closeOrderId = `hb_close_${Date.now()}_${pos.asset}_${side}`;
 
+      let closeQty = pos.quantity;
+      if (!this.client.isPaperMode()) {
+        try {
+          const exchangePositions = await this.client.getPositions(pos.symbol);
+          const ep = exchangePositions.find(p => p.symbol === pos.symbol);
+          if (!ep) {
+            this.log.info({ asset: pos.asset }, 'Position already gone from exchange, marking closed');
+            await this.tracker.closePosition(pos.asset);
+            await this.persistence.updateExecution(pos.clientOrderId, {
+              status: 'closed',
+              exitReason: reason,
+              realizedPnl: '0',
+            });
+            return;
+          }
+          closeQty = ep.qty;
+        } catch (err) {
+          this.log.warn({ asset: pos.asset, error: (err as Error).message }, 'Failed to verify exchange position size, using tracked qty');
+        }
+      }
+
       let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
           symbol: pos.symbol,
           side,
-          quantity: pos.quantity,
+          quantity: closeQty,
           clientOrderId: closeOrderId,
           reduceOnly: true,
-          markPrice: pos.markPrice,
+          markPrice: Number(pos.markPrice),
         });
       } catch (err) {
         this.log.error({ asset: pos.asset, error: (err as Error).message, exchange: this.client.exchange }, 'Heartbeat force-close failed');
@@ -449,11 +499,11 @@ export class PerpsExecutor {
 
       const exitPriceStr = closeResponse.avgPrice !== '0'
         ? closeResponse.avgPrice
-        : String(pos.markPrice);
+        : pos.markPrice;
 
-      const entryMicros = toMicros(String(pos.entryPrice));
+      const entryMicros = toMicros(pos.entryPrice);
       const exitMicros = toMicros(exitPriceStr);
-      const qtyMicros = toMicros(String(pos.quantity));
+      const qtyMicros = toMicros(pos.quantity);
       const priceDiffMicros = pos.direction === 'short'
         ? entryMicros - exitMicros
         : exitMicros - entryMicros;
@@ -521,7 +571,6 @@ export class PerpsExecutor {
         'SUI/USDC': 'SUI', 'DOT/USDC': 'DOT',
       };
       this.priceCallback = (quote) => {
-        if (quote.venue !== 'binance') return;
         const asset = pairToAsset[quote.pair];
         if (asset && this.tracker.hasPosition(asset)) {
           this.tracker.updateMarkPrice(asset, quote.mid);

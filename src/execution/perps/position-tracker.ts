@@ -1,4 +1,5 @@
 import { createChildLogger } from '../../utils/logger.js';
+import { toMicros, fromMicros, mulDiv } from './money.js';
 import { PerpsPersistence } from './perps-persistence.js';
 import { symbolToAsset, closingSide } from './types.js';
 import type { PerpsPosition, PerpsExchangeClient } from './types.js';
@@ -8,7 +9,15 @@ const log = createChildLogger({ component: 'position-tracker' });
 export class PositionTracker {
   private positions = new Map<string, PerpsPosition>();
   private syncInterval: ReturnType<typeof setInterval> | null = null;
-  private mutex = false;
+  private lockTail: Promise<void> = Promise.resolve();
+
+  private withLock<T>(fn: () => Promise<T>): Promise<T> {
+    let release: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    const prev = this.lockTail;
+    this.lockTail = gate;
+    return prev.then(async () => { try { return await fn(); } finally { release!(); } });
+  }
 
   constructor(
     private readonly client: PerpsExchangeClient,
@@ -16,8 +25,7 @@ export class PositionTracker {
   ) {}
 
   async reconcileOnStartup(): Promise<void> {
-    await this.acquireMutex();
-    try {
+    return this.withLock(async () => {
       const dbOpen = await this.persistence.getOpenExecutions();
       const exchangePositions = await this.client.getPositions();
       const exchangeMap = new Map<string, typeof exchangePositions[0]>();
@@ -31,13 +39,13 @@ export class PositionTracker {
         if (exec.status === 'pending_open') {
           if (ep && !this.client.isPaperMode()) {
             log.info({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'Adopting pending_open position (exchange confirms)');
-            const markPrice = Number(ep.markPrice ?? exec.entryPrice);
-            const amt = Number(ep.qty);
+            const markPriceStr = ep.markPrice ?? exec.entryPrice;
+            const notionalUsd = fromMicros(mulDiv(toMicros(markPriceStr), toMicros(ep.qty)));
             await this.persistence.updateExecutionEntry(exec.clientOrderId, {
               status: 'open',
               entryPrice: ep.entryPrice ?? exec.entryPrice,
               quantity: ep.qty,
-              notionalUsd: String(markPrice * amt),
+              notionalUsd,
               entryOrderId: exec.entryOrderId ?? 'reconciled',
             });
             this.positions.set(exec.asset, {
@@ -45,11 +53,11 @@ export class PositionTracker {
               asset: exec.asset,
               direction: exec.direction,
               side: exec.side,
-              quantity: amt,
-              entryPrice: Number(ep.entryPrice ?? exec.entryPrice),
-              markPrice,
-              unrealizedPnl: Number(ep.unrealizedPnl ?? 0),
-              notionalUsd: markPrice * amt,
+              quantity: ep.qty,
+              entryPrice: ep.entryPrice ?? exec.entryPrice,
+              markPrice: markPriceStr,
+              unrealizedPnl: ep.unrealizedPnl ?? '0',
+              notionalUsd,
               leverage: exec.leverage,
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
@@ -58,16 +66,17 @@ export class PositionTracker {
             exchangeMap.delete(exec.symbol);
           } else if (this.client.isPaperMode()) {
             await this.persistence.updateExecution(exec.clientOrderId, { status: 'open' });
+            const notionalUsd = fromMicros(mulDiv(toMicros(exec.entryPrice), toMicros(exec.quantity)));
             this.positions.set(exec.asset, {
               symbol: exec.symbol,
               asset: exec.asset,
               direction: exec.direction,
               side: exec.side,
-              quantity: Number(exec.quantity),
-              entryPrice: Number(exec.entryPrice),
-              markPrice: Number(exec.entryPrice),
-              unrealizedPnl: 0,
-              notionalUsd: Number(exec.entryPrice) * Number(exec.quantity),
+              quantity: exec.quantity,
+              entryPrice: exec.entryPrice,
+              markPrice: exec.entryPrice,
+              unrealizedPnl: '0',
+              notionalUsd,
               leverage: exec.leverage,
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
@@ -83,18 +92,18 @@ export class PositionTracker {
         if (exec.status === 'closing') {
           if (ep && !this.client.isPaperMode()) {
             log.warn({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'Closing position still has exchange size, retrying close');
-            const markPrice = Number(ep.markPrice ?? exec.entryPrice);
-            const amt = Number(ep.qty);
+            const markPriceStr = ep.markPrice ?? exec.entryPrice;
+            const notionalUsd = fromMicros(mulDiv(toMicros(markPriceStr), toMicros(ep.qty)));
             this.positions.set(exec.asset, {
               symbol: exec.symbol,
               asset: exec.asset,
               direction: exec.direction,
               side: exec.side,
-              quantity: amt,
-              entryPrice: Number(exec.entryPrice),
-              markPrice,
-              unrealizedPnl: Number(ep.unrealizedPnl ?? 0),
-              notionalUsd: markPrice * amt,
+              quantity: ep.qty,
+              entryPrice: exec.entryPrice,
+              markPrice: markPriceStr,
+              unrealizedPnl: ep.unrealizedPnl ?? '0',
+              notionalUsd,
               leverage: exec.leverage,
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
@@ -121,8 +130,8 @@ export class PositionTracker {
             realizedPnl: '0',
           });
         } else {
-          const markPrice = ep ? Number(ep.markPrice ?? exec.entryPrice) : Number(exec.entryPrice);
-          const amt = ep ? Number(ep.qty) : Number(exec.quantity);
+          const markPriceStr = ep?.markPrice ?? exec.entryPrice;
+          const qtyStr = ep?.qty ?? exec.quantity;
 
           if (ep && !this.client.isPaperMode()) {
             const exchangeIsLong = ep.side === 'LONG';
@@ -138,7 +147,7 @@ export class PositionTracker {
                 await this.client.placeOrder({
                   symbol: exec.symbol,
                   side,
-                  quantity: Number(ep.qty),
+                  quantity: ep.qty,
                   clientOrderId: `recon_${Date.now()}_${exec.asset}`,
                   reduceOnly: true,
                 });
@@ -162,16 +171,17 @@ export class PositionTracker {
             }
           }
 
+          const notionalUsd = fromMicros(mulDiv(toMicros(markPriceStr), toMicros(qtyStr)));
           this.positions.set(exec.asset, {
             symbol: exec.symbol,
             asset: exec.asset,
             direction: exec.direction,
             side: exec.side,
-            quantity: amt,
-            entryPrice: Number(exec.entryPrice),
-            markPrice,
-            unrealizedPnl: ep ? Number(ep.unrealizedPnl ?? 0) : 0,
-            notionalUsd: markPrice * amt,
+            quantity: qtyStr,
+            entryPrice: exec.entryPrice,
+            markPrice: markPriceStr,
+            unrealizedPnl: ep?.unrealizedPnl ?? '0',
+            notionalUsd,
             leverage: exec.leverage,
             marginType: exec.marginType,
             clientOrderId: exec.clientOrderId,
@@ -189,9 +199,7 @@ export class PositionTracker {
       }
 
       log.info({ trackedCount: this.positions.size, dbOpen: dbOpen.length }, 'Startup reconciliation complete');
-    } finally {
-      this.releaseMutex();
-    }
+    });
   }
 
   startPeriodicSync(intervalMs: number): void {
@@ -209,8 +217,7 @@ export class PositionTracker {
 
   async sync(): Promise<void> {
     if (this.client.isPaperMode()) return;
-    await this.acquireMutex();
-    try {
+    return this.withLock(async () => {
       const exchangePositions = await this.client.getPositions();
       for (const [asset, pos] of this.positions) {
         const ep = exchangePositions.find(p => p.symbol === pos.symbol);
@@ -236,35 +243,26 @@ export class PositionTracker {
           continue;
         }
 
-        const qty = Number(ep.qty);
-        pos.markPrice = Number(ep.markPrice ?? pos.markPrice);
-        pos.unrealizedPnl = Number(ep.unrealizedPnl ?? 0);
-        pos.notionalUsd = pos.markPrice * qty;
-        pos.quantity = qty;
+        pos.quantity = ep.qty;
+        pos.markPrice = ep.markPrice ?? pos.markPrice;
+        pos.unrealizedPnl = ep.unrealizedPnl ?? '0';
+        pos.notionalUsd = fromMicros(mulDiv(toMicros(pos.markPrice), toMicros(ep.qty)));
       }
-    } finally {
-      this.releaseMutex();
-    }
+    });
   }
 
   async openPosition(pos: PerpsPosition): Promise<void> {
-    await this.acquireMutex();
-    try {
+    return this.withLock(async () => {
       this.positions.set(pos.asset, pos);
-    } finally {
-      this.releaseMutex();
-    }
+    });
   }
 
   async closePosition(asset: string): Promise<PerpsPosition | undefined> {
-    await this.acquireMutex();
-    try {
+    return this.withLock(async () => {
       const pos = this.positions.get(asset);
       if (pos) this.positions.delete(asset);
       return pos;
-    } finally {
-      this.releaseMutex();
-    }
+    });
   }
 
   getPosition(asset: string): PerpsPosition | undefined {
@@ -279,12 +277,12 @@ export class PositionTracker {
     return this.positions.size;
   }
 
-  getTotalExposureUsd(): number {
-    let total = 0;
+  getTotalExposureUsd(): string {
+    let totalMicros = 0n;
     for (const pos of this.positions.values()) {
-      total += pos.notionalUsd;
+      totalMicros += toMicros(pos.notionalUsd);
     }
-    return total;
+    return fromMicros(totalMicros);
   }
 
   hasPosition(asset: string): boolean {
@@ -294,22 +292,15 @@ export class PositionTracker {
   updateMarkPrice(asset: string, markPrice: number): void {
     const pos = this.positions.get(asset);
     if (!pos) return;
-    pos.markPrice = markPrice;
-    const priceDiff = pos.direction === 'long'
-      ? markPrice - pos.entryPrice
-      : pos.entryPrice - markPrice;
-    pos.unrealizedPnl = priceDiff * pos.quantity;
-    pos.notionalUsd = markPrice * pos.quantity;
-  }
-
-  private async acquireMutex(): Promise<void> {
-    while (this.mutex) {
-      await new Promise(r => setTimeout(r, 10));
-    }
-    this.mutex = true;
-  }
-
-  private releaseMutex(): void {
-    this.mutex = false;
+    const markStr = String(markPrice);
+    pos.markPrice = markStr;
+    const entryMicros = toMicros(pos.entryPrice);
+    const markMicros = toMicros(markStr);
+    const qtyMicros = toMicros(pos.quantity);
+    const diffMicros = pos.direction === 'long'
+      ? markMicros - entryMicros
+      : entryMicros - markMicros;
+    pos.unrealizedPnl = fromMicros(mulDiv(diffMicros, qtyMicros));
+    pos.notionalUsd = fromMicros(mulDiv(markMicros, qtyMicros));
   }
 }

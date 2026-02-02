@@ -86,13 +86,13 @@ export class KillSwitch {
 
   async closeAllPositions(): Promise<number> {
     const positions = this.tracker.getOpenPositions();
+    const results = await Promise.allSettled(positions.map(p => this.closeOnePosition(p)));
     let closed = 0;
-    for (const pos of positions) {
-      const success = await this.closeOnePosition(pos);
-      if (success) {
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'fulfilled' && (results[i] as PromiseFulfilledResult<boolean>).value) {
         closed++;
       } else {
-        this.failedCloses.push(pos);
+        this.failedCloses.push(positions[i]);
       }
     }
     return closed;
@@ -102,21 +102,42 @@ export class KillSwitch {
     try {
       const side = closingSide(pos.direction);
       const closeOrderId = `ks_${Date.now()}_${pos.asset}_${side}`;
+
+      let closeQty = pos.quantity;
+      if (!this.client.isPaperMode()) {
+        try {
+          const exchangePositions = await this.client.getPositions(pos.symbol);
+          const ep = exchangePositions.find(p => p.symbol === pos.symbol);
+          if (!ep) {
+            await this.tracker.closePosition(pos.asset);
+            await this.persistence.updateExecution(pos.clientOrderId, {
+              status: 'closed',
+              exitReason: 'kill_switch',
+              realizedPnl: '0',
+            });
+            return true;
+          }
+          closeQty = ep.qty;
+        } catch (err) {
+          log.warn({ asset: pos.asset, error: (err as Error).message }, 'Failed to verify exchange position, using tracked qty');
+        }
+      }
+
       const closeResponse = await this.client.placeOrder({
         symbol: pos.symbol,
         side,
-        quantity: pos.quantity,
+        quantity: closeQty,
         clientOrderId: closeOrderId,
         reduceOnly: true,
       });
 
       const exitPriceStr = closeResponse.avgPrice !== '0'
         ? closeResponse.avgPrice
-        : String(pos.markPrice);
+        : pos.markPrice;
 
-      const entryMicros = toMicros(String(pos.entryPrice));
+      const entryMicros = toMicros(pos.entryPrice);
       const exitMicros = toMicros(exitPriceStr);
-      const qtyMicros = toMicros(String(pos.quantity));
+      const qtyMicros = toMicros(pos.quantity);
       const priceDiffMicros = pos.direction === 'short'
         ? entryMicros - exitMicros
         : exitMicros - entryMicros;

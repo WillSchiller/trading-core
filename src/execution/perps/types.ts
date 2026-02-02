@@ -38,14 +38,14 @@ export interface PerpsExchangeClient {
   placeOrder(params: {
     symbol: string;
     side: PerpsSide;
-    quantity: number;
+    quantity: string;
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
   }): Promise<OrderResult>;
   getPositions(symbol?: string): Promise<PositionInfo[]>;
   getAccountInfo(): Promise<AccountInfo>;
-  roundQuantity(symbol: string, qty: number): number;
+  roundQuantity(symbol: string, qty: number): string;
   roundPrice(symbol: string, price: number): number;
   isPaperMode(): boolean;
   getPaperFillConfig(): PaperFillConfig;
@@ -98,11 +98,11 @@ export interface PerpsPosition {
   asset: string;
   direction: PerpsDirection;
   side: PerpsSide;
-  quantity: number;
-  entryPrice: number;
-  markPrice: number;
-  unrealizedPnl: number;
-  notionalUsd: number;
+  quantity: string;
+  entryPrice: string;
+  markPrice: string;
+  unrealizedPnl: string;
+  notionalUsd: string;
   leverage: number;
   marginType: MarginType;
   clientOrderId: string;

@@ -112,7 +112,7 @@ describe('money utilities', () => {
   });
 
   describe('round-trip', () => {
-    it('preserves value through toMicros→fromMicros', () => {
+    it('preserves value through toMicros->fromMicros', () => {
       expect(fromMicros(toMicros('123.456789'))).toBe('123.456789');
     });
     it('preserves integers', () => {
@@ -163,7 +163,6 @@ describe('money utilities', () => {
         const diff = toMicros(t.exit) - toMicros(t.entry);
         totalMicros += mulDiv(diff, toMicros(t.qty));
       }
-      // (10*0.1) + (-10*0.05) + (20*0.2) = 1 + -0.5 + 4 = 4.5
       expect(totalMicros).toBe(toMicros('4.5'));
     });
   });
@@ -192,7 +191,7 @@ describe('BinanceFuturesClient', () => {
   });
 
   describe('quantity rounding', () => {
-    it('rounds down to step size', () => {
+    it('rounds down to step size and returns string', () => {
       const client = new BinanceFuturesClient({
         apiKey: 'k',
         apiSecret: 's',
@@ -205,8 +204,8 @@ describe('BinanceFuturesClient', () => {
         stepSize: 0.001,
         minNotional: 5,
       });
-      expect(client.roundQuantity('ETHUSDT', 0.12345)).toBe(0.123);
-      expect(client.roundQuantity('ETHUSDT', 0.1239)).toBe(0.123);
+      expect(client.roundQuantity('ETHUSDT', 0.12345)).toBe('0.123');
+      expect(client.roundQuantity('ETHUSDT', 0.1239)).toBe('0.123');
     });
 
     it('handles integer step sizes', () => {
@@ -222,7 +221,7 @@ describe('BinanceFuturesClient', () => {
         stepSize: 0.001,
         minNotional: 5,
       });
-      expect(client.roundQuantity('BTCUSDT', 0.00456)).toBe(0.004);
+      expect(client.roundQuantity('BTCUSDT', 0.00456)).toBe('0.004');
     });
 
     it('returns default precision for unknown symbols', () => {
@@ -247,7 +246,7 @@ describe('BinanceFuturesClient', () => {
       const result = await client.placeOrder({
         symbol: 'ETHUSDT',
         side: 'SELL',
-        quantity: 0.1,
+        quantity: '0.1',
         clientOrderId: 'test_order_1',
       });
       expect(result.status).toBe('FILLED');
@@ -265,14 +264,12 @@ describe('BinanceFuturesClient', () => {
       const result = await client.placeOrder({
         symbol: 'ETHUSDT',
         side: 'BUY',
-        quantity: 0.1,
+        quantity: '0.1',
         clientOrderId: 'test_fill_1',
         markPrice: 2000,
       });
       const fillPrice = parseFloat(result.avgPrice);
-      // BUY should fill ABOVE mark: mark + spread + slippage + fee
       expect(fillPrice).toBeGreaterThan(2000);
-      // spread=5bps=1.00, slippage=10bps=2.00, fee=2bps=0.40 → total adverse = 3.40
       expect(fillPrice).toBeCloseTo(2003.4, 1);
     });
 
@@ -286,13 +283,12 @@ describe('BinanceFuturesClient', () => {
       const result = await client.placeOrder({
         symbol: 'ETHUSDT',
         side: 'SELL',
-        quantity: 0.1,
+        quantity: '0.1',
         clientOrderId: 'test_fill_2',
         markPrice: 2000,
       });
       const fillPrice = parseFloat(result.avgPrice);
       expect(fillPrice).toBeLessThan(2000);
-      // spread=5bps=1.00, slippage=10bps=2.00, fee=2bps=0.40 → total adverse = 3.40
       expect(fillPrice).toBeCloseTo(1996.6, 1);
     });
 
@@ -306,12 +302,11 @@ describe('BinanceFuturesClient', () => {
       const result = await client.placeOrder({
         symbol: 'ETHUSDT',
         side: 'BUY',
-        quantity: 1.0,
+        quantity: '1.0',
         clientOrderId: 'test_fill_cap',
         markPrice: 2000,
       });
       const fillPrice = parseFloat(result.avgPrice);
-      // slippage capped at 10bps=2.00, spread=5bps=1.00, fee=2bps=0.40 → total = 3.40
       expect(fillPrice).toBeCloseTo(2003.4, 1);
     });
 
@@ -321,9 +316,7 @@ describe('BinanceFuturesClient', () => {
         apiSecret: 's',
         paperMode: true,
       });
-      // Should not throw, just silently skip
       await client.setLeverage('ETHUSDT', 5);
-      // No request made — if it tried to call API without proper creds, it would throw
     });
 
     it('blocks setMarginType in paper mode', async () => {
@@ -358,6 +351,7 @@ describe('KillSwitch', () => {
     exchange: 'binance' as const,
     placeOrder: vi.fn().mockResolvedValue(mockOrderResponse),
     isPaperMode: () => true,
+    getPositions: vi.fn().mockResolvedValue([]),
   };
 
   const mockPersistence = {
@@ -470,7 +464,7 @@ describe('KillSwitch', () => {
     mockPersistence.getTotalPnlMicros.mockResolvedValue(-150_000_000n);
     mockPersistence.getConsecutiveLosses.mockResolvedValue(0);
     mockTracker.getOpenPositions.mockReturnValue([
-      { symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: 0.1, clientOrderId: 'test1', markPrice: 2100, unrealizedPnl: -10, entryPrice: 2000 },
+      { symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: '0.1', clientOrderId: 'test1', markPrice: '2100', unrealizedPnl: '-10', entryPrice: '2000' },
     ]);
 
     const ks = new KillSwitch(
@@ -493,7 +487,7 @@ describe('KillSwitch', () => {
     mockPersistence.getConsecutiveLosses.mockResolvedValue(0);
     mockClient.placeOrder.mockRejectedValueOnce(new Error('network error'));
     mockTracker.getOpenPositions.mockReturnValue([
-      { symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: 0.1, clientOrderId: 'test1', markPrice: 2000, unrealizedPnl: -5, entryPrice: 2000 },
+      { symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: '0.1', clientOrderId: 'test1', markPrice: '2000', unrealizedPnl: '-5', entryPrice: '2000' },
     ]);
 
     const ks = new KillSwitch(
@@ -508,11 +502,38 @@ describe('KillSwitch', () => {
     mockClient.placeOrder.mockResolvedValue(mockOrderResponse);
     mockTracker.hasPosition.mockReturnValue(true);
     mockTracker.getPosition.mockReturnValue({
-      symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: 0.1,
-      clientOrderId: 'test1', markPrice: 2000, unrealizedPnl: -5, entryPrice: 2000,
+      symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: '0.1',
+      clientOrderId: 'test1', markPrice: '2000', unrealizedPnl: '-5', entryPrice: '2000',
     });
     await ks.check();
     expect(mockTracker.closePosition).toHaveBeenCalledWith('ETH');
+  });
+
+  it('closes positions in parallel with Promise.allSettled', async () => {
+    mockPersistence.getDailyPnlMicros.mockResolvedValue(-150_000_000n);
+    mockPersistence.getTotalPnlMicros.mockResolvedValue(-150_000_000n);
+    mockPersistence.getConsecutiveLosses.mockResolvedValue(0);
+
+    const callOrder: string[] = [];
+    mockClient.placeOrder.mockImplementation(async (params: any) => {
+      callOrder.push(params.clientOrderId);
+      await new Promise(r => setTimeout(r, 10));
+      return mockOrderResponse;
+    });
+    mockTracker.getOpenPositions.mockReturnValue([
+      { symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', quantity: '0.1', clientOrderId: 'test1', markPrice: '2000', unrealizedPnl: '0', entryPrice: '2000' },
+      { symbol: 'BTCUSDT', asset: 'BTC', direction: 'long', quantity: '0.01', clientOrderId: 'test2', markPrice: '50000', unrealizedPnl: '0', entryPrice: '50000' },
+    ]);
+
+    const ks = new KillSwitch(
+      { dailyDrawdownLimitUsd: 100, maxTotalLossUsd: 500, maxConsecutiveLosses: 5, checkIntervalMs: 60000 },
+      mockClient as any,
+      mockPersistence as any,
+      mockTracker as any,
+    );
+    await ks.check();
+    expect(mockClient.placeOrder).toHaveBeenCalledTimes(2);
+    expect(mockTracker.closePosition).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -544,21 +565,21 @@ describe('PositionTracker', () => {
 
     await tracker.openPosition({
       symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', side: 'SELL',
-      quantity: 0.1, entryPrice: 2000, markPrice: 2000, unrealizedPnl: 0,
-      notionalUsd: 200, leverage: 1, marginType: 'ISOLATED',
+      quantity: '0.1', entryPrice: '2000', markPrice: '2000', unrealizedPnl: '0',
+      notionalUsd: '200', leverage: 1, marginType: 'ISOLATED',
       clientOrderId: 'test1', openedAt: Date.now(),
     });
     expect(tracker.getOpenCount()).toBe(1);
     expect(tracker.hasPosition('ETH')).toBe(true);
-    expect(tracker.getTotalExposureUsd()).toBe(200);
+    expect(Number(tracker.getTotalExposureUsd())).toBeCloseTo(200, 0);
   });
 
   it('removes position on close', async () => {
     const tracker = new PositionTracker(mockClient as any, mockPersistence as any);
     await tracker.openPosition({
       symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', side: 'SELL',
-      quantity: 0.1, entryPrice: 2000, markPrice: 2000, unrealizedPnl: 0,
-      notionalUsd: 200, leverage: 1, marginType: 'ISOLATED',
+      quantity: '0.1', entryPrice: '2000', markPrice: '2000', unrealizedPnl: '0',
+      notionalUsd: '200', leverage: 1, marginType: 'ISOLATED',
       clientOrderId: 'test1', openedAt: Date.now(),
     });
     const closed = await tracker.closePosition('ETH');
@@ -567,18 +588,18 @@ describe('PositionTracker', () => {
     expect(tracker.getOpenCount()).toBe(0);
   });
 
-  it('updates mark price and unrealized PnL', async () => {
+  it('updates mark price and unrealized PnL using fixed-point math', async () => {
     const tracker = new PositionTracker(mockClient as any, mockPersistence as any);
     await tracker.openPosition({
       symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', side: 'SELL',
-      quantity: 0.1, entryPrice: 2000, markPrice: 2000, unrealizedPnl: 0,
-      notionalUsd: 200, leverage: 1, marginType: 'ISOLATED',
+      quantity: '0.1', entryPrice: '2000', markPrice: '2000', unrealizedPnl: '0',
+      notionalUsd: '200', leverage: 1, marginType: 'ISOLATED',
       clientOrderId: 'test1', openedAt: Date.now(),
     });
     tracker.updateMarkPrice('ETH', 1950);
     const pos = tracker.getPosition('ETH');
-    expect(pos!.markPrice).toBe(1950);
-    expect(pos!.unrealizedPnl).toBeCloseTo(5); // short: (2000-1950)*0.1
+    expect(pos!.markPrice).toBe('1950');
+    expect(Number(pos!.unrealizedPnl)).toBeCloseTo(5, 0); // short: (2000-1950)*0.1
   });
 
   it('reconciles closing positions with exchange on startup (paper)', async () => {
@@ -632,6 +653,29 @@ describe('PositionTracker', () => {
     const tracker = new PositionTracker(mockClient as any, mockPersistence as any);
     await tracker.reconcileOnStartup();
     expect(tracker.getOpenCount()).toBe(1);
+  });
+
+  it('withLock serializes concurrent operations', async () => {
+    const tracker = new PositionTracker(mockClient as any, mockPersistence as any);
+    const order: number[] = [];
+
+    const p1 = tracker.openPosition({
+      symbol: 'ETHUSDT', asset: 'ETH', direction: 'short', side: 'SELL',
+      quantity: '0.1', entryPrice: '2000', markPrice: '2000', unrealizedPnl: '0',
+      notionalUsd: '200', leverage: 1, marginType: 'ISOLATED',
+      clientOrderId: 'test1', openedAt: Date.now(),
+    }).then(() => { order.push(1); });
+
+    const p2 = tracker.openPosition({
+      symbol: 'BTCUSDT', asset: 'BTC', direction: 'long', side: 'BUY',
+      quantity: '0.01', entryPrice: '50000', markPrice: '50000', unrealizedPnl: '0',
+      notionalUsd: '500', leverage: 1, marginType: 'ISOLATED',
+      clientOrderId: 'test2', openedAt: Date.now(),
+    }).then(() => { order.push(2); });
+
+    await Promise.all([p1, p2]);
+    expect(order).toEqual([1, 2]);
+    expect(tracker.getOpenCount()).toBe(2);
   });
 });
 
@@ -713,8 +757,8 @@ describe('PerpsExecutor', () => {
 
     const mockPosition = {
       symbol: 'ETHUSDT', asset: 'ETH', direction: 'short' as const, side: 'SELL' as const,
-      quantity: 0.1, entryPrice: 2000, markPrice: 1950, unrealizedPnl: 5,
-      notionalUsd: 195, leverage: 1, marginType: 'ISOLATED' as const,
+      quantity: '0.1', entryPrice: '2000', markPrice: '1950', unrealizedPnl: '5',
+      notionalUsd: '195', leverage: 1, marginType: 'ISOLATED' as const,
       clientOrderId: 'test1', openedAt: Date.now() - 60000,
     };
 
@@ -737,7 +781,9 @@ describe('PerpsExecutor', () => {
         status: 'FILLED' as const, avgPrice: '1950',
         filledQty: '0.1', exchangeOrderId: '1',
       }),
-      roundQuantity: vi.fn().mockReturnValue(0.1),
+      roundQuantity: vi.fn().mockReturnValue('0.1'),
+      isPaperMode: () => true,
+      getPositions: vi.fn().mockResolvedValue([]),
     };
     (executor as any).client = mockExClient;
 
@@ -775,7 +821,7 @@ describe('PerpsExecutor', () => {
 
     const mockPosition = {
       symbol: 'ETHUSDT', asset: 'ETH', direction: 'short' as const,
-      quantity: 0.1, entryPrice: 2000, clientOrderId: 'test1',
+      quantity: '0.1', entryPrice: '2000', clientOrderId: 'test1',
     };
 
     (executor as any).tracker = {
@@ -845,5 +891,67 @@ describe('PerpsExecutor', () => {
     const liveClient = new BinanceFuturesClientForExec({ apiKey: 'key', apiSecret: 'secret', paperMode: false });
     const executor = new PerpsExecutor(liveConfig, null as any, liveClient, 'live-run-1');
     expect(executor.getMode()).toBe('live');
+  });
+
+  it('handles partial fills by using filledQty', async () => {
+    const executor = new PerpsExecutor(baseConfig, null as any, makeClient(), testRunId);
+    (executor as any).running = true;
+
+    const mockPersistence = {
+      getExecutionByClientOrderId: vi.fn().mockResolvedValue(null),
+      saveExecution: vi.fn().mockResolvedValue(1),
+      updateExecutionEntry: vi.fn().mockResolvedValue(undefined),
+      updateExecution: vi.fn().mockResolvedValue(undefined),
+    };
+    (executor as any).persistence = mockPersistence;
+
+    const mockTracker = {
+      hasPosition: vi.fn().mockReturnValue(false),
+      getOpenCount: vi.fn().mockReturnValue(0),
+      getTotalExposureUsd: vi.fn().mockReturnValue('0.000000'),
+      openPosition: vi.fn().mockResolvedValue(undefined),
+    };
+    (executor as any).tracker = mockTracker;
+
+    const mockKs = { check: vi.fn().mockResolvedValue({ safe: true }) };
+    (executor as any).killSwitch = mockKs;
+
+    const mockExClient = {
+      exchange: 'binance' as const,
+      roundQuantity: (_s: string, q: number) => q.toFixed(3),
+      placeOrder: vi.fn().mockResolvedValue({
+        status: 'FILLED' as const,
+        avgPrice: '2001',
+        filledQty: '0.05',
+        exchangeOrderId: '123',
+      }),
+      isPaperMode: () => true,
+    };
+    (executor as any).client = mockExClient;
+
+    await executor.handleSignal({
+      timestamp: Date.now(),
+      asset: 'ETH',
+      direction: 'short',
+      zScore: 3.0,
+      residual: 0.02,
+      confidence: 0.9,
+      entryPrice: 2000,
+      positionSizeUsd: 100,
+      factorContext: { pc1Return: 0.01, pc2Return: -0.005 },
+      allAssetResiduals: {},
+    });
+
+    expect(mockTracker.openPosition).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: '0.05', entryPrice: '2001' })
+    );
+  });
+
+  it('fixed-point stop-loss calculation', () => {
+    const entryMicros = toMicros('2000');
+    const markMicros = toMicros('1985');
+    const diffMicros = markMicros - entryMicros;
+    const pnlBps = Number((diffMicros * 10000n) / entryMicros);
+    expect(pnlBps).toBe(-75);
   });
 });

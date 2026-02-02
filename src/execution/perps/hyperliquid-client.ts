@@ -1,6 +1,7 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { HttpTransport, InfoClient, ExchangeClient } from '@nktkas/hyperliquid';
 import { createChildLogger } from '../../utils/logger.js';
+import { withRetry } from '../../utils/retry.js';
 import type {
   PerpsExchangeClient,
   ExchangeName,
@@ -110,21 +111,21 @@ export class HyperliquidClient implements PerpsExchangeClient {
   async placeOrder(params: {
     symbol: string;
     side: PerpsSide;
-    quantity: number;
+    quantity: string;
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
   }): Promise<OrderResult> {
     const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice } = params;
-    const roundedQty = this.roundQuantity(symbol, quantity);
+    const qtyNum = parseFloat(quantity);
 
     if (this._paperMode) {
-      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, roundedQty);
-      log.info({ symbol, side, quantity: roundedQty, clientOrderId, fillPrice: fillPrice.toFixed(4), exchange: this.exchange }, 'PAPER order (simulated)');
+      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum);
+      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4), exchange: this.exchange }, 'PAPER order (simulated)');
       return {
         status: 'FILLED',
         avgPrice: fillPrice > 0 ? fillPrice.toFixed(8) : '0',
-        filledQty: String(roundedQty),
+        filledQty: quantity,
         exchangeOrderId: String(Date.now()),
       };
     }
@@ -140,17 +141,21 @@ export class HyperliquidClient implements PerpsExchangeClient {
     const slippageMult = isBuy ? (1 + this.slippageBps / 10000) : (1 - this.slippageBps / 10000);
     const limitPrice = this.roundPrice(symbol, mp * slippageMult);
 
-    const resp = await this.exchangeClient.order({
-      orders: [{
-        a: meta.index,
-        b: isBuy,
-        p: String(limitPrice),
-        s: String(roundedQty),
-        r: reduceOnly ?? false,
-        t: { limit: { tif: 'Ioc' } },
-      }],
-      grouping: 'na',
-    });
+    const resp = await withRetry(
+      () => this.exchangeClient.order({
+        orders: [{
+          a: meta.index,
+          b: isBuy,
+          p: String(limitPrice),
+          s: quantity,
+          r: reduceOnly ?? false,
+          t: { limit: { tif: 'Ioc' } },
+        }],
+        grouping: 'na',
+      }),
+      { maxAttempts: 3, baseDelayMs: 500 },
+      { symbol, side, clientOrderId, exchange: this.exchange },
+    );
 
     const status = resp.response.data.statuses[0];
     if (!status) {
@@ -215,19 +220,24 @@ export class HyperliquidClient implements PerpsExchangeClient {
 
   async getAccountInfo(): Promise<AccountInfo> {
     const state = await this.info.clearinghouseState({ user: this.walletAddress });
+    let unrealizedPnl = 0;
+    for (const ap of state.assetPositions) {
+      const pnl = parseFloat(ap.position.unrealizedPnl);
+      if (!isNaN(pnl)) unrealizedPnl += pnl;
+    }
     return {
       availableBalance: state.withdrawable,
       walletBalance: state.crossMarginSummary.accountValue,
-      unrealizedPnl: state.crossMarginSummary.totalNtlPos,
+      unrealizedPnl: String(unrealizedPnl),
     };
   }
 
-  roundQuantity(symbol: string, qty: number): number {
+  roundQuantity(symbol: string, qty: number): string {
     const meta = this.getAssetMeta(symbol);
     const szDecimals = meta?.szDecimals ?? 3;
     const step = Math.pow(10, -szDecimals);
     const rounded = Math.floor(qty / step) * step;
-    return parseFloat(rounded.toFixed(szDecimals));
+    return rounded.toFixed(szDecimals);
   }
 
   roundPrice(_symbol: string, price: number): number {
