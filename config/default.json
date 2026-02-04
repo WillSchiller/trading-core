@@ -156,10 +156,10 @@
       "checkIntervalMs": 60000
     },
     "paperFill": {
-      "spreadBps": 2,
-      "slippageBps": 5,
-      "takerFeeBps": 2,
-      "maxSlippageBps": 20
+      "spreadBps": 1,
+      "slippageBps": 0,
+      "takerFeeBps": 2.5,
+      "maxSlippageBps": 10
     },
     "runs": [
       { "runId": "hl_paper", "paperMode": true, "exchange": "hyperliquid", "excludeAssets": ["DOT", "AAVE"] },

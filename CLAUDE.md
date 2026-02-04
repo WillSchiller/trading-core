@@ -11,6 +11,17 @@
 
 **Architecture**: Single Node.js/TypeScript monolith + Postgres + Grafana, deployed via docker-compose on a single EC2 instance.
 
+## Production Access
+
+SSH to EC2 and query Postgres directly:
+```bash
+ssh -o StrictHostKeyChecking=no ubuntu@3.1.140.199 "docker exec dislocation-postgres psql -U trader -d dislocation_trader -c \"<SQL>\""
+```
+
+Container names: `dislocation-trader-app`, `dislocation-postgres`, `dislocation-grafana`
+
+Grafana: http://3.1.140.199:3000 (not reachable from local, use SSH or browser)
+
 ## Documentation
 
 Read these before starting any phase:
@@ -256,17 +267,19 @@ ENABLE_BASE=true
 ENABLE_MAINNET=false
 ```
 
-## Current Phase
+## Current Status
 
-> **Phase 0 — Scaffolding**
+**Mode**: Data collection only — perps execution disabled, PCA signals + shadow tracking still running.
 
-Update this section as you progress:
+**Context**: Live run (hl_live) ran Feb 2, lost $2.50 over 9 trades before kill switch fired. Shadow data (160+ trades) shows the strategy has positive expectancy (+1,126 bps total), and trailing stops roughly match zero-cross exits. Stop-losses fire on genuinely bad trades. The Feb 2 loss was variance on a small sample, not a broken strategy. Collecting more shadow data before deciding next steps.
 
-- [ ] **Phase 0**: Project setup, docker-compose, config, logging, schema
-- [ ] **Phase 1**: Data collection (CEX WS, DEX readers, persistence)
-- [ ] **Phase 2**: Detection (spread calculator, filters, opportunity logging)
-- [ ] **Phase 3**: Execution (quoter, router, paper trader, live trader)
-- [ ] **Phase 4**: Observability (Grafana dashboards)
+**Key data table**: `pca_signals` — 840+ signals, 237+ shadow-tracked. Query via SSH to production.
+
+- [x] **Phase 0**: Project setup, docker-compose, config, logging, schema
+- [x] **Phase 1**: Data collection (CEX WS, DEX readers, persistence)
+- [x] **Phase 2**: Detection (spread calculator, filters, opportunity logging)
+- [x] **Phase 3**: Execution (quoter, router, paper trader, live trader)
+- [x] **Phase 4**: Observability (Grafana dashboards)
 - [ ] **Phase 5**: Hardening (tests, graceful shutdown, runbook)
 
 ## Task Reference
