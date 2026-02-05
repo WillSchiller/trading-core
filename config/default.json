@@ -141,16 +141,16 @@
     "enableLongs": false,
     "enableShorts": true,
     "maxConcurrentPositions": 5,
-    "maxPositionSizeUsd": 150,
+    "maxPositionSizeUsd": 300,
     "minPositionSizeUsd": 10,
-    "maxTotalExposureUsd": 750,
+    "maxTotalExposureUsd": 1500,
     "cooldownMs": 30000,
     "heartbeatIntervalMs": 5000,
     "positionSyncIntervalMs": 60000,
     "maxHoldTimeMsShort": 14400000,
     "maxHoldTimeMsLong": 21600000,
     "killSwitch": {
-      "dailyDrawdownLimitUsd": 100,
+      "dailyDrawdownLimitUsd": 150,
       "maxTotalLossUsd": 500,
       "maxConsecutiveLosses": 5,
       "checkIntervalMs": 60000
@@ -163,7 +163,7 @@
     },
     "runs": [
       { "runId": "hl_paper", "paperMode": true, "exchange": "hyperliquid", "excludeAssets": ["DOT", "AAVE"] },
-      { "runId": "hl_paper_match", "paperMode": true, "exchange": "hyperliquid", "excludeAssets": ["DOT", "AAVE"], "maxPositionSizeUsd": 75, "maxTotalExposureUsd": 375, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 250, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } }
+      { "runId": "hl_live", "paperMode": false, "exchange": "hyperliquid", "excludeAssets": ["DOT", "AAVE"], "maxPositionSizeUsd": 100, "maxTotalExposureUsd": 300, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 150, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } }
     ]
   },
   "chains": {
