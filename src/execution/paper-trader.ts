@@ -213,12 +213,6 @@ export class PaperTrader {
       'Paper trade completed'
     );
 
-    alertTradeProfit(
-      opportunity.pairCanonical || `pair:${opportunity.pairId}`,
-      opportunity.direction,
-      simulatedPnlUsd,
-      Math.abs(opportunity.spreadBps)
-    ).catch((err) => this.logger.error({ error: (err as Error).message }, 'Failed to send trade alert'));
 
     return {
       executionClientId,

@@ -964,3 +964,57 @@ curl http://localhost:8080/test-alert
 ```
 
 ---
+
+## 2026-02-02
+
+### DevOps/Platform Agent
+
+DONE - Fixed deploy pipeline secrets merging bug
+
+**Problem:**
+- After deployment, BINANCE_API_KEY and BINANCE_API_SECRET were empty in .env
+- The deploy.sh script had structural issues in how it merged .env.secrets into .env
+- The fetch-secrets.sh script treated Terraform placeholder `{}` as a valid value
+
+**Root Causes Found:**
+1. deploy.sh hardcoded `TELEGRAM_CHAT_ID=` (empty) in the base .env block, which was redundant with the secrets append
+2. fetch-secrets.sh did not filter out the Terraform default placeholder `{}` from secret values
+3. `dislocation-trader/binance-api-secret` in AWS Secrets Manager contained `{}` (never populated)
+
+**Fixes Applied:**
+
+1. `scripts/deploy.sh`:
+   - Removed hardcoded `TELEGRAM_CHAT_ID=` from base .env block
+   - Added validation step that checks POSTGRES_PASSWORD, RPC_BASE_HTTP, BINANCE_API_KEY after env build
+   - Added fatal check if .env.secrets file is not created
+   - Moved ECR login before secrets fetch for cleaner flow
+
+2. `scripts/fetch-secrets.sh`:
+   - Added `{}` check to reject Terraform placeholder values
+   - Added `fetch_secret_optional()` for keys that may not exist in Secrets Manager
+   - Added BINANCE_FUTURES_API_KEY and BINANCE_FUTURES_API_SECRET support
+   - Logs character count for each fetched secret for debugging
+
+3. Uploaded fixed scripts to S3 (s3://blockhelixasia/deploy/) for future GHA deployments
+
+**Deployment Result:**
+- BINANCE_API_KEY: 64 chars (correctly loaded from Secrets Manager)
+- BINANCE_API_SECRET: empty (AWS secret contains `{}`, needs user to populate)
+- Binance CEX connector: connected and streaming market data
+- Perps executor: skipped due to missing BINANCE_API_SECRET (the secret value was never populated in Secrets Manager)
+
+**Remaining Action Required:**
+User needs to populate `dislocation-trader/binance-api-secret` in AWS Secrets Manager (ap-southeast-1):
+```bash
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id "dislocation-trader/binance-api-secret" \
+  --secret-string "<actual-binance-api-secret>"
+```
+Then re-run: `cd /home/ubuntu/app && bash scripts/fetch-secrets.sh export && <rebuild .env> && docker-compose restart app`
+
+**Files Changed:**
+- `/scripts/deploy.sh` - Fixed .env construction and added validation
+- `/scripts/fetch-secrets.sh` - Added {} filtering, futures key support, char count logging
+
+---
