@@ -63,7 +63,8 @@
     "cex": {
       "binance": { "enabled": true, "isAnchor": true, "wsUrl": "wss://stream.binance.com:9443/ws" },
       "coinbase": { "enabled": true, "isAnchor": false, "wsUrl": "wss://ws-feed.exchange.coinbase.com" },
-      "bybit": { "enabled": true, "isAnchor": false, "wsUrl": "wss://stream.bybit.com/v5/public/spot" }
+      "bybit": { "enabled": true, "isAnchor": false, "wsUrl": "wss://stream.bybit.com/v5/public/spot" },
+      "hyperliquid": { "enabled": true, "isAnchor": false, "wsUrl": "wss://api.hyperliquid.xyz/ws" }
     },
     "dex": {
       "uniswap_v3": { "enabled": true, "chains": ["base", "mainnet"] },

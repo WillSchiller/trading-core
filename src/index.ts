@@ -247,6 +247,17 @@ async function main() {
     };
   }
 
+  if (config.app.venues.cex.hyperliquid?.enabled) {
+    const hlAssets = config.app.research?.pcaStatArb?.assets || ['ETH', 'BTC', 'SOL', 'AVAX', 'ARB', 'OP', 'LINK', 'UNI', 'AAVE', 'ATOM', 'SUI', 'DOT'];
+    cexConfigs.hyperliquid = {
+      enabled: true,
+      pairs: hlAssets.map(asset => ({
+        symbol: asset,
+        canonical: asset === 'ETH' ? 'WETH/USDC' : asset === 'BTC' ? 'WBTC/USDC' : `${asset}/USDC`,
+      })),
+    };
+  }
+
   const dexConfigs: Record<string, DexConnectorConfig> = {};
 
   if (config.app.venues.dex.uniswap_v3.enabled) {

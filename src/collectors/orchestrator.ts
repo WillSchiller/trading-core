@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Pool } from 'pg';
 import type { NormalizedQuote, Chain } from '../types/index.js';
-import { BinanceConnector, CoinbaseConnector, BybitConnector } from './cex/index.js';
+import { BinanceConnector, CoinbaseConnector, BybitConnector, HyperliquidCexConnector } from './cex/index.js';
 import { UniswapV3Connector, type PoolConfig } from './dex/index.js';
 import { LstRateOracle, BASE_LST_TOKENS, MAINNET_LST_TOKENS, type LstConfig } from './protocol/index.js';
 import { QuoteCache, type QuoteCacheConfig } from '../state/index.js';
@@ -26,6 +26,10 @@ export interface CollectorOrchestratorConfig {
       pairs: Array<{ symbol: string; canonical: string }>;
     };
     bybit?: {
+      enabled: boolean;
+      pairs: Array<{ symbol: string; canonical: string }>;
+    };
+    hyperliquid?: {
       enabled: boolean;
       pairs: Array<{ symbol: string; canonical: string }>;
     };
@@ -55,7 +59,7 @@ export class CollectorOrchestrator extends EventEmitter {
   private quoteCache: QuoteCache;
   private quotePersistence: QuotePersistence;
   private healthPersistence: HealthPersistence;
-  private cexConnectors: Map<string, BinanceConnector | CoinbaseConnector | BybitConnector>;
+  private cexConnectors: Map<string, BinanceConnector | CoinbaseConnector | BybitConnector | HyperliquidCexConnector>;
   private dexConnectors: Map<string, UniswapV3Connector>;
   private protocolConnectors: Map<string, LstRateOracle>;
   private chainProviders: Map<Chain, ChainProvider>;
@@ -191,6 +195,12 @@ export class CollectorOrchestrator extends EventEmitter {
     if (this.config.cex.bybit?.enabled && this.config.cex.bybit.pairs.length > 0) {
       const connector = new BybitConnector(this.config.cex.bybit.pairs);
       this.setupCexConnector(connector, 'bybit');
+      await connector.connect();
+    }
+
+    if (this.config.cex.hyperliquid?.enabled && this.config.cex.hyperliquid.pairs.length > 0) {
+      const connector = new HyperliquidCexConnector(this.config.cex.hyperliquid.pairs);
+      this.setupCexConnector(connector, 'hyperliquid');
       await connector.connect();
     }
   }
@@ -337,7 +347,7 @@ export class CollectorOrchestrator extends EventEmitter {
   }
 
   private setupCexConnector(
-    connector: BinanceConnector | CoinbaseConnector | BybitConnector,
+    connector: BinanceConnector | CoinbaseConnector | BybitConnector | HyperliquidCexConnector,
     venue: string
   ): void {
     connector.on('quote', (quote: NormalizedQuote) => {

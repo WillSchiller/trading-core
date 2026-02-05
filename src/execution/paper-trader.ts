@@ -8,7 +8,6 @@ import type { RiskCheckResult } from './risk.js';
 import type { Execution } from '../persistence/executions.js';
 import type { InventoryManager } from './inventory.js';
 import type { ExecutionQueue } from './execution-queue.js';
-import { alertTradeProfit } from '../utils/alerts.js';
 
 export interface PaperTradeParams {
   opportunity: Opportunity;
