@@ -115,7 +115,7 @@
         "maxHoldTimeMs": 1800000,
         "minHoldTimeMs": 2700000,
         "zeroCrossExit": true,
-        "stopLossBps": 75,
+        "stopLossBps": 9999,
         "requireRegimeConfirmation": true
       },
       "short": {
@@ -125,8 +125,8 @@
         "minHoldTimeMs": 1800000,
         "zeroCrossExit": false,
         "zscoreExit": false,
-        "stopLossBps": 75,
-        "stopLossIgnoresMinHold": true,
+        "stopLossBps": 9999,
+        "stopLossIgnoresMinHold": false,
         "trailingExit": {
           "enabled": true,
           "activationPnlBps": 20,
