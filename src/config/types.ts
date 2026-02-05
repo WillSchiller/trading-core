@@ -235,6 +235,7 @@ export interface PerpsRunConfig {
   runId: string;
   paperMode: boolean;
   exchange?: 'binance' | 'hyperliquid';
+  priceSource?: 'binance' | 'hyperliquid';
   leverage?: number;
   marginType?: 'ISOLATED' | 'CROSSED';
   enableLongs?: boolean;

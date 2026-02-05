@@ -484,20 +484,40 @@ async function main() {
     });
   }
 
-  // PCA Statistical Arbitrage Monitor
+  // PCA Statistical Arbitrage Monitors (one per price source)
   let pcaMonitor: PCAStatArbMonitor | null = null;
+  let pcaMonitorHL: PCAStatArbMonitor | null = null;
   let pcaPersistence: PCAPersistence | null = null;
+
+  // Determine which price sources we need based on configured runs
+  const priceSources = new Set<string>();
+  if (config.app.perpsExecution?.runs) {
+    for (const run of config.app.perpsExecution.runs) {
+      priceSources.add(run.priceSource ?? 'binance');
+    }
+  }
+  if (priceSources.size === 0) priceSources.add('binance');
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
-    pcaMonitor = new PCAStatArbMonitor(pcaConfig);
     pcaPersistence = new PCAPersistence(pool);
+
+    // Create PCA monitor for binance prices
+    if (priceSources.has('binance')) {
+      pcaMonitor = new PCAStatArbMonitor(pcaConfig);
+    }
+
+    // Create PCA monitor for hyperliquid prices
+    if (priceSources.has('hyperliquid')) {
+      pcaMonitorHL = new PCAStatArbMonitor(pcaConfig);
+    }
 
     // Map common pair names to PCA assets
     const pairToAsset: Record<string, string> = {
       'ETH/USDC': 'ETH',
       'WETH/USDC': 'ETH',
       'BTC/USDC': 'BTC',
+      'WBTC/USDC': 'BTC',
       'cbBTC/USDC': 'BTC',
       'SOL/USDC': 'SOL',
       'AVAX/USDC': 'AVAX',
@@ -514,80 +534,98 @@ async function main() {
     // Subscribe to quotes from orchestrator for PCA assets
     const lastPriceSave: Record<string, number> = {};
     orchestrator.on('quote', (quote: { venue: string; pair: string; mid: number }) => {
-      if (quote.venue !== 'binance') return;
-
       const asset = pairToAsset[quote.pair];
-      if (asset && pcaMonitor) {
+      if (!asset) return;
+
+      // Route to binance-sourced monitor
+      if (quote.venue === 'binance' && pcaMonitor) {
         pcaMonitor.updatePrice(asset, quote.mid);
-        // Persist price to database (throttled - every 10s per asset)
         const now = Date.now();
         if (pcaPersistence && (!lastPriceSave[asset] || now - lastPriceSave[asset] > 10000)) {
           lastPriceSave[asset] = now;
           pcaPersistence.savePrice(asset, quote.mid).catch(() => {});
         }
       }
-    });
 
-    // Persist signals
-    pcaMonitor.on('signal', async (event) => {
-      try {
-        if (pcaPersistence) {
-          await pcaPersistence.saveSignal(event);
-        }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to save PCA signal');
+      // Route to hyperliquid-sourced monitor
+      if (quote.venue === 'hyperliquid' && pcaMonitorHL) {
+        pcaMonitorHL.updatePrice(asset, quote.mid);
       }
     });
 
-    pcaMonitor.on('exit', async (event) => {
-      try {
-        if (pcaPersistence) {
-          await pcaPersistence.resolveSignal(event);
-        }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to resolve PCA signal');
-      }
-    });
-
-    pcaMonitor.on('shadow_exit', async (event) => {
-      try {
-        if (pcaPersistence) {
-          await pcaPersistence.resolveShadow(event);
-        }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to resolve shadow position');
-      }
-    });
-
-    pcaMonitor.on('factorModel', async (model) => {
-      try {
-        if (pcaPersistence) {
-          await pcaPersistence.saveFactorModel(model);
-        }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to save PCA factor model');
-      }
-    });
-
-    pcaMonitor.on('residuals', async (signals) => {
-      try {
-        if (pcaPersistence && pcaMonitor) {
-          await pcaPersistence.saveResiduals(signals);
-          const prices = pcaMonitor.getCurrentPrices();
-          if (Object.keys(prices).length > 0) {
-            await pcaPersistence.updateCurrentPrices(prices);
+    // Helper to wire persistence for a PCA monitor
+    const wirePcaPersistence = (monitor: PCAStatArbMonitor, source: string) => {
+      monitor.on('signal', async (event) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.saveSignal(event);
           }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to save PCA signal');
         }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to save PCA residuals');
-      }
-    });
+      });
 
-    // Load price history from database for faster warmup
+      monitor.on('exit', async (event) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.resolveSignal(event);
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to resolve PCA signal');
+        }
+      });
+
+      monitor.on('shadow_exit', async (event) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.resolveShadow(event);
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to resolve shadow position');
+        }
+      });
+
+      monitor.on('factorModel', async (model) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.saveFactorModel(model);
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to save PCA factor model');
+        }
+      });
+
+      monitor.on('residuals', async (signals) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.saveResiduals(signals);
+            const prices = monitor.getCurrentPrices();
+            if (Object.keys(prices).length > 0) {
+              await pcaPersistence.updateCurrentPrices(prices);
+            }
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to save PCA residuals');
+        }
+      });
+    };
+
+    // Wire persistence for binance-sourced monitor
+    if (pcaMonitor) {
+      wirePcaPersistence(pcaMonitor, 'binance');
+    }
+
+    // Wire persistence for hyperliquid-sourced monitor (signals tagged differently)
+    if (pcaMonitorHL) {
+      wirePcaPersistence(pcaMonitorHL, 'hyperliquid');
+    }
+
+    // Load price history from database for faster warmup (binance monitor only - shares DB)
     try {
       const lookbackMs = pcaConfig.returnWindowMs * pcaConfig.pcaLookbackPeriods * 2;
       const priceHistory = await pcaPersistence.loadPriceHistory(pcaConfig.assets, lookbackMs);
-      pcaMonitor.loadPriceHistory(priceHistory);
+      if (pcaMonitor) pcaMonitor.loadPriceHistory(priceHistory);
+      if (pcaMonitorHL) pcaMonitorHL.loadPriceHistory(priceHistory);
     } catch (err) {
       logger.error({ error: (err as Error).message }, 'Failed to load price history');
     }
@@ -600,10 +638,10 @@ async function main() {
       logger.error({ error: (err as Error).message }, 'Failed to cleanup orphaned positions');
     }
 
-    // Load existing open positions from database before starting
+    // Load existing open positions from database before starting (binance monitor only)
     try {
       const activePositions = await pcaPersistence.getActiveSignals();
-      if (activePositions.length > 0) {
+      if (activePositions.length > 0 && pcaMonitor) {
         pcaMonitor.loadPositions(activePositions);
         logger.info({ count: activePositions.length }, 'Loaded active PCA positions from database');
       }
@@ -611,20 +649,33 @@ async function main() {
       logger.error({ error: (err as Error).message }, 'Failed to load active PCA positions');
     }
 
-    pcaMonitor.start();
-
-    // Save price history on each tick (for faster warmup on restart)
-    pcaMonitor.on('residuals', async () => {
-      if (!pcaMonitor || !pcaPersistence) return;
-      try {
-        const prices = pcaMonitor.getCurrentPricesSnapshot();
-        if (Object.keys(prices).length > 0) {
-          await pcaPersistence.savePriceHistory(prices, Date.now());
+    // Start monitors
+    if (pcaMonitor) {
+      pcaMonitor.start();
+      pcaMonitor.on('residuals', async () => {
+        if (!pcaMonitor || !pcaPersistence) return;
+        try {
+          const prices = pcaMonitor.getCurrentPricesSnapshot();
+          if (Object.keys(prices).length > 0) {
+            await pcaPersistence.savePriceHistory(prices, Date.now());
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message }, 'Failed to save price history');
         }
-      } catch (err) {
-        logger.error({ error: (err as Error).message }, 'Failed to save price history');
-      }
-    });
+      });
+      logger.info(
+        { assets: pcaConfig.assets, numFactors: pcaConfig.numFactors, entryZScore: pcaConfig.entryZScore, source: 'binance' },
+        'PCA stat-arb monitor started (binance)'
+      );
+    }
+
+    if (pcaMonitorHL) {
+      pcaMonitorHL.start();
+      logger.info(
+        { assets: pcaConfig.assets, numFactors: pcaConfig.numFactors, entryZScore: pcaConfig.entryZScore, source: 'hyperliquid' },
+        'PCA stat-arb monitor started (hyperliquid)'
+      );
+    }
 
     // Update open signal prices every 30 seconds
     setInterval(async () => {
@@ -636,21 +687,13 @@ async function main() {
         }
       }
     }, 30000);
-
-    logger.info(
-      {
-        assets: pcaConfig.assets,
-        numFactors: pcaConfig.numFactors,
-        entryZScore: pcaConfig.entryZScore,
-      },
-      'PCA stat-arb monitor started'
-    );
   }
 
   // Perps Execution Layer — supports multiple runs (paper + live side-by-side)
-  const perpsExecutors: PerpsExecutor[] = [];
+  const perpsExecutorsBinance: PerpsExecutor[] = [];
+  const perpsExecutorsHL: PerpsExecutor[] = [];
 
-  if (config.app.perpsExecution?.enabled && pcaMonitor) {
+  if (config.app.perpsExecution?.enabled && (pcaMonitor || pcaMonitorHL)) {
     const perpsConfig = config.app.perpsExecution;
     const futuresKey = config.env.binanceFutures.apiKey;
     const futuresSecret = config.env.binanceFutures.apiSecret;
@@ -713,33 +756,68 @@ async function main() {
         };
 
         const executor = new PerpsExecutor(resolvedConfig, pool, client, run.runId);
-        perpsExecutors.push(executor);
-        logger.info({ runId: run.runId, paperMode: run.paperMode, exchange }, 'Configured perps run');
+        const priceSource = run.priceSource ?? 'binance';
+        if (priceSource === 'hyperliquid') {
+          perpsExecutorsHL.push(executor);
+        } else {
+          perpsExecutorsBinance.push(executor);
+        }
+        logger.info({ runId: run.runId, paperMode: run.paperMode, exchange, priceSource }, 'Configured perps run');
       }
 
-      pcaMonitor.on('signal', async (event) => {
-        const results = await Promise.allSettled(
-          perpsExecutors.map(ex => ex.handleSignal(event))
-        );
-        for (const [i, result] of results.entries()) {
-          if (result.status === 'rejected') {
-            logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutors[i].getRunId() }, 'Perps handleSignal error');
+      // Wire binance-sourced executors to binance monitor
+      if (pcaMonitor && perpsExecutorsBinance.length > 0) {
+        pcaMonitor.on('signal', async (event) => {
+          const results = await Promise.allSettled(
+            perpsExecutorsBinance.map(ex => ex.handleSignal(event))
+          );
+          for (const [i, result] of results.entries()) {
+            if (result.status === 'rejected') {
+              logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutorsBinance[i].getRunId() }, 'Perps handleSignal error');
+            }
           }
-        }
-      });
+        });
 
-      pcaMonitor.on('exit', async (event) => {
-        const results = await Promise.allSettled(
-          perpsExecutors.map(ex => ex.handleExit(event))
-        );
-        for (const [i, result] of results.entries()) {
-          if (result.status === 'rejected') {
-            logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutors[i].getRunId() }, 'Perps handleExit error');
+        pcaMonitor.on('exit', async (event) => {
+          const results = await Promise.allSettled(
+            perpsExecutorsBinance.map(ex => ex.handleExit(event))
+          );
+          for (const [i, result] of results.entries()) {
+            if (result.status === 'rejected') {
+              logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutorsBinance[i].getRunId() }, 'Perps handleExit error');
+            }
           }
-        }
-      });
+        });
+      }
 
-      for (const ex of perpsExecutors) {
+      // Wire hyperliquid-sourced executors to hyperliquid monitor
+      if (pcaMonitorHL && perpsExecutorsHL.length > 0) {
+        pcaMonitorHL.on('signal', async (event) => {
+          const results = await Promise.allSettled(
+            perpsExecutorsHL.map(ex => ex.handleSignal(event))
+          );
+          for (const [i, result] of results.entries()) {
+            if (result.status === 'rejected') {
+              logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutorsHL[i].getRunId() }, 'Perps handleSignal error');
+            }
+          }
+        });
+
+        pcaMonitorHL.on('exit', async (event) => {
+          const results = await Promise.allSettled(
+            perpsExecutorsHL.map(ex => ex.handleExit(event))
+          );
+          for (const [i, result] of results.entries()) {
+            if (result.status === 'rejected') {
+              logger.error({ error: (result.reason as Error).message, asset: event.asset, runId: perpsExecutorsHL[i].getRunId() }, 'Perps handleExit error');
+            }
+          }
+        });
+      }
+
+      // Start all executors
+      const allExecutors = [...perpsExecutorsBinance, ...perpsExecutorsHL];
+      for (const ex of allExecutors) {
         try {
           await ex.start();
           orchestrator.on('quote', ex.getPriceCallback());
@@ -763,10 +841,15 @@ async function main() {
     // C2: Stop PCA first (stops emitting new signals/exits), then executor
     if (pcaMonitor) {
       pcaMonitor.stop();
-      logger.info('PCA stat-arb monitor stopped');
+      logger.info('PCA stat-arb monitor stopped (binance)');
+    }
+    if (pcaMonitorHL) {
+      pcaMonitorHL.stop();
+      logger.info('PCA stat-arb monitor stopped (hyperliquid)');
     }
 
-    for (const ex of perpsExecutors) {
+    const allPerpsExecutors = [...perpsExecutorsBinance, ...perpsExecutorsHL];
+    for (const ex of allPerpsExecutors) {
       await ex.stop();
       logger.info({ runId: ex.getRunId(), mode: ex.getMode() }, 'Perps executor stopped');
     }
