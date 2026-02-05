@@ -87,7 +87,7 @@
       "exitZScore": 0.5,
       "tickIntervalMs": 60000,
       "pcaRefreshPeriods": 15,
-      "positionSizeUsd": 100,
+      "positionSizeUsd": 300,
       "regimeGating": {
         "enabled": true,
         "ewmaSpan": 10,
@@ -101,12 +101,12 @@
       },
       "sizing": {
         "mode": "factor_neutral",
-        "baseNotionalUsd": 100,
-        "minPositionUsd": 25,
-        "maxPositionUsd": 200,
+        "baseNotionalUsd": 300,
+        "minPositionUsd": 50,
+        "maxPositionUsd": 500,
         "targetVolBps": 100,
         "loadingSmoothingSpan": 20,
-        "maxPortfolioPC1ExposureUsd": 150
+        "maxPortfolioPC1ExposureUsd": 450
       },
       "long": {
         "enabled": false,
@@ -142,9 +142,9 @@
     "enableLongs": false,
     "enableShorts": true,
     "maxConcurrentPositions": 5,
-    "maxPositionSizeUsd": 300,
-    "minPositionSizeUsd": 10,
-    "maxTotalExposureUsd": 1500,
+    "maxPositionSizeUsd": 500,
+    "minPositionSizeUsd": 50,
+    "maxTotalExposureUsd": 2500,
     "cooldownMs": 30000,
     "heartbeatIntervalMs": 5000,
     "positionSyncIntervalMs": 60000,
