@@ -164,8 +164,7 @@
     },
     "runs": [
       { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE"] },
-      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE"] },
-      { "runId": "hl_live_hl", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE"], "maxPositionSizeUsd": 200, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 100, "maxTotalLossUsd": 200, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } }
+      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE"] }
     ]
   },
   "chains": {

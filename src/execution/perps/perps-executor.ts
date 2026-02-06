@@ -530,14 +530,14 @@ export class PerpsExecutor {
         requiredUsd: requiredUsd.toFixed(2),
       }, 'Margin health check');
 
-      if (available < buffer) {
+      if (wallet < buffer) {
         this.log.warn({
-          availableBalance: available.toFixed(2),
+          walletBalance: wallet.toFixed(2),
           requiredWithBuffer: buffer.toFixed(2),
-          shortfall: (buffer - available).toFixed(2),
-        }, 'LOW MARGIN — available balance below required + 10% buffer');
+          shortfall: (buffer - wallet).toFixed(2),
+        }, 'LOW MARGIN — wallet balance below required + 10% buffer');
         sendAlert(
-          `⚠️ *Low Margin* [${this.mode}/${this.runId.slice(0, 8)}]\nAvailable: $${available.toFixed(2)}\nRequired: $${requiredUsd.toFixed(2)}\nWallet: $${wallet.toFixed(2)}`,
+          `⚠️ *Low Margin* [${this.mode}/${this.runId.slice(0, 8)}]\nWallet: $${wallet.toFixed(2)}\nRequired: $${requiredUsd.toFixed(2)}\nAvailable: $${available.toFixed(2)}`,
           'warn'
         ).catch(() => {});
       }
