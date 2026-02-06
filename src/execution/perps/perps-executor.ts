@@ -426,21 +426,6 @@ export class PerpsExecutor {
         continue;
       }
 
-      const entryNum = Number(pos.entryPrice);
-      if (entryNum > 0) {
-        const entryMicros = toMicros(pos.entryPrice);
-        const markMicros = toMicros(pos.markPrice);
-        const diffMicros = pos.direction === 'short'
-          ? entryMicros - markMicros
-          : markMicros - entryMicros;
-        const pnlBps = Number((diffMicros * 10000n) / entryMicros);
-
-        const stopLossBps = this.config.killSwitch.dailyDrawdownLimitUsd > 0 ? 75 : 150;
-        if (pnlBps < -stopLossBps) {
-          this.log.warn({ asset: pos.asset, pnlBps, stopLossBps }, 'Heartbeat stop-loss triggered');
-          await this.forceClosePosition(pos, 'stop_loss');
-        }
-      }
     }
 
     if (positions.length > 0) {
