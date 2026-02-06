@@ -333,13 +333,37 @@
     {
       "id": 101,
       "type": "stat",
-      "title": "All-Time P&L (USD)",
-      "description": "Sum of realized P&L from all resolved signals",
-      "gridPos": {"x": 0, "y": 9, "w": 5, "h": 4},
+      "title": "Signal P&L (All-Time)",
+      "description": "Theoretical P&L from pca_signals table",
+      "gridPos": {"x": 0, "y": 9, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"All-Time P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL",
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Signal P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 150,
+      "type": "stat",
+      "title": "Execution P&L (All-Time)",
+      "description": "Actual P&L from perps_executions table",
+      "gridPos": {"x": 4, "y": 9, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(realized_pnl), 0)::numeric, 2) as \"Exec P&L\" FROM perps_executions WHERE status = 'closed'",
         "format": "table"
       }],
       "fieldConfig": {
@@ -357,13 +381,37 @@
     {
       "id": 102,
       "type": "stat",
-      "title": "Today's P&L (USD)",
-      "description": "Sum of realized P&L for today (UTC)",
-      "gridPos": {"x": 5, "y": 9, "w": 5, "h": 4},
+      "title": "Signal P&L (Today)",
+      "description": "Theoretical P&L for today",
+      "gridPos": {"x": 8, "y": 9, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Today P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Signal\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 151,
+      "type": "stat",
+      "title": "Execution P&L (Today)",
+      "description": "Actual P&L for today",
+      "gridPos": {"x": 12, "y": 9, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(realized_pnl), 0)::numeric, 2) as \"Exec\" FROM perps_executions WHERE status = 'closed' AND created_at::date = CURRENT_DATE",
         "format": "table"
       }],
       "fieldConfig": {
@@ -383,7 +431,7 @@
       "type": "bargauge",
       "title": "P&L by Direction",
       "description": "Total USD P&L split by long vs short",
-      "gridPos": {"x": 10, "y": 9, "w": 14, "h": 4},
+      "gridPos": {"x": 16, "y": 9, "w": 8, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -495,7 +543,7 @@
     {
       "id": 107,
       "type": "table",
-      "title": "P&L by Exit Reason",
+      "title": "P&L by Exit Reason (Signals)",
       "description": "Performance breakdown by exit type",
       "gridPos": {"x": 17, "y": 21, "w": 7, "h": 8},
       "targets": [{
@@ -516,6 +564,94 @@
             {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
           ]}
         ]
+      }
+    },
+    {
+      "id": 160,
+      "type": "row",
+      "title": "Actual Execution Performance",
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 161,
+      "type": "table",
+      "title": "Execution P&L by Run",
+      "description": "Actual P&L from perps_executions by run_id",
+      "gridPos": {"x": 0, "y": 30, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT run_id as \"Run\", mode as \"Mode\", COUNT(*) as \"Trades\", COUNT(*) FILTER (WHERE exit_reason = 'trailing_stop') as \"Trailing\", COUNT(*) FILTER (WHERE exit_reason = 'stop_loss') as \"Stopped\", ROUND(SUM(realized_pnl)::numeric, 2) as \"P&L ($)\", ROUND(AVG(realized_pnl)::numeric, 2) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM perps_executions WHERE status = 'closed' GROUP BY run_id, mode ORDER BY MAX(created_at) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      }
+    },
+    {
+      "id": 162,
+      "type": "table",
+      "title": "Execution P&L by Exit Reason",
+      "description": "Actual execution performance by exit type",
+      "gridPos": {"x": 12, "y": 30, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(realized_pnl)::numeric, 2) as \"P&L ($)\", ROUND(AVG(realized_pnl)::numeric, 2) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM perps_executions WHERE status = 'closed' GROUP BY exit_reason ORDER BY SUM(realized_pnl) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      }
+    },
+    {
+      "id": 163,
+      "type": "timeseries",
+      "title": "Cumulative Execution P&L (USD)",
+      "description": "Running total of actual P&L from executions",
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT created_at as time, SUM(realized_pnl) OVER (ORDER BY created_at) as \"Execution P&L ($)\" FROM perps_executions WHERE status = 'closed' ORDER BY created_at",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "pointSize": 3, "showPoints": "auto", "gradientMode": "scheme"},
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
       }
     },
 
