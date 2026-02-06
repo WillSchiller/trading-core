@@ -129,8 +129,8 @@
         "stopLossIgnoresMinHold": false,
         "trailingExit": {
           "enabled": true,
-          "activationPnlBps": 20,
-          "trailStopBps": 15
+          "activationPnlBps": 30,
+          "trailStopBps": 25
         }
       }
     }
