@@ -333,13 +333,37 @@
     {
       "id": 101,
       "type": "stat",
-      "title": "Signal P&L (All-Time)",
-      "description": "Theoretical P&L from pca_signals table",
-      "gridPos": {"x": 0, "y": 9, "w": 4, "h": 4},
+      "title": "Signal P&L (Gross)",
+      "description": "Gross theoretical P&L from pca_signals (no cost adjustment)",
+      "gridPos": {"x": 0, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Signal P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL",
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Gross P&L\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 170,
+      "type": "stat",
+      "title": "Signal P&L (Net ~20bps)",
+      "description": "Cost-adjusted P&L subtracting ~20bps round-trip per trade",
+      "gridPos": {"x": 3, "y": 9, "w": 3, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - 20) * position_size_usd / 10000), 0)::numeric, 2) as \"Net P&L\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {
@@ -359,7 +383,7 @@
       "type": "stat",
       "title": "Execution P&L (All-Time)",
       "description": "Actual P&L from perps_executions table",
-      "gridPos": {"x": 4, "y": 9, "w": 4, "h": 4},
+      "gridPos": {"x": 6, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -381,13 +405,37 @@
     {
       "id": 102,
       "type": "stat",
-      "title": "Signal P&L (Today)",
-      "description": "Theoretical P&L for today",
-      "gridPos": {"x": 8, "y": 9, "w": 4, "h": 4},
+      "title": "Signal P&L Today (Gross)",
+      "description": "Gross theoretical P&L for today",
+      "gridPos": {"x": 9, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Signal\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_usd), 0)::numeric, 2) as \"Gross\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 171,
+      "type": "stat",
+      "title": "Signal P&L Today (Net)",
+      "description": "Cost-adjusted P&L for today subtracting ~20bps round-trip",
+      "gridPos": {"x": 12, "y": 9, "w": 3, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - 20) * position_size_usd / 10000), 0)::numeric, 2) as \"Net\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
         "format": "table"
       }],
       "fieldConfig": {
@@ -407,7 +455,7 @@
       "type": "stat",
       "title": "Execution P&L (Today)",
       "description": "Actual P&L for today",
-      "gridPos": {"x": 12, "y": 9, "w": 4, "h": 4},
+      "gridPos": {"x": 15, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -431,7 +479,7 @@
       "type": "bargauge",
       "title": "P&L by Direction",
       "description": "Total USD P&L split by long vs short",
-      "gridPos": {"x": 16, "y": 9, "w": 8, "h": 4},
+      "gridPos": {"x": 18, "y": 9, "w": 6, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -501,13 +549,17 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_char(to_timestamp(timestamp / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD') as \"Day\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg P&L ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY 1 ORDER BY 1 DESC",
+        "rawSql": "SELECT to_char(to_timestamp(timestamp / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD') as \"Day\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - 20) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg P&L ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY 1 ORDER BY 1 DESC",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Net P&L ($)"}, "properties": [
             {"id": "custom.cellOptions", "value": {"type": "color-text"}},
             {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
           ]},
@@ -549,13 +601,17 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY exit_reason ORDER BY SUM(pnl_usd) DESC",
+        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - 20) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY exit_reason ORDER BY SUM(pnl_usd) DESC",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {"matcher": {"id": "byName", "options": "P&L ($)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Net P&L ($)"}, "properties": [
             {"id": "custom.cellOptions", "value": {"type": "color-text"}},
             {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
           ]},
