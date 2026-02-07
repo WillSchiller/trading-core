@@ -108,6 +108,7 @@
         "loadingSmoothingSpan": 20,
         "maxPortfolioPC1ExposureUsd": 450
       },
+      "blockedHoursUtc": [12],
       "long": {
         "enabled": false,
         "entryZScore": 3.5,
@@ -119,7 +120,7 @@
         "requireRegimeConfirmation": true
       },
       "short": {
-        "entryZScore": 2.5,
+        "entryZScore": 2.75,
         "exitZScore": 0.5,
         "maxHoldTimeMs": 14400000,
         "minHoldTimeMs": 1800000,
@@ -130,7 +131,8 @@
         "trailingExit": {
           "enabled": true,
           "activationPnlBps": 30,
-          "trailStopBps": 25
+          "trailStopBps": 25,
+          "minHoldTimeMs": 300000
         }
       }
     }
@@ -168,8 +170,8 @@
       "maxSlippageBps": 10
     },
     "runs": [
-      { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE"] },
-      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE"] }
+      { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE", "ARB"] },
+      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"] }
     ]
   },
   "chains": {

@@ -87,6 +87,7 @@ export interface TrailingExitConfig {
   enabled: boolean;
   activationPnlBps: number;
   trailStopBps: number;
+  minHoldTimeMs?: number;
 }
 
 export interface ShortConfig {
@@ -123,6 +124,7 @@ export interface PCAConfig {
   long: LongConfig;
   short: ShortConfig;
   orphanCleanup?: OrphanCleanupConfig;
+  blockedHoursUtc?: number[];
 }
 
 const DEFAULT_CONFIG: PCAConfig = {
@@ -492,13 +494,13 @@ export class PCAStatArbMonitor extends EventEmitter {
         exitReason = 'time_stop';
       }
 
-      // 3. Trailing stop
+      // 3. Trailing stop — gated by optional minHoldTimeMs
       if (!exitReason && direction === 'short' && this.config.short.trailingExit.enabled) {
-        const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
+        const { activationPnlBps, trailStopBps, minHoldTimeMs: trailingMinHold } = this.config.short.trailingExit;
         if (pnlBps >= activationPnlBps) {
           position.trailingActivated = true;
         }
-        if (position.trailingActivated) {
+        if (position.trailingActivated && holdTimeMs >= (trailingMinHold ?? 0)) {
           const drawdownFromPeak = position.peakPnlBps - pnlBps;
           if (drawdownFromPeak >= trailStopBps) {
             exitReason = 'trailing_stop';
@@ -1147,6 +1149,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     const threshold = longConfig.entryZScore ?? this.config.entryZScore;
     if (zScore > -threshold) return false;
 
+    if (this.config.blockedHoursUtc?.length) {
+      const hourUtc = new Date().getUTCHours();
+      if (this.config.blockedHoursUtc.includes(hourUtc)) return false;
+    }
+
     if (longConfig.requireRegimeConfirmation && this.config.regimeGating.enabled) {
       if (this.regimeState === 'bearish') {
         return false;
@@ -1167,6 +1174,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     const shortConfig = this.config.short;
     const threshold = shortConfig.entryZScore ?? this.config.entryZScore;
     if (zScore < threshold) return false;
+
+    if (this.config.blockedHoursUtc?.length) {
+      const hourUtc = new Date().getUTCHours();
+      if (this.config.blockedHoursUtc.includes(hourUtc)) return false;
+    }
 
     const limits = this.config.exposureLimits;
     const counts = this.countPositionsByDirection();
@@ -1213,13 +1225,13 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    // 3. Trailing stop — no min-hold gate so it can fire earlier
+    // 3. Trailing stop — gated by optional minHoldTimeMs
     if (direction === 'short' && this.config.short.trailingExit.enabled) {
-      const { activationPnlBps, trailStopBps } = this.config.short.trailingExit;
+      const { activationPnlBps, trailStopBps, minHoldTimeMs: trailingMinHold } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
         position.trailingActivated = true;
       }
-      if (position.trailingActivated) {
+      if (position.trailingActivated && holdTimeMs >= (trailingMinHold ?? 0)) {
         const drawdownFromPeak = position.peakPnlBps - currentPnlBps;
         if (drawdownFromPeak >= trailStopBps) {
           return { shouldExit: true, reason: 'trailing_stop' };
