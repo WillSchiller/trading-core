@@ -21,6 +21,15 @@
         "allValue": "all",
         "refresh": 2,
         "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "cost_bps",
+        "label": "RT Cost (bps)",
+        "type": "custom",
+        "query": "3,5,10,15,20",
+        "current": {"text": "3", "value": "3"},
+        "multi": false,
+        "includeAll": false
       }
     ]
   },
@@ -357,13 +366,13 @@
     {
       "id": 170,
       "type": "stat",
-      "title": "Signal P&L (Net ~20bps)",
-      "description": "Cost-adjusted P&L subtracting ~20bps round-trip per trade",
+      "title": "Signal P&L (Net)",
+      "description": "Cost-adjusted P&L subtracting $cost_bps bps round-trip per trade",
       "gridPos": {"x": 3, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - 20) * position_size_usd / 10000), 0)::numeric, 2) as \"Net P&L\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL",
+        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - ${cost_bps}) * position_size_usd / 10000), 0)::numeric, 2) as \"Net P&L\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL",
         "format": "table"
       }],
       "fieldConfig": {
@@ -430,12 +439,12 @@
       "id": 171,
       "type": "stat",
       "title": "Signal P&L Today (Net)",
-      "description": "Cost-adjusted P&L for today subtracting ~20bps round-trip",
+      "description": "Cost-adjusted P&L for today subtracting $cost_bps bps round-trip",
       "gridPos": {"x": 12, "y": 9, "w": 3, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - 20) * position_size_usd / 10000), 0)::numeric, 2) as \"Net\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
+        "rawSql": "SELECT ROUND(COALESCE(SUM((pnl_bps - ${cost_bps}) * position_size_usd / 10000), 0)::numeric, 2) as \"Net\" FROM pca_signals WHERE resolved = true AND pnl_bps IS NOT NULL AND to_timestamp(timestamp / 1000)::date = CURRENT_DATE",
         "format": "table"
       }],
       "fieldConfig": {
@@ -549,7 +558,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT to_char(to_timestamp(timestamp / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD') as \"Day\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - 20) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg P&L ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY 1 ORDER BY 1 DESC",
+        "rawSql": "SELECT to_char(to_timestamp(timestamp / 1000) AT TIME ZONE 'UTC', 'YYYY-MM-DD') as \"Day\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - ${cost_bps}) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg P&L ($)\", ROUND(SUM(pnl_bps)::numeric, 0) as \"P&L (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY 1 ORDER BY 1 DESC",
         "format": "table"
       }],
       "fieldConfig": {
@@ -601,7 +610,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - 20) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY exit_reason ORDER BY SUM(pnl_usd) DESC",
+        "rawSql": "SELECT exit_reason as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(SUM(pnl_usd)::numeric, 2) as \"P&L ($)\", ROUND(SUM((pnl_bps - ${cost_bps}) * position_size_usd / 10000)::numeric, 2) as \"Net P&L ($)\", ROUND(AVG(pnl_usd)::numeric, 4) as \"Avg ($)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win %\" FROM pca_signals WHERE resolved = true AND pnl_usd IS NOT NULL GROUP BY exit_reason ORDER BY SUM(pnl_usd) DESC",
         "format": "table"
       }],
       "fieldConfig": {

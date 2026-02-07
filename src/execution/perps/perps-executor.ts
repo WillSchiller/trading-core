@@ -215,6 +215,7 @@ export class PerpsExecutor {
       return;
     }
 
+    const useOrderType = this.config.orderType ?? 'taker';
     let orderResponse: OrderResult;
     try {
       orderResponse = await this.client.placeOrder({
@@ -223,6 +224,7 @@ export class PerpsExecutor {
         quantity: roundedQty,
         clientOrderId,
         markPrice: event.entryPrice,
+        orderType: useOrderType,
       });
     } catch (err) {
       const errMsg = (err as Error).message;
@@ -239,12 +241,27 @@ export class PerpsExecutor {
       return;
     }
 
+    if (orderResponse.status === 'RESTING' && orderResponse.exchangeOrderId) {
+      const oid = orderResponse.exchangeOrderId;
+      const timeoutMs = this.config.makerTimeoutMs ?? 15000;
+      this.log.info({ asset, oid, timeoutMs }, 'Entry ALO resting — waiting for fill');
+      const fillResult = await this.client.waitForFill(oid, timeoutMs);
+      if (fillResult.status === 'FILLED') {
+        orderResponse = { ...orderResponse, status: 'FILLED', filledQty: roundedQty };
+      } else {
+        await this.client.cancelOrder(oid);
+        this.log.info({ asset, oid }, 'Entry ALO timed out — canceled');
+        await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'maker_timeout' });
+        return;
+      }
+    }
+
     if (orderResponse.status === 'REJECTED') {
       this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order rejected');
       await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'order_rejected' });
       return;
     }
-    if (orderResponse.filledQty === '0' || orderResponse.filledQty === '0.0') {
+    if (orderResponse.status === 'CANCELED' || orderResponse.filledQty === '0' || orderResponse.filledQty === '0.0') {
       this.log.warn({ asset, symbol, status: orderResponse.status, exchange: this.client.exchange }, 'Entry order got no fill');
       await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'no_fill' });
       return;
@@ -338,6 +355,7 @@ export class PerpsExecutor {
         }
       }
 
+      const exitOrderType = this.config.orderType ?? 'taker';
       let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
@@ -347,11 +365,47 @@ export class PerpsExecutor {
           clientOrderId: closeOrderId,
           reduceOnly: true,
           markPrice: exitPrice,
+          orderType: exitOrderType,
         });
       } catch (err) {
         this.log.error({ asset, error: (err as Error).message, exchange: this.client.exchange }, 'Failed to place exit order');
         await this.persistence.updateExecution(position.clientOrderId, { status: 'open' });
         return;
+      }
+
+      if (closeResponse.status === 'RESTING' && closeResponse.exchangeOrderId) {
+        const oid = closeResponse.exchangeOrderId;
+        const timeoutMs = this.config.exitMakerTimeoutMs ?? 10000;
+        this.log.info({ asset, oid, timeoutMs }, 'Exit ALO resting — waiting for fill');
+        const fillResult = await this.client.waitForFill(oid, timeoutMs);
+        if (fillResult.status === 'FILLED') {
+          closeResponse = { ...closeResponse, status: 'FILLED', filledQty: closeQty };
+        } else {
+          await this.client.cancelOrder(oid);
+          if (this.config.exitFallbackToTaker !== false) {
+            this.log.info({ asset, oid }, 'Exit ALO timed out — falling back to IOC taker');
+            const takerOrderId = `${closeOrderId}_taker`;
+            try {
+              closeResponse = await this.client.placeOrder({
+                symbol: position.symbol,
+                side: closeSide,
+                quantity: closeQty,
+                clientOrderId: takerOrderId,
+                reduceOnly: true,
+                markPrice: exitPrice,
+                orderType: 'taker',
+              });
+            } catch (err) {
+              this.log.error({ asset, error: (err as Error).message }, 'Taker fallback exit failed');
+              await this.persistence.updateExecution(position.clientOrderId, { status: 'open' });
+              return;
+            }
+          } else {
+            this.log.warn({ asset, oid }, 'Exit ALO timed out — no taker fallback configured');
+            await this.persistence.updateExecution(position.clientOrderId, { status: 'open' });
+            return;
+          }
+        }
       }
 
       const exitPriceStr = closeResponse.avgPrice !== '0'
@@ -469,6 +523,7 @@ export class PerpsExecutor {
         }
       }
 
+      const forceExitOrderType = this.config.orderType ?? 'taker';
       let closeResponse: OrderResult;
       try {
         closeResponse = await this.client.placeOrder({
@@ -478,11 +533,46 @@ export class PerpsExecutor {
           clientOrderId: closeOrderId,
           reduceOnly: true,
           markPrice: Number(pos.markPrice),
+          orderType: forceExitOrderType,
         });
       } catch (err) {
         this.log.error({ asset: pos.asset, error: (err as Error).message, exchange: this.client.exchange }, 'Heartbeat force-close failed');
         await this.persistence.updateExecution(pos.clientOrderId, { status: 'open' });
         return;
+      }
+
+      if (closeResponse.status === 'RESTING' && closeResponse.exchangeOrderId) {
+        const oid = closeResponse.exchangeOrderId;
+        const timeoutMs = this.config.exitMakerTimeoutMs ?? 10000;
+        this.log.info({ asset: pos.asset, oid, timeoutMs }, 'Force-close ALO resting — waiting for fill');
+        const fillResult = await this.client.waitForFill(oid, timeoutMs);
+        if (fillResult.status === 'FILLED') {
+          closeResponse = { ...closeResponse, status: 'FILLED', filledQty: closeQty };
+        } else {
+          await this.client.cancelOrder(oid);
+          if (this.config.exitFallbackToTaker !== false) {
+            this.log.info({ asset: pos.asset, oid }, 'Force-close ALO timed out — falling back to IOC taker');
+            const takerOrderId = `${closeOrderId}_taker`;
+            try {
+              closeResponse = await this.client.placeOrder({
+                symbol: pos.symbol,
+                side,
+                quantity: closeQty,
+                clientOrderId: takerOrderId,
+                reduceOnly: true,
+                markPrice: Number(pos.markPrice),
+                orderType: 'taker',
+              });
+            } catch (err) {
+              this.log.error({ asset: pos.asset, error: (err as Error).message }, 'Taker fallback force-close failed');
+              await this.persistence.updateExecution(pos.clientOrderId, { status: 'open' });
+              return;
+            }
+          } else {
+            await this.persistence.updateExecution(pos.clientOrderId, { status: 'open' });
+            return;
+          }
+        }
       }
 
       const exitPriceStr = closeResponse.avgPrice !== '0'

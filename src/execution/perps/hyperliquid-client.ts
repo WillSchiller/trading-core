@@ -6,6 +6,7 @@ import type {
   PerpsExchangeClient,
   ExchangeName,
   OrderResult,
+  OpenOrder,
   PositionInfo,
   AccountInfo,
   PaperFillConfig,
@@ -115,13 +116,15 @@ export class HyperliquidClient implements PerpsExchangeClient {
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
+    orderType?: 'maker' | 'taker';
   }): Promise<OrderResult> {
-    const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice } = params;
+    const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice, orderType = 'taker' } = params;
     const qtyNum = parseFloat(quantity);
+    const isMaker = orderType === 'maker';
 
     if (this._paperMode) {
-      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum);
-      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4), exchange: this.exchange }, 'PAPER order (simulated)');
+      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum, isMaker);
+      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4), orderType, exchange: this.exchange }, 'PAPER order (simulated)');
       return {
         status: 'FILLED',
         avgPrice: fillPrice > 0 ? fillPrice.toFixed(8) : '0',
@@ -138,8 +141,17 @@ export class HyperliquidClient implements PerpsExchangeClient {
 
     const isBuy = side === 'BUY';
     const mp = markPrice ?? 0;
-    const slippageMult = isBuy ? (1 + this.slippageBps / 10000) : (1 - this.slippageBps / 10000);
-    const limitPrice = this.roundPrice(symbol, mp * slippageMult);
+
+    let limitPrice: number;
+    let tif: 'Ioc' | 'Alo';
+    if (isMaker) {
+      limitPrice = this.roundPrice(symbol, mp);
+      tif = 'Alo';
+    } else {
+      const slippageMult = isBuy ? (1 + this.slippageBps / 10000) : (1 - this.slippageBps / 10000);
+      limitPrice = this.roundPrice(symbol, mp * slippageMult);
+      tif = 'Ioc';
+    }
 
     const resp = await withRetry(
       () => this.exchangeClient.order({
@@ -149,12 +161,12 @@ export class HyperliquidClient implements PerpsExchangeClient {
           p: String(limitPrice),
           s: quantity,
           r: reduceOnly ?? false,
-          t: { limit: { tif: 'Ioc' } },
+          t: { limit: { tif } },
         }],
         grouping: 'na',
       }),
       { maxAttempts: 3, baseDelayMs: 500 },
-      { symbol, side, clientOrderId, exchange: this.exchange },
+      { symbol, side, clientOrderId, orderType, exchange: this.exchange },
     );
 
     const status = resp.response.data.statuses[0];
@@ -169,14 +181,14 @@ export class HyperliquidClient implements PerpsExchangeClient {
     }
 
     if ('error' in status) {
-      log.error({ symbol, clientOrderId, error: status.error, exchange: this.exchange }, 'Order rejected');
+      log.error({ symbol, clientOrderId, error: status.error, orderType, exchange: this.exchange }, 'Order rejected');
       return { status: 'REJECTED', avgPrice: '0', filledQty: '0' };
     }
 
     if ('filled' in status) {
       const filledQty = status.filled.totalSz;
       const avgPrice = status.filled.avgPx;
-      log.info({ symbol, side, filledQty, avgPrice, oid: status.filled.oid, clientOrderId, exchange: this.exchange }, 'Order filled');
+      log.info({ symbol, side, filledQty, avgPrice, oid: status.filled.oid, clientOrderId, orderType, exchange: this.exchange }, 'Order filled');
       return {
         status: 'FILLED',
         avgPrice,
@@ -186,12 +198,76 @@ export class HyperliquidClient implements PerpsExchangeClient {
     }
 
     if ('resting' in status) {
-      log.warn({ symbol, clientOrderId, oid: status.resting.oid, exchange: this.exchange }, 'IOC order resting (unexpected) — treating as canceled');
+      const oid = String(status.resting.oid);
+      if (isMaker) {
+        log.info({ symbol, clientOrderId, oid, orderType, exchange: this.exchange }, 'ALO order resting on book');
+        return { status: 'RESTING', avgPrice: String(limitPrice), filledQty: '0', exchangeOrderId: oid };
+      }
+      log.warn({ symbol, clientOrderId, oid, exchange: this.exchange }, 'IOC order resting (unexpected) — treating as canceled');
       return { status: 'CANCELED', avgPrice: '0', filledQty: '0' };
     }
 
     log.warn({ symbol, clientOrderId, status, exchange: this.exchange }, 'Unknown order status');
     return { status: 'CANCELED', avgPrice: '0', filledQty: '0' };
+  }
+
+  async cancelOrder(oid: string): Promise<void> {
+    if (this._paperMode) return;
+    try {
+      const meta = await this.info.metaAndAssetCtxs();
+      const oidNum = parseInt(oid, 10);
+      const orders = await this.info.openOrders({ user: this.walletAddress });
+      const order = orders.find(o => o.oid === oidNum);
+      if (!order) {
+        log.debug({ oid }, 'Order not found (already filled or canceled)');
+        return;
+      }
+      const assetMeta = meta[0].universe.findIndex(a => a.name === order.coin);
+      if (assetMeta < 0) {
+        log.warn({ oid, coin: order.coin }, 'Cannot find asset index for cancel');
+        return;
+      }
+      await this.exchangeClient.cancel({ cancels: [{ a: assetMeta, o: oidNum }] });
+      log.info({ oid }, 'Order canceled');
+    } catch (err) {
+      log.warn({ oid, error: (err as Error).message }, 'Failed to cancel order');
+    }
+  }
+
+  async getOpenOrders(): Promise<OpenOrder[]> {
+    if (this._paperMode) return [];
+    const orders = await this.info.openOrders({ user: this.walletAddress });
+    return orders.map(o => ({
+      oid: String(o.oid),
+      symbol: this.toInternalSymbol(o.coin),
+      side: o.side === 'B' ? 'BUY' as const : 'SELL' as const,
+      sz: o.sz,
+      limitPx: o.limitPx,
+    }));
+  }
+
+  async waitForFill(oid: string, timeoutMs: number, pollIntervalMs = 1000): Promise<OrderResult> {
+    if (this._paperMode) {
+      return { status: 'FILLED', avgPrice: '0', filledQty: '0', exchangeOrderId: oid };
+    }
+    const deadline = Date.now() + timeoutMs;
+    const oidNum = parseInt(oid, 10);
+
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, pollIntervalMs));
+      try {
+        const orders = await this.info.openOrders({ user: this.walletAddress });
+        const stillOpen = orders.find(o => o.oid === oidNum);
+        if (!stillOpen) {
+          log.info({ oid }, 'Order no longer open (filled)');
+          return { status: 'FILLED', avgPrice: '0', filledQty: '0', exchangeOrderId: oid };
+        }
+      } catch (err) {
+        log.warn({ oid, error: (err as Error).message }, 'Error polling open orders');
+      }
+    }
+    log.info({ oid, timeoutMs }, 'Wait for fill timed out');
+    return { status: 'CANCELED', avgPrice: '0', filledQty: '0', exchangeOrderId: oid };
   }
 
   async getPositions(_symbol?: string): Promise<PositionInfo[]> {
@@ -256,15 +332,24 @@ export class HyperliquidClient implements PerpsExchangeClient {
     return this.paperFill;
   }
 
-  private simulatePaperFill(side: PerpsSide, markPrice: number, qty: number): number {
+  private simulatePaperFill(side: PerpsSide, markPrice: number, qty: number, isMaker = false): number {
     if (markPrice <= 0) return 0;
+    const feeBps = isMaker
+      ? (this.paperFill.makerFeeBps ?? 1.5)
+      : this.paperFill.takerFeeBps;
+    if (isMaker) {
+      const notional = markPrice * qty;
+      const feeUsd = (feeBps / 10000) * notional;
+      const feePriceDelta = feeUsd / qty;
+      return side === 'BUY' ? markPrice + feePriceDelta : markPrice - feePriceDelta;
+    }
     const spreadCost = (this.paperFill.spreadBps / 10000) * markPrice;
     const slippageCost = Math.min(
       (this.paperFill.slippageBps / 10000) * markPrice,
       (this.paperFill.maxSlippageBps / 10000) * markPrice,
     );
     const notional = markPrice * qty;
-    const feeUsd = (this.paperFill.takerFeeBps / 10000) * notional;
+    const feeUsd = (feeBps / 10000) * notional;
     const feePriceDelta = feeUsd / qty;
     const totalAdverse = spreadCost + slippageCost + feePriceDelta;
     return side === 'BUY' ? markPrice + totalAdverse : markPrice - totalAdverse;

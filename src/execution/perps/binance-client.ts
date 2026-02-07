@@ -14,6 +14,7 @@ import type {
   PerpsExchangeClient,
   ExchangeName,
   OrderResult,
+  OpenOrder,
   PositionInfo,
   AccountInfo,
 } from './types.js';
@@ -140,6 +141,18 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
     const feePriceDelta = feeUsd / qty;
     const totalAdverse = spreadCost + slippageCost + feePriceDelta;
     return side === 'BUY' ? markPrice + totalAdverse : markPrice - totalAdverse;
+  }
+
+  async cancelOrder(_oid: string): Promise<void> {
+    log.warn('cancelOrder not implemented for Binance — use cancelAllOrders');
+  }
+
+  async getOpenOrders(): Promise<OpenOrder[]> {
+    return [];
+  }
+
+  async waitForFill(_oid: string, _timeoutMs: number, _pollIntervalMs?: number): Promise<OrderResult> {
+    return { status: 'CANCELED', avgPrice: '0', filledQty: '0' };
   }
 
   async getPositionRisk(symbol?: string): Promise<BinancePositionRisk[]> {

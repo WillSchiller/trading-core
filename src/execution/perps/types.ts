@@ -7,11 +7,19 @@ export type MarginType = 'ISOLATED' | 'CROSSED';
 export type ExchangeName = 'binance' | 'hyperliquid';
 
 export interface OrderResult {
-  status: 'FILLED' | 'REJECTED' | 'CANCELED';
+  status: 'FILLED' | 'REJECTED' | 'CANCELED' | 'RESTING';
   avgPrice: string;
   filledQty: string;
   exchangeOrderId?: string;
   raw?: unknown;
+}
+
+export interface OpenOrder {
+  oid: string;
+  symbol: string;
+  side: PerpsSide;
+  sz: string;
+  limitPx: string;
 }
 
 export interface PositionInfo {
@@ -42,7 +50,11 @@ export interface PerpsExchangeClient {
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
+    orderType?: 'maker' | 'taker';
   }): Promise<OrderResult>;
+  cancelOrder(oid: string): Promise<void>;
+  getOpenOrders(): Promise<OpenOrder[]>;
+  waitForFill(oid: string, timeoutMs: number, pollIntervalMs?: number): Promise<OrderResult>;
   getPositions(symbol?: string): Promise<PositionInfo[]>;
   getAccountInfo(): Promise<AccountInfo>;
   roundQuantity(symbol: string, qty: number): string;
@@ -176,6 +188,7 @@ export interface PaperFillConfig {
   spreadBps: number;
   slippageBps: number;
   takerFeeBps: number;
+  makerFeeBps?: number;
   maxSlippageBps: number;
 }
 
@@ -205,6 +218,10 @@ export interface PerpsExecutionConfig {
   maxHoldTimeMsLong: number;
   killSwitch: KillSwitchConfig;
   paperFill?: PaperFillConfig;
+  orderType?: 'maker' | 'taker';
+  makerTimeoutMs?: number;
+  exitMakerTimeoutMs?: number;
+  exitFallbackToTaker?: boolean;
 }
 
 export interface KillSwitchConfig {

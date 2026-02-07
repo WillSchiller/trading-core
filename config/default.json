@@ -156,10 +156,15 @@
       "maxConsecutiveLosses": 5,
       "checkIntervalMs": 60000
     },
+    "orderType": "maker",
+    "makerTimeoutMs": 15000,
+    "exitMakerTimeoutMs": 10000,
+    "exitFallbackToTaker": true,
     "paperFill": {
       "spreadBps": 1,
       "slippageBps": 0,
       "takerFeeBps": 2.5,
+      "makerFeeBps": 1.5,
       "maxSlippageBps": 10
     },
     "runs": [
