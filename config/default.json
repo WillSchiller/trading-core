@@ -110,14 +110,20 @@
       },
       "blockedHoursUtc": [12],
       "long": {
-        "enabled": false,
-        "entryZScore": 3.5,
+        "enabled": true,
+        "entryZScore": 2.75,
         "exitZScore": 0.5,
-        "maxHoldTimeMs": 1800000,
-        "minHoldTimeMs": 2700000,
+        "maxHoldTimeMs": 14400000,
+        "minHoldTimeMs": 300000,
         "zeroCrossExit": true,
-        "stopLossBps": 9999,
-        "requireRegimeConfirmation": true
+        "stopLossBps": 75,
+        "stopLossIgnoresMinHold": false,
+        "trailingExit": {
+          "enabled": true,
+          "activationPnlBps": 30,
+          "trailStopBps": 25,
+          "minHoldTimeMs": 300000
+        }
       },
       "short": {
         "entryZScore": 2.75,
