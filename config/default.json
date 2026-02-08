@@ -155,7 +155,6 @@
     "killSwitch": {
       "dailyDrawdownLimitUsd": 150,
       "maxTotalLossUsd": 500,
-      "maxConsecutiveLosses": 5,
       "checkIntervalMs": 60000
     },
     "orderType": "maker",
@@ -172,7 +171,7 @@
     "runs": [
       { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE", "ARB"] },
       { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"] },
-      { "runId": "hl_live", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"], "maxPositionSizeUsd": 200, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 100, "maxTotalLossUsd": 200, "maxConsecutiveLosses": 5, "checkIntervalMs": 60000 } }
+      { "runId": "hl_live", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"], "maxPositionSizeUsd": 200, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 100, "maxTotalLossUsd": 200, "checkIntervalMs": 60000 } }
     ]
   },
   "chains": {

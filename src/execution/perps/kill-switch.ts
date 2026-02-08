@@ -33,10 +33,9 @@ export class KillSwitch {
 
     this.checkDailyReset();
 
-    const [dailyPnlMicros, totalPnlMicros, consecutiveLosses] = await Promise.all([
+    const [dailyPnlMicros, totalPnlMicros] = await Promise.all([
       this.persistence.getDailyPnlMicros(),
       this.persistence.getTotalPnlMicros(),
-      this.persistence.getConsecutiveLosses(),
     ]);
 
     const dailyLimitMicros = configToMicros(this.config.dailyDrawdownLimitUsd);
@@ -44,28 +43,22 @@ export class KillSwitch {
 
     if (dailyPnlMicros <= -dailyLimitMicros) {
       const reason = `Daily drawdown limit hit: $${formatUsd(dailyPnlMicros)} (limit: -$${this.config.dailyDrawdownLimitUsd})`;
-      await this.trigger(reason, dailyPnlMicros, totalPnlMicros, consecutiveLosses);
+      await this.trigger(reason, dailyPnlMicros, totalPnlMicros);
       return { safe: false, reason };
     }
 
     if (totalPnlMicros <= -totalLimitMicros) {
       const reason = `Total loss cap hit: $${formatUsd(totalPnlMicros)} (limit: -$${this.config.maxTotalLossUsd})`;
-      await this.trigger(reason, dailyPnlMicros, totalPnlMicros, consecutiveLosses);
-      return { safe: false, reason };
-    }
-
-    if (consecutiveLosses >= this.config.maxConsecutiveLosses) {
-      const reason = `Consecutive losses: ${consecutiveLosses} (limit: ${this.config.maxConsecutiveLosses})`;
-      await this.trigger(reason, dailyPnlMicros, totalPnlMicros, consecutiveLosses);
+      await this.trigger(reason, dailyPnlMicros, totalPnlMicros);
       return { safe: false, reason };
     }
 
     return { safe: true };
   }
 
-  private async trigger(reason: string, dailyPnlMicros: bigint, totalPnlMicros: bigint, consecutiveLosses: number): Promise<void> {
+  private async trigger(reason: string, dailyPnlMicros: bigint, totalPnlMicros: bigint): Promise<void> {
     this.triggered = true;
-    log.error({ reason, dailyPnl: fromMicros(dailyPnlMicros), totalPnl: fromMicros(totalPnlMicros), consecutiveLosses }, 'KILL SWITCH TRIGGERED');
+    log.error({ reason, dailyPnl: fromMicros(dailyPnlMicros), totalPnl: fromMicros(totalPnlMicros) }, 'KILL SWITCH TRIGGERED');
 
     const closedCount = await this.closeAllPositions();
 
@@ -73,13 +66,13 @@ export class KillSwitch {
       reason,
       dailyPnl: fromMicros(dailyPnlMicros),
       totalPnl: fromMicros(totalPnlMicros),
-      consecutiveLosses,
+      consecutiveLosses: 0,
       positionsClosedCount: closedCount,
     });
 
     const failedList = this.failedCloses.map(p => p.asset).join(', ');
     sendAlert(
-      `🚨 *KILL SWITCH TRIGGERED*\n\nReason: ${reason}\nDaily PnL: $${formatUsd(dailyPnlMicros)}\nTotal PnL: $${formatUsd(totalPnlMicros)}\nPositions closed: ${closedCount}${this.failedCloses.length > 0 ? `\n⚠️ Failed to close: ${failedList}` : ''}`,
+      `🚨 *KILL SWITCH TRIGGERED*\n\nReason: ${reason}\nDaily PnL: $${formatUsd(dailyPnlMicros)}\nTotal PnL: $${formatUsd(totalPnlMicros)}\nPositions closed: ${closedCount}${this.failedCloses.length > 0 ? `\nFailed to close: ${failedList}` : ''}`,
       'critical'
     ).catch(err => log.error({ error: (err as Error).message }, 'Failed to send kill switch alert'));
   }
