@@ -216,6 +216,7 @@ export interface PerpsExecutionConfig {
   positionSyncIntervalMs: number;
   maxHoldTimeMsShort: number;
   maxHoldTimeMsLong: number;
+  heartbeatStopLossBps: number;
   killSwitch: KillSwitchConfig;
   paperFill?: PaperFillConfig;
   orderType?: 'maker' | 'taker';

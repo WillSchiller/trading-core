@@ -480,6 +480,18 @@ export class PerpsExecutor {
         continue;
       }
 
+      const entryPrice = Number(pos.entryPrice);
+      const markPrice = Number(pos.markPrice);
+      if (entryPrice > 0 && markPrice > 0) {
+        const rawReturn = (markPrice - entryPrice) / entryPrice;
+        const pnlBps = (pos.direction === 'short' ? -rawReturn : rawReturn) * 10000;
+        if (pnlBps <= -this.config.heartbeatStopLossBps) {
+          this.log.warn({ asset: pos.asset, pnlBps: pnlBps.toFixed(1), stopLossBps: this.config.heartbeatStopLossBps }, 'Heartbeat stop-loss triggered');
+          await this.forceClosePosition(pos, 'heartbeat_stop_loss');
+          continue;
+        }
+      }
+
     }
 
     if (positions.length > 0) {

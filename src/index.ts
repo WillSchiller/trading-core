@@ -750,6 +750,7 @@ async function main() {
           positionSyncIntervalMs: perpsConfig.positionSyncIntervalMs,
           maxHoldTimeMsShort: run.maxHoldTimeMsShort ?? perpsConfig.maxHoldTimeMsShort,
           maxHoldTimeMsLong: run.maxHoldTimeMsLong ?? perpsConfig.maxHoldTimeMsLong,
+          heartbeatStopLossBps: perpsConfig.heartbeatStopLossBps,
           killSwitch: run.killSwitch ?? perpsConfig.killSwitch,
           paperFill: run.paperFill ?? perpsConfig.paperFill,
           excludeAssets: run.excludeAssets,
