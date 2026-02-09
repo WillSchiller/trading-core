@@ -512,24 +512,15 @@ async function main() {
       pcaMonitorHL = new PCAStatArbMonitor(pcaConfig);
     }
 
-    // Map common pair names to PCA assets
+    // Build pair→asset mapping dynamically from PCA config
     const pairToAsset: Record<string, string> = {
-      'ETH/USDC': 'ETH',
       'WETH/USDC': 'ETH',
-      'BTC/USDC': 'BTC',
       'WBTC/USDC': 'BTC',
       'cbBTC/USDC': 'BTC',
-      'SOL/USDC': 'SOL',
-      'AVAX/USDC': 'AVAX',
-      'ARB/USDC': 'ARB',
-      'OP/USDC': 'OP',
-      'LINK/USDC': 'LINK',
-      'UNI/USDC': 'UNI',
-      'AAVE/USDC': 'AAVE',
-      'ATOM/USDC': 'ATOM',
-      'SUI/USDC': 'SUI',
-      'DOT/USDC': 'DOT',
     };
+    for (const asset of pcaConfig.assets) {
+      pairToAsset[`${asset}/USDC`] = asset;
+    }
 
     // Subscribe to quotes from orchestrator for PCA assets
     const lastPriceSave: Record<string, number> = {};
