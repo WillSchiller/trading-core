@@ -77,7 +77,7 @@
   "research": {
     "pcaStatArb": {
       "enabled": true,
-      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT", "XRP", "BNB", "DOGE", "ADA", "TRX", "NEAR", "LTC", "BCH", "APT", "RNDR", "FIL", "HBAR", "FTM", "INJ", "RUNE", "SEI", "STX", "MKR", "WLD", "PEPE"],
+      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT", "XRP", "BNB", "DOGE", "ADA", "TRX", "NEAR", "LTC", "BCH", "APT", "FIL", "HBAR", "INJ", "RUNE", "SEI", "STX", "WLD", "PEPE"],
       "returnWindowMs": 60000,
       "pcaLookbackPeriods": 60,
       "numFactors": 3,

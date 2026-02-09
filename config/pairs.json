@@ -371,11 +371,6 @@
       "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
-      "base": "RNDR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
-      "venues": { "binance": { "symbol": "RNDRUSDC" } },
-      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
-    },
-    {
       "base": "FIL", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
       "venues": { "binance": { "symbol": "FILUSDC" } },
       "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
@@ -383,11 +378,6 @@
     {
       "base": "HBAR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
       "venues": { "binance": { "symbol": "HBARUSDC" } },
-      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
-    },
-    {
-      "base": "FTM", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
-      "venues": { "binance": { "symbol": "FTMUSDC" } },
       "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
@@ -408,11 +398,6 @@
     {
       "base": "STX", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
       "venues": { "binance": { "symbol": "STXUSDC" } },
-      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
-    },
-    {
-      "base": "MKR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
-      "venues": { "binance": { "symbol": "MKRUSDC" } },
       "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     },
     {
