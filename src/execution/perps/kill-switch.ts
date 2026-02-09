@@ -33,9 +33,10 @@ export class KillSwitch {
 
     this.checkDailyReset();
 
-    const [dailyPnlMicros, totalPnlMicros] = await Promise.all([
+    const [dailyPnlMicros, totalPnlMicros, consecutiveLosses] = await Promise.all([
       this.persistence.getDailyPnlMicros(),
       this.persistence.getTotalPnlMicros(),
+      this.config.maxConsecutiveLosses > 0 ? this.persistence.getConsecutiveLosses() : Promise.resolve(0),
     ]);
 
     const dailyLimitMicros = configToMicros(this.config.dailyDrawdownLimitUsd);
@@ -49,6 +50,12 @@ export class KillSwitch {
 
     if (totalPnlMicros <= -totalLimitMicros) {
       const reason = `Total loss cap hit: $${formatUsd(totalPnlMicros)} (limit: -$${this.config.maxTotalLossUsd})`;
+      await this.trigger(reason, dailyPnlMicros, totalPnlMicros);
+      return { safe: false, reason };
+    }
+
+    if (this.config.maxConsecutiveLosses > 0 && consecutiveLosses >= this.config.maxConsecutiveLosses) {
+      const reason = `Consecutive losses: ${consecutiveLosses} (limit: ${this.config.maxConsecutiveLosses})`;
       await this.trigger(reason, dailyPnlMicros, totalPnlMicros);
       return { safe: false, reason };
     }
