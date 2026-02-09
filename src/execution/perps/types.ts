@@ -232,45 +232,8 @@ export interface KillSwitchConfig {
   checkIntervalMs: number;
 }
 
-const ASSET_TO_SYMBOL: Record<string, string> = {
-  ETH: 'ETHUSDT',
-  BTC: 'BTCUSDT',
-  SOL: 'SOLUSDT',
-  AVAX: 'AVAXUSDT',
-  ARB: 'ARBUSDT',
-  OP: 'OPUSDT',
-  LINK: 'LINKUSDT',
-  UNI: 'UNIUSDT',
-  AAVE: 'AAVEUSDT',
-  ATOM: 'ATOMUSDT',
-  SUI: 'SUIUSDT',
-  DOT: 'DOTUSDT',
-  MATIC: 'MATICUSDT',
-  XRP: 'XRPUSDT',
-  BNB: 'BNBUSDT',
-  DOGE: 'DOGEUSDT',
-  ADA: 'ADAUSDT',
-  TRX: 'TRXUSDT',
-  NEAR: 'NEARUSDT',
-  LTC: 'LTCUSDT',
-  BCH: 'BCHUSDT',
-  APT: 'APTUSDT',
-  RNDR: 'RNDRUSDT',
-  FIL: 'FILUSDT',
-  HBAR: 'HBARUSDT',
-  FTM: 'FTMUSDT',
-  INJ: 'INJUSDT',
-  RUNE: 'RUNEUSDT',
-  SEI: 'SEIUSDT',
-  STX: 'STXUSDT',
-  MKR: 'MKRUSDT',
-  WLD: 'WLDUSDT',
-  PEPE: 'PEPEUSDT',
-};
-
-const SYMBOL_TO_ASSET: Record<string, string> = Object.fromEntries(
-  Object.entries(ASSET_TO_SYMBOL).map(([k, v]) => [v, k])
-);
+const ASSET_TO_SYMBOL: Record<string, string> = {};
+const SYMBOL_TO_ASSET: Record<string, string> = {};
 
 export function assetToSymbol(asset: string): string {
   return ASSET_TO_SYMBOL[asset] ?? `${asset}USDT`;

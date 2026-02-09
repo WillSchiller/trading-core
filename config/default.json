@@ -77,10 +77,23 @@
   "research": {
     "pcaStatArb": {
       "enabled": true,
-      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT", "XRP", "BNB", "DOGE", "ADA", "TRX", "NEAR", "LTC", "BCH", "APT", "FIL", "HBAR", "INJ", "RUNE", "SEI", "STX", "WLD", "PEPE"],
+      "assets": [
+        "BTC", "ETH", "SOL", "HYPE", "XRP", "BNB", "SUI", "DOGE", "LTC",
+        "kPEPE", "BCH", "LINK", "TAO", "ADA", "AAVE", "CRV", "ENA", "JUP",
+        "AVAX", "ARB", "TRUMP", "PENGU", "UNI", "XLM", "NEAR", "VIRTUAL",
+        "kSHIB", "TRX", "kBONK", "S", "WIF", "INJ", "ICP", "PENDLE", "IP",
+        "ONDO", "HBAR", "APT", "TON", "OP", "ETHFI", "DOT", "KAITO", "POL",
+        "STRK", "SEI", "AR", "MORPHO", "LDO", "TIA", "PYTH", "ZK", "EIGEN",
+        "RENDER", "POPCAT", "ATOM", "MNT", "STX", "MOODENG", "JTO", "FIL",
+        "OM", "SAND", "WLD", "RUNE", "FET", "ETC", "ALGO", "IMX", "GALA",
+        "ENS", "DYDX", "COMP", "GMX", "SNX", "RSR", "MKR", "CAKE", "PEOPLE",
+        "FXS", "SUPER", "BADGER", "NEO", "SUSHI", "ORDI", "MEME", "BLUR",
+        "NTRN", "MANTA", "UMA", "MAV", "ZETA", "DYM", "W", "BOME", "TNSR",
+        "SAGA", "TURBO", "NOT", "BRETT", "IO", "BLAST"
+      ],
       "returnWindowMs": 60000,
       "pcaLookbackPeriods": 60,
-      "numFactors": 3,
+      "numFactors": 5,
       "minVarianceExplained": 0.7,
       "residualLookbackPeriods": 30,
       "entryZScore": 2.0,
@@ -176,8 +189,7 @@
       "maxSlippageBps": 10
     },
     "runs": [
-      { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE", "ARB"] },
-      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"] }
+      { "runId": "hl_primary", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid" }
     ]
   },
   "chains": {

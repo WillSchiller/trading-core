@@ -541,6 +541,12 @@ async function main() {
       // Route to hyperliquid-sourced monitor
       if (quote.venue === 'hyperliquid' && pcaMonitorHL) {
         pcaMonitorHL.updatePrice(asset, quote.mid);
+        const now = Date.now();
+        const hlKey = `hl_${asset}`;
+        if (pcaPersistence && (!lastPriceSave[hlKey] || now - lastPriceSave[hlKey] > 10000)) {
+          lastPriceSave[hlKey] = now;
+          pcaPersistence.savePrice(asset, quote.mid).catch(() => {});
+        }
       }
     });
 
@@ -629,12 +635,18 @@ async function main() {
       logger.error({ error: (err as Error).message }, 'Failed to cleanup orphaned positions');
     }
 
-    // Load existing open positions from database before starting (binance monitor only)
+    // Load existing open positions from database before starting
     try {
       const activePositions = await pcaPersistence.getActiveSignals();
-      if (activePositions.length > 0 && pcaMonitor) {
-        pcaMonitor.loadPositions(activePositions);
-        logger.info({ count: activePositions.length }, 'Loaded active PCA positions from database');
+      if (activePositions.length > 0) {
+        if (pcaMonitor) {
+          pcaMonitor.loadPositions(activePositions);
+          logger.info({ count: activePositions.length, source: 'binance' }, 'Loaded active PCA positions from database');
+        }
+        if (pcaMonitorHL) {
+          pcaMonitorHL.loadPositions(activePositions);
+          logger.info({ count: activePositions.length, source: 'hyperliquid' }, 'Loaded active PCA positions from database');
+        }
       }
     } catch (err) {
       logger.error({ error: (err as Error).message }, 'Failed to load active PCA positions');
@@ -662,6 +674,17 @@ async function main() {
 
     if (pcaMonitorHL) {
       pcaMonitorHL.start();
+      pcaMonitorHL.on('residuals', async () => {
+        if (!pcaMonitorHL || !pcaPersistence) return;
+        try {
+          const prices = pcaMonitorHL.getCurrentPricesSnapshot();
+          if (Object.keys(prices).length > 0) {
+            await pcaPersistence.savePriceHistory(prices, Date.now());
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message }, 'Failed to save HL price history');
+        }
+      });
       logger.info(
         { assets: pcaConfig.assets, numFactors: pcaConfig.numFactors, entryZScore: pcaConfig.entryZScore, source: 'hyperliquid' },
         'PCA stat-arb monitor started (hyperliquid)'
