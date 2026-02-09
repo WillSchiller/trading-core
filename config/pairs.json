@@ -324,6 +324,106 @@
         "binance": { "symbol": "DOTUSDC" }
       },
       "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "XRP", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "XRPUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "BNB", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "BNBUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "DOGE", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "DOGEUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "ADA", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "ADAUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "TRX", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "TRXUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "NEAR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "NEARUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "LTC", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "LTCUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "BCH", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "BCHUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "APT", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "APTUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "RNDR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "RNDRUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "FIL", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "FILUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "HBAR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "HBARUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "FTM", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "FTMUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "INJ", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "INJUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "RUNE", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "RUNEUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "SEI", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "SEIUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "STX", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "STXUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "MKR", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "MKRUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "WLD", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "WLDUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
+    },
+    {
+      "base": "PEPE", "quote": "USDC", "chain": "base", "tier": 3, "enabled": false, "researchOnly": true,
+      "venues": { "binance": { "symbol": "PEPEUSDC" } },
+      "thresholds": { "minSpreadBps": 1, "minDurationMs": 1, "minLiquidityUsd": 1, "maxTradeSizeUsd": 1 }
     }
   ]
 }

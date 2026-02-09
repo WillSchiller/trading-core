@@ -77,7 +77,7 @@
   "research": {
     "pcaStatArb": {
       "enabled": true,
-      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT"],
+      "assets": ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "UNI", "AAVE", "ATOM", "SUI", "DOT", "XRP", "BNB", "DOGE", "ADA", "TRX", "NEAR", "LTC", "BCH", "APT", "RNDR", "FIL", "HBAR", "FTM", "INJ", "RUNE", "SEI", "STX", "MKR", "WLD", "PEPE"],
       "returnWindowMs": 60000,
       "pcaLookbackPeriods": 60,
       "numFactors": 3,
@@ -177,8 +177,7 @@
     },
     "runs": [
       { "runId": "hl_paper_v2", "paperMode": true, "exchange": "hyperliquid", "priceSource": "binance", "excludeAssets": ["DOT", "AAVE", "ARB"] },
-      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"] },
-      { "runId": "hl_live", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"], "maxPositionSizeUsd": 200, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 100, "maxTotalLossUsd": 200, "checkIntervalMs": 60000 } }
+      { "runId": "hl_paper_hl", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["DOT", "AAVE", "ARB"] }
     ]
   },
   "chains": {
