@@ -239,7 +239,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT date_trunc('day', to_timestamp(shadow_exit_timestamp / 1000)) as time, SUM(shadow_pnl_bps) as \"Daily PnL (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY 1 ORDER BY 1",
+        "rawSql": "SELECT date_trunc('day', to_timestamp(shadow_exit_timestamp / 1000)) as time, SUM(shadow_pnl_bps) as \"Daily PnL (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY 1 ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {

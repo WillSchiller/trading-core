@@ -97,7 +97,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT exit_reason AS \"Exit Reason\", COUNT(*) AS \"Trades\", COUNT(*) FILTER (WHERE realized_pnl > 0) AS \"Wins\", ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / NULLIF(COUNT(*), 0), 1) AS \"Win Rate %\", ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL ($)\", ROUND(SUM(realized_pnl)::numeric, 2) AS \"Total PnL ($)\", ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Avg Hold (min)\" FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY exit_reason ORDER BY SUM(realized_pnl) DESC",
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", COUNT(*) AS \"Trades\", COUNT(*) FILTER (WHERE realized_pnl > 0) AS \"Wins\", ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / NULLIF(COUNT(*), 0), 1) AS \"Win Rate %\", ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL ($)\", ROUND(SUM(realized_pnl)::numeric, 2) AS \"Total PnL ($)\", ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Avg Hold (min)\" FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND created_at >= $__timeFrom() AND created_at <= $__timeTo() GROUP BY exit_reason ORDER BY SUM(realized_pnl) DESC",
         "format": "table"
       }],
       "options": {
@@ -495,13 +495,13 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, COUNT(*) AS \"Time Stop Count\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, COUNT(*) AS \"Time Stop Count\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY time",
           "format": "time_series"
         },
         {
           "refId": "B",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg Time Stop PnL ($)\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg Time Stop PnL ($)\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY time",
           "format": "time_series"
         }
       ],
