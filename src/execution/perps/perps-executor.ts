@@ -653,14 +653,8 @@ export class PerpsExecutor {
 
   getPriceCallback(): (quote: { venue: string; pair: string; mid: number }) => void {
     if (!this.priceCallback) {
-      const pairToAsset: Record<string, string> = {
-        'ETH/USDC': 'ETH', 'WETH/USDC': 'ETH', 'BTC/USDC': 'BTC', 'cbBTC/USDC': 'BTC',
-        'SOL/USDC': 'SOL', 'AVAX/USDC': 'AVAX', 'ARB/USDC': 'ARB', 'OP/USDC': 'OP',
-        'LINK/USDC': 'LINK', 'UNI/USDC': 'UNI', 'AAVE/USDC': 'AAVE', 'ATOM/USDC': 'ATOM',
-        'SUI/USDC': 'SUI', 'DOT/USDC': 'DOT',
-      };
       this.priceCallback = (quote) => {
-        const asset = pairToAsset[quote.pair];
+        const asset = quote.pair.split('/')[0];
         if (asset && this.tracker.hasPosition(asset)) {
           this.tracker.updateMarkPrice(asset, quote.mid);
         }
