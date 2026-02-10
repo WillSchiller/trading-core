@@ -1,0 +1,571 @@
+{
+  "id": null,
+  "uid": "strategy-performance",
+  "title": "PCA Strategy Performance",
+  "tags": ["dislocation-trader", "pca", "performance"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-14d", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "asset",
+        "label": "Asset",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT asset FROM pca_signals ORDER BY asset",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "all",
+        "refresh": 2,
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "direction",
+        "label": "Direction",
+        "type": "custom",
+        "query": "all : all,long : long,short : short",
+        "current": {"text": "all", "value": "all"},
+        "options": [
+          {"text": "all", "value": "all", "selected": true},
+          {"text": "long", "value": "long", "selected": false},
+          {"text": "short", "value": "short", "selected": false}
+        ],
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "regime",
+        "label": "Regime",
+        "type": "custom",
+        "query": "all : all,bullish : bullish,neutral : neutral,bearish : bearish",
+        "current": {"text": "all", "value": "all"},
+        "options": [
+          {"text": "all", "value": "all", "selected": true},
+          {"text": "bullish", "value": "bullish", "selected": false},
+          {"text": "neutral", "value": "neutral", "selected": false},
+          {"text": "bearish", "value": "bearish", "selected": false}
+        ],
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Key Metrics",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Shadow Trades",
+      "gridPos": {"x": 0, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) as \"Trades\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Win Rate %",
+      "gridPos": {"x": 5, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 60, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg PnL (bps)",
+      "gridPos": {"x": 10, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(AVG(shadow_pnl_bps), 0)::numeric, 1) as \"Avg PnL\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Cumulative PnL (bps)",
+      "gridPos": {"x": 15, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(shadow_pnl_bps), 0)::numeric, 1) as \"Total PnL\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg Hold Time",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(shadow_hold_time_ms) / 60000.0, 1) as \"Hold Time\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_hold_time_ms IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "min",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Cumulative Shadow PnL",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Cumulative Shadow PnL (bps)",
+      "description": "Running sum of shadow_pnl_bps over time. This is the key equity curve.",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(shadow_exit_timestamp / 1000) as time, SUM(shadow_pnl_bps) OVER (ORDER BY shadow_exit_timestamp) as \"Cumulative Shadow PnL (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') ORDER BY shadow_exit_timestamp",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "gradientMode": "scheme",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "Cumulative PnL (bps)",
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max"]},
+        "tooltip": {"mode": "single", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Daily PnL",
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Daily Shadow PnL (bps)",
+      "description": "Shadow PnL summed by day as bars",
+      "gridPos": {"x": 0, "y": 17, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('day', to_timestamp(shadow_exit_timestamp / 1000)) as time, SUM(shadow_pnl_bps) as \"Daily PnL (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "scheme",
+            "showPoints": "never",
+            "axisPlacement": "auto",
+            "axisLabel": "Daily PnL (bps)",
+            "stacking": {"mode": "none", "group": "A"}
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Breakdowns",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "Per-Asset Performance",
+      "description": "Shadow trade performance by asset, sorted by total bps descending",
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset as \"Asset\", COUNT(*) as \"Trades\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) as \"Avg (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) as \"Total (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY asset ORDER BY SUM(shadow_pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Total (bps)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win Rate %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Total (bps)", "desc": true}]
+      }
+    },
+    {
+      "id": 31,
+      "type": "table",
+      "title": "Regime Breakdown",
+      "description": "Shadow trade performance by market regime",
+      "gridPos": {"x": 12, "y": 26, "w": 6, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(regime_state, 'unknown') as \"Regime\", COUNT(*) as \"Trades\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) as \"Avg (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) as \"Total (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') GROUP BY regime_state ORDER BY SUM(shadow_pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Total (bps)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win Rate %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      }
+    },
+    {
+      "id": 32,
+      "type": "table",
+      "title": "Direction Breakdown",
+      "description": "Shadow trade performance by long vs short",
+      "gridPos": {"x": 18, "y": 26, "w": 6, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT direction as \"Direction\", COUNT(*) as \"Trades\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) as \"Avg (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) as \"Total (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY direction ORDER BY SUM(shadow_pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Total (bps)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win Rate %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Shadow vs Live Comparison",
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Shadow vs Live PnL Comparison",
+      "description": "Overlay of cumulative shadow PnL (bps from pca_signals) and cumulative live/paper PnL (USD from perps_executions). Note: different units -- shadow is bps, live is USD.",
+      "gridPos": {"x": 0, "y": 37, "w": 24, "h": 10},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT to_timestamp(shadow_exit_timestamp / 1000) as time, SUM(shadow_pnl_bps) OVER (ORDER BY shadow_exit_timestamp) as \"Shadow PnL (bps)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') ORDER BY shadow_exit_timestamp",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at as time, SUM(realized_pnl) OVER (ORDER BY created_at) as \"Live PnL (USD)\" FROM perps_executions WHERE status = 'closed' AND created_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY created_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 3,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Shadow PnL (bps)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}},
+              {"id": "custom.axisLabel", "value": "Shadow PnL (bps)"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Live PnL (USD)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.axisPlacement", "value": "right"},
+              {"id": "custom.axisLabel", "value": "Live PnL (USD)"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"showLegend": true, "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min", "max"]},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Rolling Win Rate",
+      "gridPos": {"x": 0, "y": 47, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "Rolling 50-Trade Win Rate",
+      "description": "50-trade rolling window win rate over time",
+      "gridPos": {"x": 0, "y": 48, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH numbered AS (SELECT to_timestamp(shadow_exit_timestamp / 1000) as time, shadow_pnl_bps, ROW_NUMBER() OVER (ORDER BY shadow_exit_timestamp) as rn FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}')) SELECT time, ROUND(100.0 * SUM(CASE WHEN shadow_pnl_bps > 0 THEN 1 ELSE 0 END) OVER (ORDER BY rn ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) / LEAST(rn, 50), 1) as \"Rolling Win Rate %\" FROM numbered ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "Win Rate %",
+            "thresholdsStyle": {"mode": "line+area"}
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 60, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 106,
+      "type": "row",
+      "title": "Exit Reason Analysis",
+      "gridPos": {"x": 0, "y": 56, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 60,
+      "type": "table",
+      "title": "Performance by Shadow Exit Reason",
+      "description": "Shadow trade performance grouped by exit reason",
+      "gridPos": {"x": 0, "y": 57, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(shadow_exit_reason, 'unknown') as \"Exit Reason\", COUNT(*) as \"Trades\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) as \"Win Rate %\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) as \"Avg (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) as \"Total (bps)\", ROUND(AVG(shadow_hold_time_ms) / 60000.0, 1) as \"Avg Hold (min)\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') GROUP BY shadow_exit_reason ORDER BY SUM(shadow_pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Total (bps)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Win Rate %"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+          ]}
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      }
+    },
+    {
+      "id": 61,
+      "type": "table",
+      "title": "Recent Shadow Trades",
+      "description": "Most recent shadow-resolved trades",
+      "gridPos": {"x": 12, "y": 57, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(shadow_exit_timestamp / 1000) as \"Resolved\", asset as \"Asset\", direction as \"Dir\", ROUND(z_score::numeric, 2) as \"Entry Z\", ROUND(shadow_pnl_bps::numeric, 1) as \"PnL (bps)\", ROUND(shadow_peak_pnl_bps::numeric, 1) as \"Peak (bps)\", ROUND(shadow_trough_pnl_bps::numeric, 1) as \"Trough (bps)\", shadow_exit_reason as \"Exit Reason\", ROUND(shadow_hold_time_ms / 60000.0, 1) as \"Hold (min)\", COALESCE(regime_state, '') as \"Regime\" FROM pca_signals WHERE shadow_pnl_bps IS NOT NULL AND shadow_exit_timestamp IS NOT NULL AND shadow_exit_timestamp BETWEEN EXTRACT(EPOCH FROM $__timeFrom()::timestamptz) * 1000 AND EXTRACT(EPOCH FROM $__timeTo()::timestamptz) * 1000 AND ('${asset}' = 'all' OR asset = ANY(string_to_array('${asset}', ','))) AND ('${direction}' = 'all' OR direction = '${direction}') AND ('${regime}' = 'all' OR regime_state = '${regime}') ORDER BY shadow_exit_timestamp DESC LIMIT 50",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "PnL (bps)"}, "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+          ]},
+          {"matcher": {"id": "byName", "options": "Dir"}, "properties": [
+            {"id": "custom.width", "value": 60},
+            {"id": "mappings", "value": [
+              {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+              {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+            ]}
+          ]}
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Resolved", "desc": true}]
+      }
+    }
+  ]
+}

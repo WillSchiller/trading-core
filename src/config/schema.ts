@@ -280,6 +280,7 @@ export const perpsRunConfigSchema = z.object({
   runId: z.string().min(1),
   paperMode: z.boolean(),
   exchange: z.enum(['binance', 'hyperliquid']).default('binance'),
+  priceSource: z.enum(['binance', 'hyperliquid']).optional(),
   leverage: z.number().int().min(1).max(20).optional(),
   marginType: z.enum(['ISOLATED', 'CROSSED']).optional(),
   enableLongs: z.boolean().optional(),
@@ -291,6 +292,7 @@ export const perpsRunConfigSchema = z.object({
   cooldownMs: z.number().int().nonnegative().optional(),
   maxHoldTimeMsShort: z.number().int().positive().optional(),
   maxHoldTimeMsLong: z.number().int().positive().optional(),
+  excludeAssets: z.array(z.string()).optional(),
   killSwitch: killSwitchConfigSchema.optional(),
   paperFill: paperFillConfigSchema.optional(),
 });

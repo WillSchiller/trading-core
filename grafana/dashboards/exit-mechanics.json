@@ -1,0 +1,903 @@
+{
+  "id": null,
+  "uid": "exit-mechanics",
+  "title": "Exit Mechanics Analysis",
+  "tags": ["dislocation-trader", "perps", "exits"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-30d", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "mode",
+        "label": "Mode",
+        "type": "custom",
+        "options": [
+          {"text": "All", "value": "All", "selected": true},
+          {"text": "paper", "value": "paper", "selected": false},
+          {"text": "live", "value": "live", "selected": false}
+        ],
+        "current": {"text": "All", "value": "All"},
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "run_id",
+        "label": "Run ID",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "definition": "SELECT DISTINCT run_id AS __value, run_id AS __text FROM perps_executions ORDER BY run_id",
+        "query": "SELECT DISTINCT run_id AS __value, run_id AS __text FROM perps_executions ORDER BY run_id",
+        "multi": false,
+        "includeAll": true,
+        "allValue": "All",
+        "refresh": 1,
+        "sort": 1,
+        "current": {"text": "All", "value": "$__all", "selected": true}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "PnL by Exit Reason (Execution)",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "PnL by Exit Reason",
+      "description": "Total realized PnL grouped by exit reason. Green = profitable, red = losing.",
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", ROUND(SUM(realized_pnl)::numeric, 2) AS \"Total PnL ($)\" FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY exit_reason ORDER BY SUM(realized_pnl) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]},
+          "custom": {
+            "fillOpacity": 80,
+            "gradientMode": "scheme",
+            "lineWidth": 0
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "showValue": "always",
+        "barWidth": 0.7,
+        "groupWidth": 0.7,
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Trade Count & Win Rate by Exit Reason",
+      "description": "Detailed breakdown: count, wins, win rate, avg PnL, total PnL per exit reason",
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", COUNT(*) AS \"Trades\", COUNT(*) FILTER (WHERE realized_pnl > 0) AS \"Wins\", ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / NULLIF(COUNT(*), 0), 1) AS \"Win Rate %\", ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL ($)\", ROUND(SUM(realized_pnl)::numeric, 2) AS \"Total PnL ($)\", ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Avg Hold (min)\" FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY exit_reason ORDER BY SUM(realized_pnl) DESC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Total PnL ($)", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Total PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Win Rate %"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 45, "color": "yellow"}, {"value": 55, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Avg PnL by Exit Reason",
+      "gridPos": {"x": 0, "y": 9, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "trailing_stop",
+      "description": "Average realized PnL for trailing_stop exits",
+      "gridPos": {"x": 0, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'trailing_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "stop_loss",
+      "description": "Average realized PnL for stop_loss exits",
+      "gridPos": {"x": 4, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'stop_loss' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "time_stop",
+      "description": "Average realized PnL for time_stop exits",
+      "gridPos": {"x": 8, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "heartbeat_stop_loss",
+      "description": "Average realized PnL for heartbeat_stop_loss exits",
+      "gridPos": {"x": 12, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'heartbeat_stop_loss' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "kill_switch",
+      "description": "Average realized PnL for kill_switch exits",
+      "gridPos": {"x": 16, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'kill_switch' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "reconciliation",
+      "description": "Average realized PnL for reconciliation exits",
+      "gridPos": {"x": 20, "y": 10, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg PnL\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'reconciliation' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}}
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Hold Time Distribution",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 20,
+      "type": "barchart",
+      "title": "Hold Time Distribution by Exit Reason",
+      "description": "Hold time in minutes bucketed into ranges, colored by exit reason",
+      "gridPos": {"x": 0, "y": 15, "w": 14, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH buckets AS (SELECT exit_reason, CASE WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 5 THEN '00-05 min' WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 15 THEN '05-15 min' WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 30 THEN '15-30 min' WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 60 THEN '30-60 min' WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 120 THEN '60-120 min' WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 60 < 240 THEN '120-240 min' ELSE '240+ min' END AS bucket FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})) SELECT bucket AS \"Hold Time\", COUNT(*) FILTER (WHERE exit_reason = 'trailing_stop') AS \"trailing_stop\", COUNT(*) FILTER (WHERE exit_reason = 'stop_loss') AS \"stop_loss\", COUNT(*) FILTER (WHERE exit_reason = 'time_stop') AS \"time_stop\", COUNT(*) FILTER (WHERE exit_reason = 'heartbeat_stop_loss') AS \"heartbeat_stop_loss\", COUNT(*) FILTER (WHERE exit_reason NOT IN ('trailing_stop', 'stop_loss', 'time_stop', 'heartbeat_stop_loss')) AS \"other\" FROM buckets GROUP BY bucket ORDER BY bucket",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "stacking": {"mode": "normal"}
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "trailing_stop"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "stop_loss"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "time_stop"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byName", "options": "heartbeat_stop_loss"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]},
+          {"matcher": {"id": "byName", "options": "other"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+        ]
+      },
+      "options": {
+        "orientation": "vertical",
+        "showValue": "auto",
+        "barWidth": 0.8,
+        "groupWidth": 0.7,
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "stacking": "normal",
+        "xTickLabelRotation": -45
+      }
+    },
+
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Hold Time Stats by Exit Reason",
+      "description": "Min, avg, median, max hold time in minutes per exit reason",
+      "gridPos": {"x": 14, "y": 15, "w": 10, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", COUNT(*) AS \"Trades\", ROUND(MIN(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Min (min)\", ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Avg (min)\", ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Median (min)\", ROUND(MAX(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Max (min)\" FROM perps_executions WHERE status = 'closed' AND exit_reason IS NOT NULL AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY exit_reason ORDER BY AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) ASC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Avg (min)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 120, "color": "orange"}, {"value": 240, "color": "red"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Peak PnL Before Exit (Signal Data)",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 30,
+      "type": "table",
+      "title": "Peak PnL vs Realized PnL by Exit Reason",
+      "description": "How much unrealized profit is given back at exit. Uses pca_signals data which has peak/trough tracking.",
+      "gridPos": {"x": 0, "y": 24, "w": 14, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", COUNT(*) AS \"Trades\", ROUND(AVG(peak_pnl_bps)::numeric, 1) AS \"Avg Peak (bps)\", ROUND(AVG(trough_pnl_bps)::numeric, 1) AS \"Avg Trough (bps)\", ROUND(AVG(pnl_bps)::numeric, 1) AS \"Avg Realized (bps)\", ROUND(AVG(peak_pnl_bps - pnl_bps)::numeric, 1) AS \"Avg Giveback (bps)\", ROUND(CASE WHEN AVG(peak_pnl_bps) > 0 THEN 100.0 * AVG(peak_pnl_bps - pnl_bps) / NULLIF(AVG(peak_pnl_bps), 0) ELSE NULL END::numeric, 1) AS \"Giveback %\" FROM pca_signals WHERE resolved = true AND exit_reason IS NOT NULL AND peak_pnl_bps IS NOT NULL GROUP BY exit_reason ORDER BY AVG(pnl_bps) DESC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Avg Realized (bps)", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Avg Realized (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg Peak (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg Giveback (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 30, "color": "orange"}, {"value": 50, "color": "red"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg Trough (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": -50, "color": "orange"}, {"value": -20, "color": "yellow"}, {"value": 0, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 31,
+      "type": "barchart",
+      "title": "Peak vs Realized PnL by Exit Reason",
+      "description": "Avg peak PnL (MFE) vs avg realized PnL per exit reason -- the gap is profit left on the table",
+      "gridPos": {"x": 14, "y": 24, "w": 10, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Exit Reason\", ROUND(AVG(peak_pnl_bps)::numeric, 1) AS \"Avg Peak (bps)\", ROUND(AVG(pnl_bps)::numeric, 1) AS \"Avg Realized (bps)\" FROM pca_signals WHERE resolved = true AND exit_reason IS NOT NULL AND peak_pnl_bps IS NOT NULL GROUP BY exit_reason ORDER BY AVG(pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Avg Peak (bps)"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "Avg Realized (bps)"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
+      },
+      "options": {
+        "orientation": "vertical",
+        "showValue": "always",
+        "barWidth": 0.7,
+        "groupWidth": 0.7,
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi"},
+        "xTickLabelRotation": -45
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Time Stop Analysis",
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Time Stops by Day",
+      "description": "Daily count and avg loss from time_stop exits",
+      "gridPos": {"x": 0, "y": 33, "w": 14, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, COUNT(*) AS \"Time Stop Count\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT DATE_TRUNC('day', updated_at) AS time, ROUND(AVG(realized_pnl)::numeric, 4) AS \"Avg Time Stop PnL ($)\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) AND $__timeFilter(updated_at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "lineWidth": 0, "fillOpacity": 80, "pointSize": 5, "showPoints": "always"},
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Time Stop Count"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}},
+              {"id": "custom.drawStyle", "value": "bars"},
+              {"id": "custom.fillOpacity", "value": 60},
+              {"id": "unit", "value": "short"},
+              {"id": "custom.axisPlacement", "value": "left"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg Time Stop PnL ($)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+              {"id": "custom.drawStyle", "value": "line"},
+              {"id": "custom.lineWidth", "value": 2},
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "unit", "value": "currencyUSD"},
+              {"id": "custom.axisPlacement", "value": "right"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 41,
+      "type": "table",
+      "title": "Time Stop Detail (Recent)",
+      "description": "Recent time_stop trades with asset, direction, PnL, and hold time",
+      "gridPos": {"x": 14, "y": 33, "w": 10, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT updated_at AS \"Closed\", run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 2) AS \"Z-Score\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY updated_at DESC LIMIT 30",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Closed", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Dir"},
+            "properties": [
+              {"id": "custom.width", "value": 60},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+                {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+              ]}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Heartbeat Stop Analysis",
+      "gridPos": {"x": 0, "y": 41, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 50,
+      "type": "table",
+      "title": "Heartbeat Stop Loss Detail",
+      "description": "All heartbeat_stop_loss trades with asset, hold time, and PnL",
+      "gridPos": {"x": 0, "y": 42, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT updated_at AS \"Closed\", run_id AS \"Run\", mode AS \"Mode\", asset AS \"Asset\", direction AS \"Direction\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 2) AS \"Z-Score\" FROM perps_executions WHERE status = 'closed' AND exit_reason = 'heartbeat_stop_loss' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY updated_at DESC LIMIT 50",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false},
+        "sortBy": [{"displayName": "Closed", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "PnL (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Direction"},
+            "properties": [
+              {"id": "custom.width", "value": 80},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+                {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Mode"},
+            "properties": [
+              {"id": "custom.width", "value": 70},
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"paper": {"color": "blue", "text": "PAPER"}}},
+                {"type": "value", "options": {"live": {"color": "orange", "text": "LIVE"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Hold (min)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 120, "color": "orange"}, {"value": 240, "color": "red"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 106,
+      "type": "row",
+      "title": "Shadow Exit Comparison (pca_signals)",
+      "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 60,
+      "type": "table",
+      "title": "Shadow Exit Reason Breakdown",
+      "description": "Shadow (zero_cross) exit performance vs live exit mechanics from pca_signals. Shadow tracks what would happen if the position were held until z-score crosses zero.",
+      "gridPos": {"x": 0, "y": 51, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT shadow_exit_reason AS \"Shadow Exit\", COUNT(*) AS \"Trades\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) AS \"Avg Shadow PnL (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) AS \"Total Shadow PnL (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > 0) / NULLIF(COUNT(*), 0), 1) AS \"Win Rate %\", ROUND(AVG(shadow_hold_time_ms / 60000.0)::numeric, 1) AS \"Avg Hold (min)\" FROM pca_signals WHERE resolved = true AND shadow_exit_reason IS NOT NULL GROUP BY shadow_exit_reason ORDER BY SUM(shadow_pnl_bps) DESC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Total Shadow PnL (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Win Rate %"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 61,
+      "type": "table",
+      "title": "Real vs Shadow: Side-by-Side by Exit Reason",
+      "description": "Compare real exit PnL with shadow (zero_cross) PnL for each real exit reason. Shows how much better/worse shadow performs.",
+      "gridPos": {"x": 12, "y": 51, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT exit_reason AS \"Real Exit\", COUNT(*) AS \"Trades\", ROUND(AVG(pnl_bps)::numeric, 1) AS \"Avg Real (bps)\", ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total Real (bps)\", ROUND(AVG(shadow_pnl_bps)::numeric, 1) AS \"Avg Shadow (bps)\", ROUND(SUM(shadow_pnl_bps)::numeric, 1) AS \"Total Shadow (bps)\", ROUND(AVG(shadow_pnl_bps - pnl_bps)::numeric, 1) AS \"Shadow Edge (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE shadow_pnl_bps > pnl_bps) / NULLIF(COUNT(*), 0), 1) AS \"Shadow Better %\" FROM pca_signals WHERE resolved = true AND exit_reason IS NOT NULL AND shadow_pnl_bps IS NOT NULL GROUP BY exit_reason ORDER BY AVG(shadow_pnl_bps - pnl_bps) DESC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Shadow Edge (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Total Real (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Total Shadow (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Shadow Better %"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 40, "color": "yellow"}, {"value": 55, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 107,
+      "type": "row",
+      "title": "Cumulative PnL by Exit Reason",
+      "gridPos": {"x": 0, "y": 59, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 70,
+      "type": "timeseries",
+      "title": "Cumulative PnL by Exit Reason (Execution)",
+      "description": "Running total of realized PnL split by exit reason. Shows which exit types accumulate profit vs destroy it.",
+      "gridPos": {"x": 0, "y": 60, "w": 24, "h": 10},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT updated_at AS time, 'trailing_stop' AS metric, SUM(realized_pnl) OVER (ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND exit_reason = 'trailing_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT updated_at AS time, 'time_stop' AS metric, SUM(realized_pnl) OVER (ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND exit_reason = 'time_stop' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+          "format": "time_series"
+        },
+        {
+          "refId": "C",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT updated_at AS time, 'stop_loss' AS metric, SUM(realized_pnl) OVER (ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND exit_reason = 'stop_loss' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+          "format": "time_series"
+        },
+        {
+          "refId": "D",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT updated_at AS time, 'heartbeat_stop_loss' AS metric, SUM(realized_pnl) OVER (ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND exit_reason = 'heartbeat_stop_loss' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "gradientMode": "none"
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "trailing_stop"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "time_stop"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byName", "options": "stop_loss"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "heartbeat_stop_loss"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+
+    {
+      "id": 108,
+      "type": "row",
+      "title": "Exit Reason by Asset",
+      "gridPos": {"x": 0, "y": 70, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+
+    {
+      "id": 80,
+      "type": "table",
+      "title": "PnL by Asset and Exit Reason (Execution)",
+      "description": "Which assets are most hurt by bad exits? Breakdown of PnL per asset per exit reason.",
+      "gridPos": {"x": 0, "y": 71, "w": 24, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", COUNT(*) AS \"Total\", ROUND(SUM(realized_pnl)::numeric, 2) AS \"Total PnL ($)\", ROUND(SUM(realized_pnl) FILTER (WHERE exit_reason = 'trailing_stop')::numeric, 2) AS \"Trailing ($)\", COUNT(*) FILTER (WHERE exit_reason = 'trailing_stop') AS \"Trailing #\", ROUND(SUM(realized_pnl) FILTER (WHERE exit_reason = 'time_stop')::numeric, 2) AS \"Time Stop ($)\", COUNT(*) FILTER (WHERE exit_reason = 'time_stop') AS \"Time #\", ROUND(SUM(realized_pnl) FILTER (WHERE exit_reason = 'stop_loss')::numeric, 2) AS \"Stop Loss ($)\", COUNT(*) FILTER (WHERE exit_reason = 'stop_loss') AS \"SL #\", ROUND(SUM(realized_pnl) FILTER (WHERE exit_reason = 'heartbeat_stop_loss')::numeric, 2) AS \"HB Stop ($)\", COUNT(*) FILTER (WHERE exit_reason = 'heartbeat_stop_loss') AS \"HB #\" FROM perps_executions WHERE status = 'closed' AND ('${mode}' = 'All' OR mode = '${mode}') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) GROUP BY asset ORDER BY SUM(realized_pnl) DESC",
+        "format": "table"
+      }],
+      "options": {
+        "showHeader": true,
+        "footer": {"show": true, "reducer": ["sum"], "fields": ["Total PnL ($)", "Trailing ($)", "Time Stop ($)", "Stop Loss ($)", "HB Stop ($)"]},
+        "sortBy": [{"displayName": "Total PnL ($)", "desc": true}]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "filterable": true, "displayMode": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Total PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Trailing ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Time Stop ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Stop Loss ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "HB Stop ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

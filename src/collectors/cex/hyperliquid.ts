@@ -26,8 +26,8 @@ export class HyperliquidCexConnector extends CexConnector {
 
     super(config);
 
-    this.assetMap = new Map(pairs.map((p) => [p.symbol.toUpperCase(), p.canonical]));
-    this.assets = pairs.map((p) => p.symbol.toUpperCase());
+    this.assetMap = new Map(pairs.map((p) => [p.symbol, p.canonical]));
+    this.assets = pairs.map((p) => p.symbol);
   }
 
   protected buildWsUrl(): string {
