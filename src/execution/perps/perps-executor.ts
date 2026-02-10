@@ -69,16 +69,7 @@ export class PerpsExecutor {
     await this.client.refreshPrecisionCache();
 
     if (!this.config.paperMode) {
-      const assets = ['ETH', 'BTC', 'SOL', 'AVAX', 'ARB', 'OP', 'LINK', 'UNI', 'AAVE', 'ATOM', 'SUI', 'DOT'];
-      for (const asset of assets) {
-        const symbol = assetToSymbol(asset);
-        try {
-          await this.client.setLeverage(symbol, this.config.leverage);
-          await this.client.setMarginType(symbol, this.config.marginType);
-        } catch (err) {
-          this.log.warn({ symbol, error: (err as Error).message }, 'Failed to configure symbol (may not exist or already set)');
-        }
-      }
+      this.log.info({ leverage: this.config.leverage, marginType: this.config.marginType }, 'Leverage will be set per-asset before each entry order');
     }
 
     try {
@@ -213,6 +204,14 @@ export class PerpsExecutor {
     if (pendingId === -1) {
       this.log.debug({ clientOrderId }, 'Duplicate pending_open (idempotent skip)');
       return;
+    }
+
+    if (!this.config.paperMode) {
+      try {
+        await this.client.setLeverage(symbol, this.config.leverage);
+      } catch (err) {
+        this.log.warn({ symbol, error: (err as Error).message }, 'Failed to set leverage before entry');
+      }
     }
 
     const useOrderType = this.config.orderType ?? 'taker';
