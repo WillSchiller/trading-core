@@ -637,27 +637,14 @@ export class PerpsExecutor {
       const account = await this.client.getAccountInfo();
       const wallet = parseFloat(account.walletBalance ?? '0');
       const currentExposure = parseFloat(this.tracker.getTotalExposureUsd());
-      const headroom = wallet - (currentExposure / this.config.leverage);
 
       this.log.info({
         walletBalance: wallet.toFixed(2),
         currentExposure: currentExposure.toFixed(2),
-        headroom: headroom.toFixed(2),
+        positions: this.tracker.getOpenCount(),
       }, 'Margin health check');
-
-      if (headroom < 0) {
-        this.log.warn({
-          walletBalance: wallet.toFixed(2),
-          currentExposure: currentExposure.toFixed(2),
-          shortfall: (-headroom).toFixed(2),
-        }, 'LOW MARGIN — wallet balance below current exposure requirement');
-        sendAlert(
-          `⚠️ *Low Margin* [${this.mode}/${this.runId.slice(0, 8)}]\nWallet: $${wallet.toFixed(2)}\nExposure: $${currentExposure.toFixed(2)}\nShortfall: $${(-headroom).toFixed(2)}`,
-          'warn'
-        ).catch(() => {});
-      }
     } catch (err) {
-      this.log.warn({ error: (err as Error).message }, 'Failed to check margin health (API key/permissions issue?)');
+      this.log.warn({ error: (err as Error).message }, 'Failed to check margin health');
     }
   }
 
