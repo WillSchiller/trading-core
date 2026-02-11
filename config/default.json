@@ -171,7 +171,7 @@
     "positionSyncIntervalMs": 60000,
     "maxHoldTimeMsShort": 14400000,
     "maxHoldTimeMsLong": 21600000,
-    "heartbeatStopLossBps": 75,
+    "heartbeatStopLossBps": 9999,
     "killSwitch": {
       "dailyDrawdownLimitUsd": 150,
       "maxTotalLossUsd": 500,
