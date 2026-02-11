@@ -316,11 +316,13 @@ export class HyperliquidClient implements PerpsExchangeClient {
     return rounded.toFixed(szDecimals);
   }
 
-  roundPrice(_symbol: string, price: number): number {
+  roundPrice(symbol: string, price: number): number {
     if (price === 0) return 0;
+    const meta = this.getAssetMeta(symbol);
+    const maxDecimals = 6 - (meta?.szDecimals ?? 0);
     const sigFigs = 5;
     const magnitude = Math.floor(Math.log10(Math.abs(price))) + 1;
-    const decimals = Math.max(0, sigFigs - magnitude);
+    const decimals = Math.min(Math.max(0, sigFigs - magnitude), maxDecimals);
     return parseFloat(price.toFixed(decimals));
   }
 
