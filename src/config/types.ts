@@ -268,6 +268,7 @@ export interface PerpsExecutionConfig {
   maxHoldTimeMsShort: number;
   maxHoldTimeMsLong: number;
   heartbeatStopLossBps: number;
+  trailingStop: { activationPnlBps: number; trailStopBps: number };
   killSwitch: KillSwitchConfig;
   paperFill: PaperFillConfig;
   runs: PerpsRunConfig[];

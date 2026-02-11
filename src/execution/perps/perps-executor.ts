@@ -296,6 +296,8 @@ export class PerpsExecutor {
       marginType: this.config.marginType,
       clientOrderId,
       openedAt: signalTimestamp,
+      peakPnlBps: 0,
+      trailingActivated: false,
     };
 
     await this.tracker.openPosition(position);
@@ -484,10 +486,25 @@ export class PerpsExecutor {
       if (entryPrice > 0 && markPrice > 0) {
         const rawReturn = (markPrice - entryPrice) / entryPrice;
         const pnlBps = (pos.direction === 'short' ? -rawReturn : rawReturn) * 10000;
+
         if (pnlBps <= -this.config.heartbeatStopLossBps) {
           this.log.warn({ asset: pos.asset, pnlBps: pnlBps.toFixed(1), stopLossBps: this.config.heartbeatStopLossBps }, 'Heartbeat stop-loss triggered');
           await this.forceClosePosition(pos, 'heartbeat_stop_loss');
           continue;
+        }
+
+        pos.peakPnlBps = Math.max(pos.peakPnlBps, pnlBps);
+        const { activationPnlBps, trailStopBps } = this.config.trailingStop;
+        if (pnlBps >= activationPnlBps) {
+          pos.trailingActivated = true;
+        }
+        if (pos.trailingActivated) {
+          const drawdownFromPeak = pos.peakPnlBps - pnlBps;
+          if (drawdownFromPeak >= trailStopBps) {
+            this.log.info({ asset: pos.asset, pnlBps: pnlBps.toFixed(1), peakBps: pos.peakPnlBps.toFixed(1), drawdown: drawdownFromPeak.toFixed(1) }, 'Trailing stop triggered');
+            await this.forceClosePosition(pos, 'trailing_stop');
+            continue;
+          }
         }
       }
 

@@ -62,6 +62,8 @@ export class PositionTracker {
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
               openedAt: exec.signalTimestamp,
+              peakPnlBps: 0,
+              trailingActivated: false,
             });
             exchangeMap.delete(exec.symbol);
           } else if (this.client.isPaperMode()) {
@@ -81,6 +83,8 @@ export class PositionTracker {
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
               openedAt: exec.signalTimestamp,
+              peakPnlBps: 0,
+              trailingActivated: false,
             });
           } else {
             log.warn({ asset: exec.asset, clientOrderId: exec.clientOrderId }, 'pending_open with no exchange position, marking failed');
@@ -108,6 +112,8 @@ export class PositionTracker {
               marginType: exec.marginType,
               clientOrderId: exec.clientOrderId,
               openedAt: exec.signalTimestamp,
+              peakPnlBps: 0,
+              trailingActivated: false,
             });
             exchangeMap.delete(exec.symbol);
             await this.persistence.updateExecution(exec.clientOrderId, { status: 'open' });
@@ -186,6 +192,8 @@ export class PositionTracker {
             marginType: exec.marginType,
             clientOrderId: exec.clientOrderId,
             openedAt: exec.signalTimestamp,
+            peakPnlBps: 0,
+            trailingActivated: false,
           });
           exchangeMap.delete(exec.symbol);
         }

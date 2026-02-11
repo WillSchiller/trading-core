@@ -172,6 +172,10 @@
     "maxHoldTimeMsShort": 14400000,
     "maxHoldTimeMsLong": 21600000,
     "heartbeatStopLossBps": 9999,
+    "trailingStop": {
+      "activationPnlBps": 30,
+      "trailStopBps": 25
+    },
     "killSwitch": {
       "dailyDrawdownLimitUsd": 150,
       "maxTotalLossUsd": 500,

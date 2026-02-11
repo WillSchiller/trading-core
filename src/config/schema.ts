@@ -313,6 +313,10 @@ export const perpsExecutionConfigSchema = z.object({
   maxHoldTimeMsShort: z.number().int().positive().default(14400000),
   maxHoldTimeMsLong: z.number().int().positive().default(21600000),
   heartbeatStopLossBps: z.number().positive().default(150),
+  trailingStop: z.object({
+    activationPnlBps: z.number().nonnegative().default(30),
+    trailStopBps: z.number().positive().default(25),
+  }).default({ activationPnlBps: 30, trailStopBps: 25 }),
   killSwitch: killSwitchConfigSchema,
   paperFill: paperFillConfigSchema,
   runs: z.array(perpsRunConfigSchema).default([]),

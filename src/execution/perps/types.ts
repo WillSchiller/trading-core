@@ -119,6 +119,8 @@ export interface PerpsPosition {
   marginType: MarginType;
   clientOrderId: string;
   openedAt: number;
+  peakPnlBps: number;
+  trailingActivated: boolean;
 }
 
 export interface BinanceOrderResponse {
@@ -217,6 +219,7 @@ export interface PerpsExecutionConfig {
   maxHoldTimeMsShort: number;
   maxHoldTimeMsLong: number;
   heartbeatStopLossBps: number;
+  trailingStop: { activationPnlBps: number; trailStopBps: number };
   killSwitch: KillSwitchConfig;
   paperFill?: PaperFillConfig;
   orderType?: 'maker' | 'taker';
