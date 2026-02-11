@@ -582,6 +582,26 @@ async function main() {
         }
       });
 
+      monitor.on('benchmark_signal', async (event) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.saveBenchmarkSignal(event);
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to save benchmark signal');
+        }
+      });
+
+      monitor.on('benchmark_exit', async (event) => {
+        try {
+          if (pcaPersistence) {
+            await pcaPersistence.resolveBenchmarkSignal(event);
+          }
+        } catch (err) {
+          logger.error({ error: (err as Error).message, source }, 'Failed to resolve benchmark signal');
+        }
+      });
+
       monitor.on('factorModel', async (model) => {
         try {
           if (pcaPersistence) {

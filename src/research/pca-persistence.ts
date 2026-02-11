@@ -105,6 +105,35 @@ export class PCAPersistence {
     }, 'Signal resolved');
   }
 
+  async saveBenchmarkSignal(event: { asset: string; entryPrice: number; timestamp: number }): Promise<number> {
+    const result = await this.pool.query(
+      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, entry_price, position_size_usd)
+       VALUES ($1, $2, 'random_short', 0, 0, 0, 0, 0, $3, 100)
+       RETURNING id`,
+      [event.timestamp, event.asset, event.entryPrice]
+    );
+    return result.rows[0].id;
+  }
+
+  async resolveBenchmarkSignal(event: {
+    asset: string; exitPrice: number; pnlBps: number; peakPnlBps: number;
+    troughPnlBps: number; holdTimeMs: number; exitReason: string; timestamp: number;
+  }): Promise<void> {
+    await this.pool.query(
+      `UPDATE pca_signals
+       SET resolved = true, exit_timestamp = $1, hold_time_ms = $2, exit_price = $3,
+           pnl_bps = $4, exit_reason = $5, peak_pnl_bps = $6, trough_pnl_bps = $7,
+           pnl_usd = $8
+       WHERE id = (SELECT id FROM pca_signals WHERE asset = $9 AND direction = 'random_short' AND resolved = false AND timestamp = $10 LIMIT 1)`,
+      [
+        Date.now(), event.holdTimeMs, event.exitPrice, event.pnlBps,
+        event.exitReason, event.peakPnlBps, event.troughPnlBps,
+        100 * event.pnlBps / 10000,
+        event.asset, event.timestamp,
+      ]
+    );
+  }
+
   async saveResiduals(signals: AssetSignal[]): Promise<void> {
     if (signals.length === 0) return;
 

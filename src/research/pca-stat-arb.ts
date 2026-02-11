@@ -253,6 +253,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private residualHistory: Map<string, number[]> = new Map();
   private activeSignals: Map<string, PCASignalEvent> = new Map();
   private activePositions: Map<string, ActivePosition> = new Map();
+  private benchmarkPositions: Map<string, ActivePosition> = new Map();
   private shadowPositions: Map<string, ShadowPosition[]> = new Map();
   private static readonly SHADOW_MAX_HOLD_MS = 12 * 60 * 60 * 1000;
   private tickCount: number = 0;
@@ -435,6 +436,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     }
 
     this.processSignals(signals, now);
+    this.checkBenchmarkExits(now);
     this.updateShadowPositions(signals, now);
     this.logSummary(returns, signals);
 
@@ -549,6 +551,96 @@ export class PCAStatArbMonitor extends EventEmitter {
     for (const asset of toRemove) {
       this.activePositions.delete(asset);
       this.activeSignals.delete(asset);
+    }
+  }
+
+  private createBenchmarkEntry(pcaAsset: string, now: number, _signals: AssetSignal[]): void {
+    const candidates = this.config.assets.filter(a =>
+      a !== pcaAsset &&
+      !this.activePositions.has(a) &&
+      !this.benchmarkPositions.has(a) &&
+      this.getCurrentPrice(a) > 0
+    );
+    if (candidates.length === 0) return;
+
+    const randomAsset = candidates[Math.floor(Math.random() * candidates.length)];
+    const price = this.getCurrentPrice(randomAsset);
+    const benchmarkKey = `bench_${randomAsset}_${now}`;
+
+    const position: ActivePosition = {
+      timestamp: now,
+      asset: randomAsset,
+      direction: 'short',
+      zScore: 0,
+      residual: 0,
+      confidence: 0,
+      entryPrice: price,
+      positionSizeUsd: 100,
+      factorContext: { pc1Return: 0, pc2Return: 0 },
+      allAssetResiduals: {},
+      peakPnlBps: 0,
+      troughPnlBps: 0,
+      lastPnlBps: 0,
+      trailingActivated: false,
+      cumulativePC1Return: 0,
+      entryPC1Loading: 0,
+    };
+
+    this.benchmarkPositions.set(benchmarkKey, position);
+    this.emit('benchmark_signal', { ...position, direction: 'random_short' as const });
+  }
+
+  private checkBenchmarkExits(now: number): void {
+    const toRemove: string[] = [];
+    const trailingCfg = this.config.short.trailingExit;
+    const maxHoldTimeMs = this.config.short.maxHoldTimeMs ?? 14400000;
+
+    for (const [key, pos] of this.benchmarkPositions) {
+      const currentPrice = this.getCurrentPrice(pos.asset);
+      if (currentPrice <= 0) continue;
+
+      const holdTimeMs = now - pos.timestamp;
+      const priceChange = (currentPrice - pos.entryPrice) / pos.entryPrice;
+      const pnlBps = -priceChange * 10000;
+
+      pos.lastPnlBps = pnlBps;
+      pos.peakPnlBps = Math.max(pos.peakPnlBps, pnlBps);
+      pos.troughPnlBps = Math.min(pos.troughPnlBps, pnlBps);
+
+      let exitReason: ExitReason | null = null;
+
+      if (holdTimeMs >= maxHoldTimeMs) {
+        exitReason = 'time_stop';
+      }
+
+      if (!exitReason && trailingCfg.enabled) {
+        if (pnlBps >= trailingCfg.activationPnlBps) pos.trailingActivated = true;
+        if (pos.trailingActivated && holdTimeMs >= (trailingCfg.minHoldTimeMs ?? 0)) {
+          if (pos.peakPnlBps - pnlBps >= trailingCfg.trailStopBps) {
+            exitReason = 'trailing_stop';
+          }
+        }
+      }
+
+      if (exitReason) {
+        this.emit('benchmark_exit', {
+          asset: pos.asset,
+          direction: 'random_short',
+          entryPrice: pos.entryPrice,
+          exitPrice: currentPrice,
+          pnlBps,
+          peakPnlBps: pos.peakPnlBps,
+          troughPnlBps: pos.troughPnlBps,
+          holdTimeMs,
+          exitReason,
+          timestamp: pos.timestamp,
+        });
+        toRemove.push(key);
+      }
+    }
+
+    for (const key of toRemove) {
+      this.benchmarkPositions.delete(key);
     }
   }
 
@@ -899,6 +991,10 @@ export class PCAStatArbMonitor extends EventEmitter {
           );
 
           this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState });
+
+          if (direction === 'short') {
+            this.createBenchmarkEntry(signal.asset, now, signals);
+          }
         }
       }
 
