@@ -142,7 +142,7 @@
         "entryZScore": 2.75,
         "maxEntryZScore": 3.5,
         "exitZScore": 0.5,
-        "maxHoldTimeMs": 3600000,
+        "maxHoldTimeMs": 7200000,
         "minHoldTimeMs": 1800000,
         "zeroCrossExit": false,
         "zscoreExit": false,
@@ -172,7 +172,7 @@
     "cooldownMs": 30000,
     "heartbeatIntervalMs": 5000,
     "positionSyncIntervalMs": 60000,
-    "maxHoldTimeMsShort": 3600000,
+    "maxHoldTimeMsShort": 7200000,
     "maxHoldTimeMsLong": 21600000,
     "heartbeatStopLossBps": 9999,
     "trailingStop": {
