@@ -141,7 +141,7 @@
       "short": {
         "entryZScore": 2.75,
         "exitZScore": 0.5,
-        "maxHoldTimeMs": 7200000,
+        "maxHoldTimeMs": 3600000,
         "minHoldTimeMs": 1800000,
         "zeroCrossExit": false,
         "zscoreExit": false,
@@ -153,8 +153,8 @@
           "trailStopBps": 25,
           "minHoldTimeMs": 300000
         },
-        "stallExitMs": 3600000,
-        "stallExitMinPeakBps": 15
+        "stallExitMs": 1800000,
+        "stallExitMinPeakBps": 30
       }
     }
   },
@@ -171,15 +171,15 @@
     "cooldownMs": 30000,
     "heartbeatIntervalMs": 5000,
     "positionSyncIntervalMs": 60000,
-    "maxHoldTimeMsShort": 7200000,
+    "maxHoldTimeMsShort": 3600000,
     "maxHoldTimeMsLong": 21600000,
     "heartbeatStopLossBps": 9999,
     "trailingStop": {
       "activationPnlBps": 30,
       "trailStopBps": 25
     },
-    "stallExitMs": 3600000,
-    "stallExitMinPeakBps": 15,
+    "stallExitMs": 1800000,
+    "stallExitMinPeakBps": 30,
     "killSwitch": {
       "dailyDrawdownLimitUsd": 150,
       "maxTotalLossUsd": 500,
