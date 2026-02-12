@@ -152,6 +152,8 @@ const regimeGatingConfigSchema = z.object({
   regimeThreshold: z.number().default(0.5),
   hysteresisTicks: z.number().int().positive().default(3),
   minVolatilityBps: z.number().positive().optional(),
+  maxPC1DisplacementBps: z.number().positive().optional(),
+  pc1DisplacementLookback: z.number().int().positive().optional(),
 }).default({
   enabled: true,
   ewmaSpan: 10,

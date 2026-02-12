@@ -152,6 +152,8 @@ export interface PCARegimeGatingConfig {
   regimeThreshold: number;
   hysteresisTicks: number;
   minVolatilityBps?: number;
+  maxPC1DisplacementBps?: number;
+  pc1DisplacementLookback?: number;
 }
 
 export interface PCAExposureLimitsConfig {

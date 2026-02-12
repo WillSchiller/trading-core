@@ -53,6 +53,8 @@ export interface RegimeGatingConfig {
   regimeThreshold: number;
   hysteresisTicks: number;
   minVolatilityBps?: number;
+  maxPC1DisplacementBps?: number;
+  pc1DisplacementLookback?: number;
 }
 
 export interface ExposureLimitsConfig {
@@ -268,6 +270,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private ewmaMean: number = 0;
   private ewmaVar: number = 0;
   private ewmaVol: number = 0;
+  private pc1DisplacementBps: number = 0;
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
   private smoothedPC1Loadings: Map<string, number> = new Map();
@@ -995,13 +998,14 @@ export class PCAStatArbMonitor extends EventEmitter {
               positionSizeUsd: position.positionSizeUsd.toFixed(2),
               volMult: volMult.toFixed(2),
               ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
+              pc1DisplacementBps: this.pc1DisplacementBps.toFixed(1),
               pc1Loading: this.getPC1Loading(signal.asset).toFixed(3),
               portfolioPC1Exposure: this.computePortfolioPC1Exposure().toFixed(2),
             },
             'PCA signal detected'
           );
 
-          this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState, ewmaVolBps: this.ewmaVol * 10000 });
+          this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState, ewmaVolBps: this.ewmaVol * 10000, pc1DisplacementBps: this.pc1DisplacementBps });
 
           if (direction === 'short') {
             this.createBenchmarkEntry(signal.asset, now, signals);
@@ -1100,6 +1104,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     const ewmaStd = Math.sqrt(Math.max(this.ewmaVar - Math.pow(this.ewmaMean, 2), 0.0000001));
     this.ewmaVol = ewmaStd;
     this.pc1Momentum = this.ewmaMean / ewmaStd;
+
+    const lookback = gating.pc1DisplacementLookback ?? gating.ewmaSpan;
+    const recentReturns = this.pc1ReturnHistory.slice(-lookback);
+    const displacement = recentReturns.reduce((sum, r) => sum + r, 0);
+    this.pc1DisplacementBps = Math.abs(displacement) * 10000;
 
     const threshold = gating.regimeThreshold;
     let candidateRegime: RegimeState;
@@ -1282,6 +1291,9 @@ export class PCAStatArbMonitor extends EventEmitter {
 
     if (this.wouldBreachPC1Exposure(asset, 'long')) return 0;
 
+    const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
+    if (maxDisp && this.pc1DisplacementBps > maxDisp) return 0;
+
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
     return volMult;
@@ -1303,6 +1315,9 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (counts.total >= limits.maxPositionsTotal) return 0;
 
     if (this.wouldBreachPC1Exposure(asset, 'short')) return 0;
+
+    const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
+    if (maxDisp && this.pc1DisplacementBps > maxDisp) return 0;
 
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
@@ -1519,6 +1534,7 @@ export class PCAStatArbMonitor extends EventEmitter {
         regimeState: this.regimeState,
         pc1Momentum: this.pc1Momentum.toFixed(4),
         ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
+        pc1DisplacementBps: this.pc1DisplacementBps.toFixed(1),
       },
       'PCA summary'
     );
