@@ -3,7 +3,7 @@ import * as math from 'mathjs';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 
 export type RegimeState = 'bullish' | 'bearish' | 'neutral';
-export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop' | 'stop_loss' | 'stall_exit';
+export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop' | 'stop_loss' | 'stall_exit' | 'bounce_fail';
 export type ShadowExitReason = 'zero_cross' | 'shadow_time_stop';
 
 export interface ShadowPosition {
@@ -93,6 +93,12 @@ export interface TrailingExitConfig {
   minHoldTimeMs?: number;
 }
 
+export interface BounceFailConfig {
+  enabled: boolean;
+  holdMs: number;
+  thresholdBps: number;
+}
+
 export interface ShortConfig {
   entryZScore: number;
   maxEntryZScore?: number;
@@ -106,6 +112,14 @@ export interface ShortConfig {
   trailingExit: TrailingExitConfig;
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
+  bounceFail?: BounceFailConfig;
+}
+
+export interface HeatScalingConfig {
+  enabled: boolean;
+  decayPerPosition: number;
+  dispersionThresholdBps: number;
+  dispersionPenalty: number;
 }
 
 export interface OrphanCleanupConfig {
@@ -131,6 +145,7 @@ export interface PCAConfig {
   short: ShortConfig;
   orphanCleanup?: OrphanCleanupConfig;
   blockedHoursUtc?: number[];
+  heatScaling?: HeatScalingConfig;
 }
 
 const DEFAULT_CONFIG: PCAConfig = {
@@ -272,6 +287,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private ewmaVar: number = 0;
   private ewmaVol: number = 0;
   private pc1DisplacementBps: number = 0;
+  private residualDispersionBps: number = 0;
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
   private smoothedPC1Loadings: Map<string, number> = new Map();
@@ -443,6 +459,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       this.computeRegimeState(signals[0].factorReturns[0]);
     }
 
+    this.updateResidualDispersion(signals);
     this.processSignals(signals, now);
     this.checkBenchmarkExits(now);
     this.updateShadowPositions(signals, now);
@@ -961,6 +978,7 @@ export class PCAStatArbMonitor extends EventEmitter {
           }
 
           const baseSize = this.computePositionSize(signal.asset, direction);
+          const heatFactor = this.computeHeatFactor();
           const position: ActivePosition = {
             timestamp: now,
             asset: signal.asset,
@@ -970,7 +988,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             confidence:
               this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
             entryPrice: currentPrice,
-            positionSizeUsd: baseSize * volMult,
+            positionSizeUsd: baseSize * volMult * heatFactor,
             factorContext: {
               pc1Return: signal.factorReturns[0] ?? 0,
               pc2Return: signal.factorReturns[1] ?? 0,
@@ -998,6 +1016,9 @@ export class PCAStatArbMonitor extends EventEmitter {
               pc1Momentum: this.pc1Momentum.toFixed(4),
               positionSizeUsd: position.positionSizeUsd.toFixed(2),
               volMult: volMult.toFixed(2),
+              heatFactor: heatFactor.toFixed(2),
+              activePositions: this.activePositions.size - 1,
+              dispersionBps: this.residualDispersionBps.toFixed(1),
               ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
               pc1DisplacementBps: this.pc1DisplacementBps.toFixed(1),
               pc1Loading: this.getPC1Loading(signal.asset).toFixed(3),
@@ -1087,6 +1108,14 @@ export class PCAStatArbMonitor extends EventEmitter {
     const history = this.priceHistory.get(asset);
     if (!history || history.length === 0) return 0;
     return history[history.length - 1].price;
+  }
+
+  private updateResidualDispersion(signals: AssetSignal[]): void {
+    if (signals.length < 3) return;
+    const residuals = signals.map(s => s.residual);
+    const mean = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+    const variance = residuals.reduce((sum, r) => sum + (r - mean) ** 2, 0) / residuals.length;
+    this.residualDispersionBps = Math.sqrt(variance) * 10000;
   }
 
   private computeRegimeState(pc1Return: number): void {
@@ -1267,6 +1296,17 @@ export class PCAStatArbMonitor extends EventEmitter {
     return Math.min(1, this.ewmaVol / minVol);
   }
 
+  private computeHeatFactor(): number {
+    const hs = this.config.heatScaling;
+    if (!hs?.enabled) return 1;
+    const activeCount = this.activePositions.size;
+    let factor = 1 / (1 + hs.decayPerPosition * activeCount);
+    if (this.residualDispersionBps >= hs.dispersionThresholdBps) {
+      factor *= hs.dispersionPenalty;
+    }
+    return factor;
+  }
+
   private shouldEnterLong(zScore: number, asset: string): number {
     if (this.config.long.enabled === false) return 0;
 
@@ -1356,7 +1396,15 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'stop_loss' };
     }
 
-    // 2. Stall exit — if position hasn't shown life after stallExitMs, bail early
+    // 2. Bounce fail — structural repricing filter, early kill if no bounce
+    if (direction === 'short' && this.config.short.bounceFail?.enabled) {
+      const bf = this.config.short.bounceFail;
+      if (holdTimeMs >= bf.holdMs && currentPnlBps < bf.thresholdBps && !position.trailingActivated) {
+        return { shouldExit: true, reason: 'bounce_fail' };
+      }
+    }
+
+    // 3. Stall exit — if position hasn't shown life after stallExitMs, bail early
     if (direction === 'short' && this.config.short.stallExitMs && this.config.short.stallExitMinPeakBps !== undefined) {
       if (holdTimeMs >= this.config.short.stallExitMs && !position.trailingActivated
           && position.peakPnlBps < this.config.short.stallExitMinPeakBps) {
@@ -1364,12 +1412,12 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
     }
 
-    // 3. Time stop
+    // 4. Time stop
     if (holdTimeMs >= maxHoldTimeMs) {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    // 4. Trailing stop — gated by optional minHoldTimeMs
+    // 5. Trailing stop — gated by optional minHoldTimeMs
     if (direction === 'short' && this.config.short.trailingExit.enabled) {
       const { activationPnlBps, trailStopBps, minHoldTimeMs: trailingMinHold } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
@@ -1383,7 +1431,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
     }
 
-    // 5. Z-score / zero-cross exits — lowest priority, gated by direction config
+    // 6. Z-score / zero-cross exits — lowest priority, gated by direction config
     const passedMinHold = holdTimeMs >= minHoldTimeMs;
     const useZeroCrossExit = dirConfig.zeroCrossExit ?? false;
     const useZscoreExit = direction === 'short'
@@ -1537,6 +1585,8 @@ export class PCAStatArbMonitor extends EventEmitter {
         pc1Momentum: this.pc1Momentum.toFixed(4),
         ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
         pc1DisplacementBps: this.pc1DisplacementBps.toFixed(1),
+        dispersionBps: this.residualDispersionBps.toFixed(1),
+        heatFactor: this.computeHeatFactor().toFixed(2),
       },
       'PCA summary'
     );

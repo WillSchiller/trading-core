@@ -155,8 +155,19 @@
           "minHoldTimeMs": 300000
         },
         "stallExitMs": 1800000,
-        "stallExitMinPeakBps": 30
+        "stallExitMinPeakBps": 30,
+        "bounceFail": {
+          "enabled": true,
+          "holdMs": 300000,
+          "thresholdBps": -20
+        }
       }
+    },
+    "heatScaling": {
+      "enabled": true,
+      "decayPerPosition": 0.4,
+      "dispersionThresholdBps": 8,
+      "dispersionPenalty": 0.5
     }
   },
   "perpsExecution": {
@@ -200,7 +211,7 @@
     },
     "runs": [
       { "runId": "hl_primary", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["AAVE", "BTC", "DOT", "ARB", "TRX"] },
-      { "runId": "hl_live_500", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["AAVE", "BTC", "DOT", "ARB", "TRX"], "maxPC1DisplacementBps": 0, "maxPositionSizeUsd": 100, "maxConcurrentPositions": 5, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 150, "maxConsecutiveLosses": 10, "checkIntervalMs": 60000 } }
+      { "runId": "hl_live_500", "paperMode": false, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["AAVE", "BTC", "DOT", "ARB", "TRX"], "maxPositionSizeUsd": 100, "maxConcurrentPositions": 5, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 150, "maxConsecutiveLosses": 10, "checkIntervalMs": 60000 } }
     ]
   },
   "chains": {

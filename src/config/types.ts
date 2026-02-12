@@ -183,6 +183,12 @@ export interface PCALongConfig {
   requireRegimeConfirmation: boolean;
 }
 
+export interface PCABounceFailConfig {
+  enabled: boolean;
+  holdMs: number;
+  thresholdBps: number;
+}
+
 export interface PCAShortConfig {
   entryZScore: number;
   maxEntryZScore?: number;
@@ -196,6 +202,14 @@ export interface PCAShortConfig {
   trailingExit: PCATrailingExitConfig;
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
+  bounceFail?: PCABounceFailConfig;
+}
+
+export interface PCAHeatScalingConfig {
+  enabled: boolean;
+  decayPerPosition: number;
+  dispersionThresholdBps: number;
+  dispersionPenalty: number;
 }
 
 export interface PCAOrphanCleanupConfig {
@@ -221,6 +235,7 @@ export interface PCAStatArbConfig {
   long: PCALongConfig;
   short: PCAShortConfig;
   orphanCleanup?: PCAOrphanCleanupConfig;
+  heatScaling?: PCAHeatScalingConfig;
 }
 
 export interface KillSwitchConfig {

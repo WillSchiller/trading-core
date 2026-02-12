@@ -209,6 +209,12 @@ const longConfigSchema = z.object({
   requireRegimeConfirmation: true,
 });
 
+const bounceFailConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  holdMs: z.number().int().positive().default(300000),
+  thresholdBps: z.number().default(-20),
+}).optional();
+
 const shortConfigSchema = z.object({
   entryZScore: z.number().positive().default(2.5),
   maxEntryZScore: z.number().positive().optional(),
@@ -222,6 +228,7 @@ const shortConfigSchema = z.object({
   trailingExit: trailingExitConfigSchema,
   stallExitMs: z.number().int().positive().optional(),
   stallExitMinPeakBps: z.number().nonnegative().optional(),
+  bounceFail: bounceFailConfigSchema,
 }).default({
   entryZScore: 2.5,
   exitZScore: 0.0,
@@ -240,6 +247,13 @@ const shortConfigSchema = z.object({
 
 const orphanCleanupConfigSchema = z.object({
   maxStaleMs: z.number().int().positive().default(7200000),
+}).optional();
+
+const heatScalingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  decayPerPosition: z.number().nonnegative().default(0.4),
+  dispersionThresholdBps: z.number().positive().default(8),
+  dispersionPenalty: z.number().min(0).max(1).default(0.5),
 }).optional();
 
 export const pcaStatArbConfigSchema = z.object({
@@ -261,6 +275,7 @@ export const pcaStatArbConfigSchema = z.object({
   long: longConfigSchema,
   short: shortConfigSchema,
   orphanCleanup: orphanCleanupConfigSchema,
+  heatScaling: heatScalingConfigSchema,
 });
 
 export const killSwitchConfigSchema = z.object({
