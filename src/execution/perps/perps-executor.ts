@@ -481,6 +481,14 @@ export class PerpsExecutor {
         continue;
       }
 
+      if (this.config.stallExitMs && this.config.stallExitMinPeakBps !== undefined
+          && holdTimeMs > this.config.stallExitMs && !pos.trailingActivated
+          && pos.peakPnlBps < this.config.stallExitMinPeakBps) {
+        this.log.warn({ asset: pos.asset, holdMin: (holdTimeMs / 60000).toFixed(0), peakBps: pos.peakPnlBps.toFixed(1) }, 'Stall exit triggered');
+        await this.forceClosePosition(pos, 'stall_exit');
+        continue;
+      }
+
       const entryPrice = Number(pos.entryPrice);
       const markPrice = Number(pos.markPrice);
       if (entryPrice > 0 && markPrice > 0) {

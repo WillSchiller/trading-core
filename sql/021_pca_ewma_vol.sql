@@ -1,0 +1,1 @@
+ALTER TABLE pca_signals ADD COLUMN IF NOT EXISTS ewma_vol_bps NUMERIC(10,2);

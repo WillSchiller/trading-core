@@ -151,6 +151,7 @@ const regimeGatingConfigSchema = z.object({
   ewmaSpan: z.number().int().positive().default(10),
   regimeThreshold: z.number().default(0.5),
   hysteresisTicks: z.number().int().positive().default(3),
+  minVolatilityBps: z.number().positive().optional(),
 }).default({
   enabled: true,
   ewmaSpan: 10,
@@ -216,6 +217,8 @@ const shortConfigSchema = z.object({
   stopLossBps: z.number().positive().default(150),
   stopLossIgnoresMinHold: z.boolean().default(false),
   trailingExit: trailingExitConfigSchema,
+  stallExitMs: z.number().int().positive().optional(),
+  stallExitMinPeakBps: z.number().nonnegative().optional(),
 }).default({
   entryZScore: 2.5,
   exitZScore: 0.0,
@@ -317,6 +320,8 @@ export const perpsExecutionConfigSchema = z.object({
     activationPnlBps: z.number().nonnegative().default(30),
     trailStopBps: z.number().positive().default(25),
   }).default({ activationPnlBps: 30, trailStopBps: 25 }),
+  stallExitMs: z.number().int().positive().optional(),
+  stallExitMinPeakBps: z.number().nonnegative().optional(),
   killSwitch: killSwitchConfigSchema,
   paperFill: paperFillConfigSchema,
   runs: z.array(perpsRunConfigSchema).default([]),

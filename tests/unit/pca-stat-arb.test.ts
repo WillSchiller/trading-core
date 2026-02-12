@@ -228,10 +228,10 @@ describe('PCAStatArbMonitor', () => {
       Object.assign(monitor, { regimeState: 'bearish' as RegimeState });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(false);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(0);
     });
 
     it('allows long entries in bullish regime', () => {
@@ -248,10 +248,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(true);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(1);
     });
 
     it('allows long entries in neutral regime', () => {
@@ -268,10 +268,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(true);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(1);
     });
 
     it('respects long exposure limits', () => {
@@ -290,10 +290,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(false);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(0);
     });
   });
 
@@ -310,10 +310,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterShort = (monitor as unknown as {
-        shouldEnterShort: (zScore: number, asset: string) => boolean
+        shouldEnterShort: (zScore: number, asset: string) => number
       }).shouldEnterShort.bind(monitor);
 
-      expect(shouldEnterShort(3.0, 'ETH')).toBe(true);
+      expect(shouldEnterShort(3.0, 'ETH')).toBe(1);
     });
 
     it('allows shorts in bullish regime', () => {
@@ -328,10 +328,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterShort = (monitor as unknown as {
-        shouldEnterShort: (zScore: number, asset: string) => boolean
+        shouldEnterShort: (zScore: number, asset: string) => number
       }).shouldEnterShort.bind(monitor);
 
-      expect(shouldEnterShort(3.0, 'ETH')).toBe(true);
+      expect(shouldEnterShort(3.0, 'ETH')).toBe(1);
     });
 
     it('respects short exposure limits', () => {
@@ -350,10 +350,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterShort = (monitor as unknown as {
-        shouldEnterShort: (zScore: number, asset: string) => boolean
+        shouldEnterShort: (zScore: number, asset: string) => number
       }).shouldEnterShort.bind(monitor);
 
-      expect(shouldEnterShort(3.0, 'ETH')).toBe(false);
+      expect(shouldEnterShort(3.0, 'ETH')).toBe(0);
     });
 
     it('rejects short when z-score below threshold', () => {
@@ -368,10 +368,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterShort = (monitor as unknown as {
-        shouldEnterShort: (zScore: number, asset: string) => boolean
+        shouldEnterShort: (zScore: number, asset: string) => number
       }).shouldEnterShort.bind(monitor);
 
-      expect(shouldEnterShort(1.5, 'ETH')).toBe(false);
+      expect(shouldEnterShort(1.5, 'ETH')).toBe(0);
     });
   });
 
@@ -593,10 +593,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(false);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(0);
     });
 
     it('allows entry when within PC1 exposure cap', () => {
@@ -619,10 +619,10 @@ describe('PCAStatArbMonitor', () => {
       });
 
       const shouldEnterLong = (monitor as unknown as {
-        shouldEnterLong: (zScore: number, asset: string) => boolean
+        shouldEnterLong: (zScore: number, asset: string) => number
       }).shouldEnterLong.bind(monitor);
 
-      expect(shouldEnterLong(-3.0, 'ETH')).toBe(true);
+      expect(shouldEnterLong(-3.0, 'ETH')).toBe(1);
     });
 
     it('calculates portfolio PC1 exposure correctly', () => {

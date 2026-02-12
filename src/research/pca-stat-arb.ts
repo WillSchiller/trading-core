@@ -3,7 +3,7 @@ import * as math from 'mathjs';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 
 export type RegimeState = 'bullish' | 'bearish' | 'neutral';
-export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop' | 'stop_loss';
+export type ExitReason = 'zscore' | 'zero_cross' | 'time_stop' | 'trailing_stop' | 'stop_loss' | 'stall_exit';
 export type ShadowExitReason = 'zero_cross' | 'shadow_time_stop';
 
 export interface ShadowPosition {
@@ -52,6 +52,7 @@ export interface RegimeGatingConfig {
   ewmaSpan: number;
   regimeThreshold: number;
   hysteresisTicks: number;
+  minVolatilityBps?: number;
 }
 
 export interface ExposureLimitsConfig {
@@ -100,6 +101,8 @@ export interface ShortConfig {
   stopLossBps: number;
   stopLossIgnoresMinHold: boolean;
   trailingExit: TrailingExitConfig;
+  stallExitMs?: number;
+  stallExitMinPeakBps?: number;
 }
 
 export interface OrphanCleanupConfig {
@@ -264,6 +267,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private pc1Momentum: number = 0;
   private ewmaMean: number = 0;
   private ewmaVar: number = 0;
+  private ewmaVol: number = 0;
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
   private smoothedPC1Loadings: Map<string, number> = new Map();
@@ -930,24 +934,29 @@ export class PCAStatArbMonitor extends EventEmitter {
       const existingPosition = this.activePositions.get(signal.asset);
 
       if (!existingPosition) {
-        let shouldEnter = false;
+        let volMult = 0;
         let direction: 'long' | 'short' | null = null;
 
-        if (this.shouldEnterLong(signal.residualZScore, signal.asset)) {
-          shouldEnter = true;
+        const longMult = this.shouldEnterLong(signal.residualZScore, signal.asset);
+        if (longMult > 0) {
+          volMult = longMult;
           direction = 'long';
-        } else if (this.shouldEnterShort(signal.residualZScore, signal.asset)) {
-          shouldEnter = true;
-          direction = 'short';
+        } else {
+          const shortMult = this.shouldEnterShort(signal.residualZScore, signal.asset);
+          if (shortMult > 0) {
+            volMult = shortMult;
+            direction = 'short';
+          }
         }
 
-        if (shouldEnter && direction) {
+        if (volMult > 0 && direction) {
           const currentPrice = this.getCurrentPrice(signal.asset);
           if (currentPrice <= 0) {
             this.logger.warn({ asset: signal.asset }, 'Skipping signal - no valid price');
             continue;
           }
 
+          const baseSize = this.computePositionSize(signal.asset, direction);
           const position: ActivePosition = {
             timestamp: now,
             asset: signal.asset,
@@ -957,7 +966,7 @@ export class PCAStatArbMonitor extends EventEmitter {
             confidence:
               this.factorModel?.varianceExplained[this.factorModel.varianceExplained.length - 1] ?? 0,
             entryPrice: currentPrice,
-            positionSizeUsd: this.computePositionSize(signal.asset, direction),
+            positionSizeUsd: baseSize * volMult,
             factorContext: {
               pc1Return: signal.factorReturns[0] ?? 0,
               pc2Return: signal.factorReturns[1] ?? 0,
@@ -984,13 +993,15 @@ export class PCAStatArbMonitor extends EventEmitter {
               regimeState: this.regimeState,
               pc1Momentum: this.pc1Momentum.toFixed(4),
               positionSizeUsd: position.positionSizeUsd.toFixed(2),
+              volMult: volMult.toFixed(2),
+              ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
               pc1Loading: this.getPC1Loading(signal.asset).toFixed(3),
               portfolioPC1Exposure: this.computePortfolioPC1Exposure().toFixed(2),
             },
             'PCA signal detected'
           );
 
-          this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState });
+          this.emit('signal', { ...position, pc1Momentum: this.pc1Momentum, regimeState: this.regimeState, ewmaVolBps: this.ewmaVol * 10000 });
 
           if (direction === 'short') {
             this.createBenchmarkEntry(signal.asset, now, signals);
@@ -1087,6 +1098,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     this.ewmaVar = alpha * Math.pow(pc1Return, 2) + (1 - alpha) * this.ewmaVar;
 
     const ewmaStd = Math.sqrt(Math.max(this.ewmaVar - Math.pow(this.ewmaMean, 2), 0.0000001));
+    this.ewmaVol = ewmaStd;
     this.pc1Momentum = this.ewmaMean / ewmaStd;
 
     const threshold = gating.regimeThreshold;
@@ -1238,52 +1250,63 @@ export class PCAStatArbMonitor extends EventEmitter {
     return false;
   }
 
-  private shouldEnterLong(zScore: number, asset: string): boolean {
-    if (this.config.long.enabled === false) return false;
+  private computeVolMultiplier(): number {
+    const minVolBps = this.config.regimeGating.minVolatilityBps;
+    if (!minVolBps) return 1;
+    const minVol = minVolBps / 10000;
+    return Math.min(1, this.ewmaVol / minVol);
+  }
+
+  private shouldEnterLong(zScore: number, asset: string): number {
+    if (this.config.long.enabled === false) return 0;
 
     const longConfig = this.config.long;
     const threshold = longConfig.entryZScore ?? this.config.entryZScore;
-    if (zScore > -threshold) return false;
+    if (zScore > -threshold) return 0;
 
     if (this.config.blockedHoursUtc?.length) {
       const hourUtc = new Date().getUTCHours();
-      if (this.config.blockedHoursUtc.includes(hourUtc)) return false;
+      if (this.config.blockedHoursUtc.includes(hourUtc)) return 0;
     }
 
     if (longConfig.requireRegimeConfirmation && this.config.regimeGating.enabled) {
       if (this.regimeState === 'bearish') {
-        return false;
+        return 0;
       }
     }
 
     const limits = this.config.exposureLimits;
     const counts = this.countPositionsByDirection();
-    if (counts.long >= limits.maxPositionsLong) return false;
-    if (counts.total >= limits.maxPositionsTotal) return false;
+    if (counts.long >= limits.maxPositionsLong) return 0;
+    if (counts.total >= limits.maxPositionsTotal) return 0;
 
-    if (this.wouldBreachPC1Exposure(asset, 'long')) return false;
+    if (this.wouldBreachPC1Exposure(asset, 'long')) return 0;
 
-    return true;
+    const volMult = this.computeVolMultiplier();
+    if (volMult < 0.1) return 0;
+    return volMult;
   }
 
-  private shouldEnterShort(zScore: number, asset: string): boolean {
+  private shouldEnterShort(zScore: number, asset: string): number {
     const shortConfig = this.config.short;
     const threshold = shortConfig.entryZScore ?? this.config.entryZScore;
-    if (zScore < threshold) return false;
+    if (zScore < threshold) return 0;
 
     if (this.config.blockedHoursUtc?.length) {
       const hourUtc = new Date().getUTCHours();
-      if (this.config.blockedHoursUtc.includes(hourUtc)) return false;
+      if (this.config.blockedHoursUtc.includes(hourUtc)) return 0;
     }
 
     const limits = this.config.exposureLimits;
     const counts = this.countPositionsByDirection();
-    if (counts.short >= limits.maxPositionsShort) return false;
-    if (counts.total >= limits.maxPositionsTotal) return false;
+    if (counts.short >= limits.maxPositionsShort) return 0;
+    if (counts.total >= limits.maxPositionsTotal) return 0;
 
-    if (this.wouldBreachPC1Exposure(asset, 'short')) return false;
+    if (this.wouldBreachPC1Exposure(asset, 'short')) return 0;
 
-    return true;
+    const volMult = this.computeVolMultiplier();
+    if (volMult < 0.1) return 0;
+    return volMult;
   }
 
   private checkExitConditions(
@@ -1316,12 +1339,20 @@ export class PCAStatArbMonitor extends EventEmitter {
       return { shouldExit: true, reason: 'stop_loss' };
     }
 
-    // 2. Time stop
+    // 2. Stall exit — if position hasn't shown life after stallExitMs, bail early
+    if (direction === 'short' && this.config.short.stallExitMs && this.config.short.stallExitMinPeakBps !== undefined) {
+      if (holdTimeMs >= this.config.short.stallExitMs && !position.trailingActivated
+          && position.peakPnlBps < this.config.short.stallExitMinPeakBps) {
+        return { shouldExit: true, reason: 'stall_exit' };
+      }
+    }
+
+    // 3. Time stop
     if (holdTimeMs >= maxHoldTimeMs) {
       return { shouldExit: true, reason: 'time_stop' };
     }
 
-    // 3. Trailing stop — gated by optional minHoldTimeMs
+    // 4. Trailing stop — gated by optional minHoldTimeMs
     if (direction === 'short' && this.config.short.trailingExit.enabled) {
       const { activationPnlBps, trailStopBps, minHoldTimeMs: trailingMinHold } = this.config.short.trailingExit;
       if (currentPnlBps >= activationPnlBps) {
@@ -1335,7 +1366,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
     }
 
-    // 4. Z-score / zero-cross exits — lowest priority, gated by direction config
+    // 5. Z-score / zero-cross exits — lowest priority, gated by direction config
     const passedMinHold = holdTimeMs >= minHoldTimeMs;
     const useZeroCrossExit = dirConfig.zeroCrossExit ?? false;
     const useZscoreExit = direction === 'short'
@@ -1487,6 +1518,7 @@ export class PCAStatArbMonitor extends EventEmitter {
         pc1Bps: signals[0] ? (signals[0].factorReturns[0] * 10000).toFixed(1) : 'N/A',
         regimeState: this.regimeState,
         pc1Momentum: this.pc1Momentum.toFixed(4),
+        ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
       },
       'PCA summary'
     );

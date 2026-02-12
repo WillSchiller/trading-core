@@ -38,10 +38,10 @@ export class PCAPersistence {
     return result.rows[0].id;
   }
 
-  async saveSignal(event: PCASignalEvent & { pc1Momentum?: number; regimeState?: RegimeState }): Promise<number> {
+  async saveSignal(event: PCASignalEvent & { pc1Momentum?: number; regimeState?: RegimeState; ewmaVolBps?: number }): Promise<number> {
     const result = await this.pool.query(
-      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price, pc1_momentum, regime_state, position_size_usd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price, pc1_momentum, regime_state, position_size_usd, ewma_vol_bps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         event.timestamp,
@@ -57,6 +57,7 @@ export class PCAPersistence {
         event.pc1Momentum ?? null,
         event.regimeState ?? null,
         event.positionSizeUsd > 0 ? event.positionSizeUsd : null,
+        event.ewmaVolBps ?? null,
       ]
     );
 

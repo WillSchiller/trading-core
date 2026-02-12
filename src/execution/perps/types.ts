@@ -220,6 +220,8 @@ export interface PerpsExecutionConfig {
   maxHoldTimeMsLong: number;
   heartbeatStopLossBps: number;
   trailingStop: { activationPnlBps: number; trailStopBps: number };
+  stallExitMs?: number;
+  stallExitMinPeakBps?: number;
   killSwitch: KillSwitchConfig;
   paperFill?: PaperFillConfig;
   orderType?: 'maker' | 'taker';

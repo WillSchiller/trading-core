@@ -151,6 +151,7 @@ export interface PCARegimeGatingConfig {
   ewmaSpan: number;
   regimeThreshold: number;
   hysteresisTicks: number;
+  minVolatilityBps?: number;
 }
 
 export interface PCAExposureLimitsConfig {
@@ -190,6 +191,8 @@ export interface PCAShortConfig {
   stopLossBps: number;
   stopLossIgnoresMinHold: boolean;
   trailingExit: PCATrailingExitConfig;
+  stallExitMs?: number;
+  stallExitMinPeakBps?: number;
 }
 
 export interface PCAOrphanCleanupConfig {
@@ -269,6 +272,8 @@ export interface PerpsExecutionConfig {
   maxHoldTimeMsLong: number;
   heartbeatStopLossBps: number;
   trailingStop: { activationPnlBps: number; trailStopBps: number };
+  stallExitMs?: number;
+  stallExitMinPeakBps?: number;
   killSwitch: KillSwitchConfig;
   paperFill: PaperFillConfig;
   runs: PerpsRunConfig[];
