@@ -124,6 +124,14 @@ export class PerpsExecutor {
     if (direction === 'long' && !this.config.enableLongs) return;
     if (this.excludeAssets.has(asset)) return;
 
+    if (this.config.maxPC1DisplacementBps && (event as any).pc1DisplacementBps != null) {
+      const disp = (event as any).pc1DisplacementBps as number;
+      if (direction === 'short' && disp > this.config.maxPC1DisplacementBps) {
+        this.log.debug({ asset, pc1DisplacementBps: disp.toFixed(1), threshold: this.config.maxPC1DisplacementBps }, 'Skipping — PC1 displacement too high for short');
+        return;
+      }
+    }
+
     const existing = await this.persistence.getExecutionByClientOrderId(clientOrderId);
     if (existing) {
       this.log.debug({ clientOrderId, status: existing.status }, 'Signal already processed (idempotent skip)');

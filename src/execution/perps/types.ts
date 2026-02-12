@@ -222,6 +222,7 @@ export interface PerpsExecutionConfig {
   trailingStop: { activationPnlBps: number; trailStopBps: number };
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
+  maxPC1DisplacementBps?: number;
   killSwitch: KillSwitchConfig;
   paperFill?: PaperFillConfig;
   orderType?: 'maker' | 'taker';

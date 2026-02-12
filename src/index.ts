@@ -788,6 +788,7 @@ async function main() {
           trailingStop: perpsConfig.trailingStop,
           stallExitMs: perpsConfig.stallExitMs,
           stallExitMinPeakBps: perpsConfig.stallExitMinPeakBps,
+          maxPC1DisplacementBps: run.maxPC1DisplacementBps,
           killSwitch: run.killSwitch ?? perpsConfig.killSwitch,
           paperFill: run.paperFill ?? perpsConfig.paperFill,
           excludeAssets: run.excludeAssets,

@@ -254,6 +254,7 @@ export interface PerpsRunConfig {
   maxHoldTimeMsShort?: number;
   maxHoldTimeMsLong?: number;
   excludeAssets?: string[];
+  maxPC1DisplacementBps?: number;
   killSwitch?: KillSwitchConfig;
   paperFill?: PaperFillConfig;
 }

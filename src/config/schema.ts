@@ -299,6 +299,7 @@ export const perpsRunConfigSchema = z.object({
   maxHoldTimeMsShort: z.number().int().positive().optional(),
   maxHoldTimeMsLong: z.number().int().positive().optional(),
   excludeAssets: z.array(z.string()).optional(),
+  maxPC1DisplacementBps: z.number().optional(),
   killSwitch: killSwitchConfigSchema.optional(),
   paperFill: paperFillConfigSchema.optional(),
 });
