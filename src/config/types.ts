@@ -185,6 +185,7 @@ export interface PCALongConfig {
 
 export interface PCAShortConfig {
   entryZScore: number;
+  maxEntryZScore?: number;
   exitZScore: number;
   maxHoldTimeMs: number;
   minHoldTimeMs: number;

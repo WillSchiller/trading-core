@@ -211,6 +211,7 @@ const longConfigSchema = z.object({
 
 const shortConfigSchema = z.object({
   entryZScore: z.number().positive().default(2.5),
+  maxEntryZScore: z.number().positive().optional(),
   exitZScore: z.number().nonnegative().default(0.0),
   maxHoldTimeMs: z.number().int().positive().default(43200000),
   minHoldTimeMs: z.number().int().nonnegative().default(1800000),

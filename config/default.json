@@ -140,6 +140,7 @@
       },
       "short": {
         "entryZScore": 2.75,
+        "maxEntryZScore": 3.5,
         "exitZScore": 0.5,
         "maxHoldTimeMs": 3600000,
         "minHoldTimeMs": 1800000,

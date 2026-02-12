@@ -95,6 +95,7 @@ export interface TrailingExitConfig {
 
 export interface ShortConfig {
   entryZScore: number;
+  maxEntryZScore?: number;
   exitZScore: number;
   maxHoldTimeMs: number;
   minHoldTimeMs: number;
@@ -1303,6 +1304,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     const shortConfig = this.config.short;
     const threshold = shortConfig.entryZScore ?? this.config.entryZScore;
     if (zScore < threshold) return 0;
+    if (shortConfig.maxEntryZScore && zScore > shortConfig.maxEntryZScore) return 0;
 
     if (this.config.blockedHoursUtc?.length) {
       const hourUtc = new Date().getUTCHours();
