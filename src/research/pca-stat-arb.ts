@@ -1108,7 +1108,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     const lookback = gating.pc1DisplacementLookback ?? gating.ewmaSpan;
     const recentReturns = this.pc1ReturnHistory.slice(-lookback);
     const displacement = recentReturns.reduce((sum, r) => sum + r, 0);
-    this.pc1DisplacementBps = Math.abs(displacement) * 10000;
+    this.pc1DisplacementBps = displacement * 10000;
 
     const threshold = gating.regimeThreshold;
     let candidateRegime: RegimeState;
@@ -1292,7 +1292,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (this.wouldBreachPC1Exposure(asset, 'long')) return 0;
 
     const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
-    if (maxDisp && this.pc1DisplacementBps > maxDisp) return 0;
+    if (maxDisp && Math.abs(this.pc1DisplacementBps) > maxDisp) return 0;
 
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
@@ -1317,7 +1317,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (this.wouldBreachPC1Exposure(asset, 'short')) return 0;
 
     const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
-    if (maxDisp && this.pc1DisplacementBps > maxDisp) return 0;
+    if (maxDisp && Math.abs(this.pc1DisplacementBps) > maxDisp) return 0;
 
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
