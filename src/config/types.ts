@@ -154,6 +154,7 @@ export interface PCARegimeGatingConfig {
   minVolatilityBps?: number;
   maxPC1DisplacementBps?: number;
   pc1DisplacementLookback?: number;
+  trendGateThresholdBps?: number;
 }
 
 export interface PCAExposureLimitsConfig {

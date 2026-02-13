@@ -55,6 +55,7 @@ export interface RegimeGatingConfig {
   minVolatilityBps?: number;
   maxPC1DisplacementBps?: number;
   pc1DisplacementLookback?: number;
+  trendGateThresholdBps?: number;
 }
 
 export interface ExposureLimitsConfig {
@@ -1335,6 +1336,9 @@ export class PCAStatArbMonitor extends EventEmitter {
     const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
     if (maxDisp && Math.abs(this.pc1DisplacementBps) > maxDisp) return 0;
 
+    const trendGate = this.config.regimeGating.trendGateThresholdBps;
+    if (trendGate !== undefined && this.ewmaMean * 10000 < -trendGate) return 0;
+
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
     return volMult;
@@ -1360,6 +1364,9 @@ export class PCAStatArbMonitor extends EventEmitter {
 
     const maxDisp = this.config.regimeGating.maxPC1DisplacementBps;
     if (maxDisp && Math.abs(this.pc1DisplacementBps) > maxDisp) return 0;
+
+    const trendGate = this.config.regimeGating.trendGateThresholdBps;
+    if (trendGate !== undefined && this.ewmaMean * 10000 > trendGate) return 0;
 
     const volMult = this.computeVolMultiplier();
     if (volMult < 0.1) return 0;
@@ -1584,6 +1591,7 @@ export class PCAStatArbMonitor extends EventEmitter {
         regimeState: this.regimeState,
         pc1Momentum: this.pc1Momentum.toFixed(4),
         ewmaVolBps: (this.ewmaVol * 10000).toFixed(1),
+        ewmaMeanBps: (this.ewmaMean * 10000).toFixed(1),
         pc1DisplacementBps: this.pc1DisplacementBps.toFixed(1),
         dispersionBps: this.residualDispersionBps.toFixed(1),
         heatFactor: this.computeHeatFactor().toFixed(2),

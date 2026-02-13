@@ -105,7 +105,8 @@
         "enabled": true,
         "ewmaSpan": 10,
         "regimeThreshold": 0.5,
-        "hysteresisTicks": 3
+        "hysteresisTicks": 3,
+        "trendGateThresholdBps": 0
       },
       "exposureLimits": {
         "maxPositionsLong": 3,
