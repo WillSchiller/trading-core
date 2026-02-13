@@ -184,7 +184,7 @@ async function main() {
     const envEnabled = chainName === 'mainnet' ? config.env.enableMainnet
       : chainName === 'base' ? config.env.enableBase
       : false;
-    const isEnabled = chainConfig.enabled || envEnabled;
+    const isEnabled = envEnabled !== undefined ? envEnabled : chainConfig.enabled;
     logger.info({
       chain: chainName,
       configEnabled: chainConfig.enabled,
@@ -379,7 +379,7 @@ async function main() {
       const envEnabled = chainName === 'mainnet' ? config.env.enableMainnet
         : chainName === 'base' ? config.env.enableBase
         : false;
-      const isEnabled = chainConfig.enabled || envEnabled;
+      const isEnabled = envEnabled !== undefined ? envEnabled : chainConfig.enabled;
       if (!isEnabled) continue;
 
       const chain = chainName as Chain;
