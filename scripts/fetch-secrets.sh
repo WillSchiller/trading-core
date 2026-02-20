@@ -45,10 +45,11 @@ fetch_secret_optional() {
 }
 
 fetch_secret "postgres-password" "POSTGRES_PASSWORD"
-fetch_secret "rpc-base-http" "RPC_BASE_HTTP"
-fetch_secret "rpc-base-ws" "RPC_BASE_WS"
-fetch_secret "rpc-mainnet-http" "RPC_MAINNET_HTTP"
-fetch_secret "rpc-mainnet-ws" "RPC_MAINNET_WS"
+# RPC secrets not needed in observatory mode (no chain providers)
+# fetch_secret "rpc-base-http" "RPC_BASE_HTTP"
+# fetch_secret "rpc-base-ws" "RPC_BASE_WS"
+# fetch_secret "rpc-mainnet-http" "RPC_MAINNET_HTTP"
+# fetch_secret "rpc-mainnet-ws" "RPC_MAINNET_WS"
 fetch_secret "binance-api-key" "BINANCE_API_KEY"
 fetch_secret "binance-api-secret" "BINANCE_API_SECRET"
 fetch_secret_optional "binance-futures-api-key" "BINANCE_FUTURES_API_KEY"
@@ -56,7 +57,8 @@ fetch_secret_optional "binance-futures-api-secret" "BINANCE_FUTURES_API_SECRET"
 fetch_secret "coinbase-api-key" "COINBASE_API_KEY"
 fetch_secret "coinbase-api-secret" "COINBASE_API_SECRET"
 fetch_secret "coinbase-passphrase" "COINBASE_PASSPHRASE"
-fetch_secret "executor-private-key" "EXECUTOR_PRIVATE_KEY"
+# Executor key not needed in observatory mode
+# fetch_secret "executor-private-key" "EXECUTOR_PRIVATE_KEY"
 fetch_secret_optional "hyperliquid-private-key" "HYPERLIQUID_PRIVATE_KEY"
 fetch_secret "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
 fetch_secret "telegram-chat-id" "TELEGRAM_CHAT_ID"
@@ -69,10 +71,6 @@ if [ "$1" = "export" ]; then
   echo "Exporting secrets to .env file..."
   cat > /home/ubuntu/app/.env.secrets <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-RPC_BASE_HTTP=$RPC_BASE_HTTP
-RPC_BASE_WS=$RPC_BASE_WS
-RPC_MAINNET_HTTP=$RPC_MAINNET_HTTP
-RPC_MAINNET_WS=$RPC_MAINNET_WS
 BINANCE_API_KEY=$BINANCE_API_KEY
 BINANCE_API_SECRET=$BINANCE_API_SECRET
 BINANCE_FUTURES_API_KEY=$BINANCE_FUTURES_API_KEY
@@ -80,7 +78,6 @@ BINANCE_FUTURES_API_SECRET=$BINANCE_FUTURES_API_SECRET
 COINBASE_API_KEY=$COINBASE_API_KEY
 COINBASE_API_SECRET=$COINBASE_API_SECRET
 COINBASE_PASSPHRASE=$COINBASE_PASSPHRASE
-EXECUTOR_PRIVATE_KEY=$EXECUTOR_PRIVATE_KEY
 HYPERLIQUID_PRIVATE_KEY=$HYPERLIQUID_PRIVATE_KEY
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID

@@ -18,12 +18,8 @@ services:
       POSTGRES_USER: trader
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
-      RPC_BASE_HTTP: ${RPC_BASE_HTTP}
-      RPC_BASE_WS: ${RPC_BASE_WS}
-      RPC_MAINNET_HTTP: ${RPC_MAINNET_HTTP:-}
-      RPC_MAINNET_WS: ${RPC_MAINNET_WS:-}
-      RPC_ALCHEMY_MAINNET_HTTP: ${RPC_ALCHEMY_MAINNET_HTTP:-${RPC_MAINNET_HTTP:-}}
-      RPC_ALCHEMY_MAINNET_WS: ${RPC_ALCHEMY_MAINNET_WS:-${RPC_MAINNET_WS:-}}
+      # RPC vars removed — observatory mode doesn't need chain providers
+      # Re-add when DEX reading or on-chain execution is re-enabled
 
       BINANCE_API_KEY: ${BINANCE_API_KEY}
       BINANCE_API_SECRET: ${BINANCE_API_SECRET}
@@ -31,15 +27,15 @@ services:
       COINBASE_API_SECRET: ${COINBASE_API_SECRET}
       COINBASE_PASSPHRASE: ${COINBASE_PASSPHRASE}
 
-      EXECUTOR_PRIVATE_KEY: ${EXECUTOR_PRIVATE_KEY}
+      # EXECUTOR_PRIVATE_KEY and HYPERLIQUID_PRIVATE_KEY removed — observatory mode
       HYPERLIQUID_PRIVATE_KEY: ${HYPERLIQUID_PRIVATE_KEY:-}
 
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
 
       PAPER_MODE: ${PAPER_MODE:-true}
-      ENABLE_EXECUTION: ${ENABLE_EXECUTION:-true}
-      ENABLE_BASE: ${ENABLE_BASE:-true}
+      ENABLE_EXECUTION: ${ENABLE_EXECUTION:-false}
+      ENABLE_BASE: ${ENABLE_BASE:-false}
       ENABLE_MAINNET: ${ENABLE_MAINNET:-false}
     # Config is baked into the Docker image (not volume-mounted) to ensure
     # config and code are always in sync. The Dockerfile COPY includes config/.

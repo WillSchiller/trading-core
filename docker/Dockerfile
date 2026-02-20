@@ -23,7 +23,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Production stage
 FROM node:20-slim
 
+ARG GIT_SHA=unknown
 ENV NODE_ENV=production
+ENV GIT_SHA=$GIT_SHA
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

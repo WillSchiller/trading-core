@@ -172,7 +172,7 @@
     }
   },
   "perpsExecution": {
-    "enabled": true,
+    "enabled": false,
     "leverage": 1,
     "marginType": "ISOLATED",
     "enableLongs": false,
@@ -210,10 +210,7 @@
       "makerFeeBps": 1.5,
       "maxSlippageBps": 10
     },
-    "runs": [
-      { "runId": "hl_primary", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["AAVE", "BTC", "DOT", "ARB", "TRX"] },
-      { "runId": "hl_live_500", "paperMode": true, "exchange": "hyperliquid", "priceSource": "hyperliquid", "excludeAssets": ["AAVE", "BTC", "DOT", "ARB", "TRX"], "maxPositionSizeUsd": 100, "maxConcurrentPositions": 5, "maxTotalExposureUsd": 500, "killSwitch": { "dailyDrawdownLimitUsd": 75, "maxTotalLossUsd": 150, "maxConsecutiveLosses": 10, "checkIntervalMs": 60000 } }
-    ]
+    "runs": []
   },
   "chains": {
     "mainnet": {
@@ -229,7 +226,7 @@
       }
     },
     "base": {
-      "enabled": true,
+      "enabled": false,
       "chainId": 8453,
       "blockTimeMs": 2000,
       "contracts": {

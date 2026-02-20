@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPublicClient, http, type Address } from 'viem';
@@ -162,6 +163,17 @@ async function main() {
     telegramEnabled,
     telegramChatId: config.env.telegram?.chatId ? `${config.env.telegram.chatId.slice(0, 4)}...` : 'not set',
   }, 'Config loaded');
+
+  logger.info({
+    gitSha: process.env.GIT_SHA ?? 'unknown',
+    nodeEnv: process.env.NODE_ENV,
+    enableBase: config.env.enableBase,
+    enableMainnet: config.env.enableMainnet,
+    enableExecution: config.env.enableExecution,
+    perpsEnabled: config.app.perpsExecution?.enabled ?? false,
+    pcaEnabled: config.app.research?.pcaStatArb?.enabled ?? false,
+    runIds: config.app.perpsExecution?.runs?.map(r => r.runId) ?? [],
+  }, 'Observatory boot');
 
   if (telegramEnabled) {
     sendAlert('🚀 *Dislocation Trader Started*\n\nSystem initialized successfully.', 'info')
@@ -727,6 +739,10 @@ async function main() {
   const perpsExecutorsBinance: PerpsExecutor[] = [];
   const perpsExecutorsHL: PerpsExecutor[] = [];
 
+  if (config.app.perpsExecution?.enabled) {
+    logger.warn('Perps execution is ENABLED — this should be false in observatory mode');
+  }
+
   if (config.app.perpsExecution?.enabled && (pcaMonitor || pcaMonitorHL)) {
     const perpsConfig = config.app.perpsExecution;
     const futuresKey = config.env.binanceFutures.apiKey;
@@ -868,8 +884,50 @@ async function main() {
     }
   }
 
+  // Health endpoint for Docker healthcheck
+  const healthServer = createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        gitSha: process.env.GIT_SHA ?? 'unknown',
+        uptime: process.uptime(),
+      }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  healthServer.listen(8080);
+  logger.info('Health endpoint listening on :8080');
+
+  // Observatory heartbeat — write stats every 60s
+  let heartbeatQuotesSeen = 0;
+  let heartbeatSignalsWritten = 0;
+  orchestrator.on('quote', () => { heartbeatQuotesSeen++; });
+  if (pcaMonitor) pcaMonitor.on('signal', () => { heartbeatSignalsWritten++; });
+  if (pcaMonitorHL) pcaMonitorHL.on('signal', () => { heartbeatSignalsWritten++; });
+
+  const heartbeatInterval = setInterval(async () => {
+    try {
+      const pcaAssets = config.app.research?.pcaStatArb?.assets?.length ?? 0;
+      await pool.query(
+        `INSERT INTO observatory_heartbeat (quotes_seen_1m, signals_written_1m, active_positions, pca_assets_tracked)
+         VALUES ($1, $2, $3, $4)`,
+        [heartbeatQuotesSeen, heartbeatSignalsWritten, 0, pcaAssets]
+      );
+      heartbeatQuotesSeen = 0;
+      heartbeatSignalsWritten = 0;
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, 'Failed to write observatory heartbeat');
+    }
+  }, 60000);
+
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+
+    clearInterval(heartbeatInterval);
+    healthServer.close();
 
     await detector.stop();
     logger.info('Opportunity detector stopped');

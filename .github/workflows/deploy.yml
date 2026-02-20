@@ -62,6 +62,8 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.tags }}
             ${{ steps.meta.outputs.latest }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -167,6 +169,17 @@ jobs:
         run: |
           sleep 30
           INSTANCE_IP=${{ steps.get-instance.outputs.instance-ip }}
+
+          echo "Checking app health at http://$INSTANCE_IP:8080/health..."
+          for i in {1..6}; do
+            if curl -sf --max-time 10 http://$INSTANCE_IP:8080/health; then
+              echo ""
+              echo "App is healthy"
+              break
+            fi
+            echo "Waiting for app... ($i/6)"
+            sleep 10
+          done
 
           echo "Checking Grafana at http://$INSTANCE_IP:3000..."
           if curl -sf --max-time 10 http://$INSTANCE_IP:3000/api/health; then

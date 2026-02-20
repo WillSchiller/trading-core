@@ -42,13 +42,15 @@ ECR_REPOSITORY_URL=${ECR_REPOSITORY_URL}
 IMAGE_TAG=${IMAGE_TAG:-latest}
 PUBLIC_IP=${PUBLIC_IP}
 GRAFANA_ADMIN_PASSWORD=admin123
+ENABLE_BASE=false
+ENABLE_EXECUTION=false
 EOF
 
 cat .env.secrets >> .env
 
 echo "=== Validating secrets in .env ==="
 MISSING=""
-for KEY in POSTGRES_PASSWORD RPC_BASE_HTTP BINANCE_API_KEY; do
+for KEY in POSTGRES_PASSWORD BINANCE_API_KEY; do
   VAL=$(grep "^${KEY}=" .env | tail -1 | cut -d= -f2-)
   if [ -z "$VAL" ] || [ "$VAL" = "{}" ]; then
     MISSING="${MISSING} ${KEY}"
@@ -105,5 +107,14 @@ docker-compose --env-file .env -f docker/docker-compose.prod.yml ps
 echo "=== Final container logs (if any errors) ==="
 docker logs dislocation-postgres 2>&1 | tail -20 || true
 docker logs dislocation-trader-app 2>&1 | tail -20 || true
+
+echo "=== Verifying deployment ==="
+sleep 5
+for i in {1..12}; do
+  HEALTH=$(docker exec dislocation-trader-app node -e "const http=require('http');http.get('http://localhost:8080/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>{console.log(d);process.exit(r.statusCode===200?0:1)})}).on('error',e=>{console.log(e.message);process.exit(1)})" 2>&1) && break
+  echo "Waiting for app health... ($i/12)"
+  sleep 5
+done
+echo "Health: $HEALTH"
 
 echo "=== Deployment completed ==="
