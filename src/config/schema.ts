@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const envBool = (defaultVal: boolean) =>
+  z.string().optional().transform((v) => {
+    if (v === undefined || v === '') return defaultVal;
+    return v === 'true' || v === '1';
+  });
+
 const rollupIntervalSchema = z.enum(['1s', '10s', '1m']);
 const chainSchema = z.enum(['mainnet', 'base', 'arbitrum']);
 
@@ -416,10 +422,10 @@ export const envConfigSchema = z.object({
     privateKey: z.string().optional(),
   }).default({}),
   executorPrivateKey: z.string().optional(),
-  paperMode: z.coerce.boolean().default(true),
-  enableExecution: z.coerce.boolean().default(false),
-  enableMainnet: z.coerce.boolean().default(false),
-  enableBase: z.coerce.boolean().default(true),
+  paperMode: envBool(true),
+  enableExecution: envBool(false),
+  enableMainnet: envBool(false),
+  enableBase: envBool(false),
   telegram: z
     .object({
       botToken: z.string(),
