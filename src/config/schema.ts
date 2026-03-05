@@ -301,6 +301,7 @@ export const paperFillConfigSchema = z.object({
   spreadBps: z.number().nonnegative().default(2),
   slippageBps: z.number().nonnegative().default(5),
   takerFeeBps: z.number().nonnegative().default(2),
+  makerFeeBps: z.number().nonnegative().optional(),
   maxSlippageBps: z.number().nonnegative().default(20),
 }).default({});
 
@@ -322,6 +323,10 @@ export const perpsRunConfigSchema = z.object({
   maxHoldTimeMsLong: z.number().int().positive().optional(),
   excludeAssets: z.array(z.string()).optional(),
   maxPC1DisplacementBps: z.number().optional(),
+  orderType: z.enum(['maker', 'taker']).optional(),
+  makerTimeoutMs: z.number().int().positive().optional(),
+  exitMakerTimeoutMs: z.number().int().positive().optional(),
+  exitFallbackToTaker: z.boolean().optional(),
   killSwitch: killSwitchConfigSchema.optional(),
   paperFill: paperFillConfigSchema.optional(),
 });
@@ -348,6 +353,10 @@ export const perpsExecutionConfigSchema = z.object({
   }).default({ activationPnlBps: 30, trailStopBps: 25 }),
   stallExitMs: z.number().int().positive().optional(),
   stallExitMinPeakBps: z.number().nonnegative().optional(),
+  orderType: z.enum(['maker', 'taker']).default('taker'),
+  makerTimeoutMs: z.number().int().positive().default(15000),
+  exitMakerTimeoutMs: z.number().int().positive().default(10000),
+  exitFallbackToTaker: z.boolean().default(true),
   killSwitch: killSwitchConfigSchema,
   paperFill: paperFillConfigSchema,
   runs: z.array(perpsRunConfigSchema).default([]),

@@ -250,6 +250,7 @@ export interface PaperFillConfig {
   spreadBps: number;
   slippageBps: number;
   takerFeeBps: number;
+  makerFeeBps?: number;
   maxSlippageBps: number;
 }
 
@@ -271,6 +272,10 @@ export interface PerpsRunConfig {
   maxHoldTimeMsLong?: number;
   excludeAssets?: string[];
   maxPC1DisplacementBps?: number;
+  orderType?: 'maker' | 'taker';
+  makerTimeoutMs?: number;
+  exitMakerTimeoutMs?: number;
+  exitFallbackToTaker?: boolean;
   killSwitch?: KillSwitchConfig;
   paperFill?: PaperFillConfig;
 }
@@ -294,6 +299,10 @@ export interface PerpsExecutionConfig {
   trailingStop: { activationPnlBps: number; trailStopBps: number };
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
+  orderType?: 'maker' | 'taker';
+  makerTimeoutMs?: number;
+  exitMakerTimeoutMs?: number;
+  exitFallbackToTaker?: boolean;
   killSwitch: KillSwitchConfig;
   paperFill: PaperFillConfig;
   runs: PerpsRunConfig[];

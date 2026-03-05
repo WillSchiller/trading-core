@@ -310,6 +310,36 @@ describe('BinanceFuturesClient', () => {
       expect(fillPrice).toBeCloseTo(2003.4, 1);
     });
 
+    it('uses maker fee-only simulation when orderType is maker', async () => {
+      const client = new BinanceFuturesClient({
+        apiKey: 'k',
+        apiSecret: 's',
+        paperMode: true,
+        paperFill: { spreadBps: 5, slippageBps: 10, takerFeeBps: 2, makerFeeBps: 1, maxSlippageBps: 20 },
+      });
+
+      const makerBuy = await client.placeOrder({
+        symbol: 'ETHUSDT',
+        side: 'BUY',
+        quantity: '0.5',
+        clientOrderId: 'maker_fill_buy',
+        markPrice: 2000,
+        orderType: 'maker',
+      });
+
+      const makerSell = await client.placeOrder({
+        symbol: 'ETHUSDT',
+        side: 'SELL',
+        quantity: '0.5',
+        clientOrderId: 'maker_fill_sell',
+        markPrice: 2000,
+        orderType: 'maker',
+      });
+
+      expect(parseFloat(makerBuy.avgPrice)).toBeCloseTo(2000.2, 3);
+      expect(parseFloat(makerSell.avgPrice)).toBeCloseTo(1999.8, 3);
+    });
+
     it('blocks setLeverage in paper mode', async () => {
       const client = new BinanceFuturesClient({
         apiKey: 'k',

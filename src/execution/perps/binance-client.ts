@@ -90,20 +90,26 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
     clientOrderId: string;
     reduceOnly?: boolean;
     markPrice?: number;
+    orderType?: 'maker' | 'taker';
   }): Promise<OrderResult> {
-    const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice } = params;
+    const { symbol, side, quantity, clientOrderId, reduceOnly, markPrice, orderType = 'taker' } = params;
 
     const qtyNum = parseFloat(quantity);
+    const isMaker = orderType === 'maker';
 
     if (this.paperMode) {
-      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum);
-      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4) }, 'PAPER order (simulated)');
+      const fillPrice = this.simulatePaperFill(side, markPrice ?? 0, qtyNum, isMaker);
+      log.info({ symbol, side, quantity, clientOrderId, fillPrice: fillPrice.toFixed(4), orderType }, 'PAPER order (simulated)');
       return {
         status: 'FILLED',
         avgPrice: fillPrice > 0 ? fillPrice.toFixed(8) : '0',
         filledQty: quantity,
         exchangeOrderId: String(Date.now()),
       };
+    }
+
+    if (isMaker) {
+      log.warn({ symbol, clientOrderId }, 'Binance maker mode not implemented; falling back to taker MARKET order');
     }
 
     const orderParams: Record<string, string | number> = {
@@ -129,16 +135,22 @@ export class BinanceFuturesClient implements PerpsExchangeClient {
     };
   }
 
-  private simulatePaperFill(side: PerpsSide, markPrice: number, qty: number): number {
+  private simulatePaperFill(side: PerpsSide, markPrice: number, qty: number, isMaker = false): number {
     if (markPrice <= 0) return 0;
+    const feeBps = isMaker ? (this.paperFill.makerFeeBps ?? 1.5) : this.paperFill.takerFeeBps;
+    const notional = markPrice * qty;
+    const feeUsd = (feeBps / 10000) * notional;
+    const feePriceDelta = feeUsd / qty;
+
+    if (isMaker) {
+      return side === 'BUY' ? markPrice + feePriceDelta : markPrice - feePriceDelta;
+    }
+
     const spreadCost = (this.paperFill.spreadBps / 10000) * markPrice;
     const slippageCost = Math.min(
       (this.paperFill.slippageBps / 10000) * markPrice,
       (this.paperFill.maxSlippageBps / 10000) * markPrice,
     );
-    const notional = markPrice * qty;
-    const feeUsd = (this.paperFill.takerFeeBps / 10000) * notional;
-    const feePriceDelta = feeUsd / qty;
     const totalAdverse = spreadCost + slippageCost + feePriceDelta;
     return side === 'BUY' ? markPrice + totalAdverse : markPrice - totalAdverse;
   }
