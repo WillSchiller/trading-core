@@ -38,10 +38,10 @@ export class PCAPersistence {
     return result.rows[0].id;
   }
 
-  async saveSignal(event: PCASignalEvent & { pc1Momentum?: number; regimeState?: RegimeState; ewmaVolBps?: number; pc1DisplacementBps?: number }): Promise<number> {
+  async saveSignal(event: PCASignalEvent & { pc1Momentum?: number; regimeState?: RegimeState; ewmaVolBps?: number; pc1DisplacementBps?: number; marketContext?: Record<string, number> | null }): Promise<number> {
     const result = await this.pool.query(
-      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price, pc1_momentum, regime_state, position_size_usd, ewma_vol_bps, pc1_displacement_bps)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `INSERT INTO pca_signals (timestamp, asset, direction, z_score, residual, confidence, pc1_return, pc2_return, all_residuals, entry_price, pc1_momentum, regime_state, position_size_usd, ewma_vol_bps, pc1_displacement_bps, market_context)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [
         event.timestamp,
@@ -59,6 +59,7 @@ export class PCAPersistence {
         event.positionSizeUsd > 0 ? event.positionSizeUsd : null,
         event.ewmaVolBps ?? null,
         event.pc1DisplacementBps ?? null,
+        event.marketContext ? JSON.stringify(event.marketContext) : null,
       ]
     );
 

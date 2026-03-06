@@ -11,7 +11,7 @@ import { CollectorOrchestrator } from './collectors/orchestrator.js';
 import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
-import { PCAStatArbMonitor, PCAPersistence } from './research/index.js';
+import { PCAStatArbMonitor, PCAPersistence, MarketContextService } from './research/index.js';
 import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
@@ -499,6 +499,7 @@ async function main() {
   // PCA Statistical Arbitrage Monitor (Hyperliquid prices only)
   let pcaMonitor: PCAStatArbMonitor | null = null;
   let pcaPersistence: PCAPersistence | null = null;
+  let marketContext: MarketContextService | null = null;
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
@@ -530,12 +531,17 @@ async function main() {
       }
     });
 
+    // Start market context service for multi-signal research
+    marketContext = new MarketContextService(pool, pcaConfig.assets);
+    await marketContext.start(60000);
+
     // Helper to wire persistence for a PCA monitor
     const wirePcaPersistence = (monitor: PCAStatArbMonitor, source: string) => {
       monitor.on('signal', async (event) => {
         try {
           if (pcaPersistence) {
-            await pcaPersistence.saveSignal(event);
+            const ctx = marketContext?.getContextSnapshot(event.asset) ?? null;
+            await pcaPersistence.saveSignal({ ...event, marketContext: ctx });
           }
         } catch (err) {
           logger.error({ error: (err as Error).message, source }, 'Failed to save PCA signal');
@@ -840,6 +846,7 @@ async function main() {
     logger.info('RankSpace detector stopped');
 
     // Stop PCA first (stops emitting new signals/exits), then executor
+    if (marketContext) marketContext.stop();
     if (pcaMonitor) {
       pcaMonitor.stop();
       logger.info('PCA stat-arb monitor stopped');
