@@ -41,7 +41,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Today PnL\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Today PnL\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -65,7 +65,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -89,7 +89,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -114,7 +114,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -139,7 +139,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH recent AS (SELECT realized_pnl, ROW_NUMBER() OVER (ORDER BY updated_at DESC) as rn FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})) SELECT COALESCE(MIN(rn) FILTER (WHERE realized_pnl > 0) - 1, COUNT(*)) AS \"Consec Losses\" FROM recent",
+        "rawSql": "WITH recent AS (SELECT realized_pnl, ROW_NUMBER() OVER (ORDER BY updated_at DESC) as rn FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND ('${run_id}' = 'All' OR run_id = '${run_id}')) SELECT COALESCE(MIN(rn) FILTER (WHERE realized_pnl > 0) - 1, COUNT(*)) AS \"Consec Losses\" FROM recent",
         "format": "table"
       }],
       "fieldConfig": {
@@ -163,7 +163,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Drawdown\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND realized_pnl < 0 AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Drawdown\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND realized_pnl < 0 AND ('${run_id}' = 'All' OR run_id = '${run_id}')",
         "format": "table"
       }],
       "fieldConfig": {
@@ -196,7 +196,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized ($)\", leverage AS \"Lev\", ROUND(z_score::numeric, 3) AS \"Z\", ROUND((EXTRACT(EPOCH FROM (now() - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", created_at AS \"Opened\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC",
+        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized ($)\", leverage AS \"Lev\", ROUND(z_score::numeric, 3) AS \"Z\", ROUND((EXTRACT(EPOCH FROM (now() - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", created_at AS \"Opened\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Opened", "desc": true}]},
@@ -247,7 +247,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT updated_at AS time, run_id AS metric, SUM(realized_pnl) OVER (PARTITION BY run_id ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+        "rawSql": "SELECT updated_at AS time, run_id AS metric, SUM(realized_pnl) OVER (PARTITION BY run_id ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -282,7 +282,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT updated_at AS time, ROUND(realized_pnl::numeric, 4) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+        "rawSql": "SELECT updated_at AS time, ROUND(realized_pnl::numeric, 4) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -322,7 +322,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(notional_usd::numeric, 2) AS \"Size ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", exit_reason AS \"Exit Reason\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z\", updated_at AS \"Closed\" FROM perps_executions WHERE status = 'closed' AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY updated_at DESC LIMIT 20",
+        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(notional_usd::numeric, 2) AS \"Size ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", exit_reason AS \"Exit Reason\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z\", updated_at AS \"Closed\" FROM perps_executions WHERE status = 'closed' AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY updated_at DESC LIMIT 20",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Closed", "desc": true}]},
@@ -380,7 +380,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 2) AS \"Daily PnL ($)\", ROUND(total_pnl::numeric, 2) AS \"Total PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Closed\" FROM perps_kill_switch_events WHERE (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC LIMIT 20",
+        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 2) AS \"Daily PnL ($)\", ROUND(total_pnl::numeric, 2) AS \"Total PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Closed\" FROM perps_kill_switch_events WHERE ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC LIMIT 20",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Time", "desc": true}]},

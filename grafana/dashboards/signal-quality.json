@@ -25,7 +25,7 @@
         "type": "query",
         "datasource": {"type": "postgres", "uid": "postgresql"},
         "query": "SELECT DISTINCT asset FROM pca_signals ORDER BY asset",
-        "multi": true,
+        "multi": false,
         "includeAll": true,
         "allValue": "all",
         "refresh": 2,
