@@ -205,6 +205,7 @@ export interface PCAShortConfig {
   stallExitMinPeakBps?: number;
   bounceFail?: PCABounceFailConfig;
   minPC1ReturnBps?: number;
+  maxFundingRate?: number;
 }
 
 export interface PCAHeatScalingConfig {

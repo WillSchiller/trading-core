@@ -115,6 +115,7 @@ export interface ShortConfig {
   stallExitMinPeakBps?: number;
   bounceFail?: BounceFailConfig;
   minPC1ReturnBps?: number;
+  maxFundingRate?: number;
 }
 
 export interface HeatScalingConfig {
@@ -293,6 +294,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
   private smoothedPC1Loadings: Map<string, number> = new Map();
+  private marketContextProvider?: (asset: string) => { funding: number } | undefined;
 
   constructor(config: Partial<PCAConfig>) {
     super();
@@ -304,6 +306,10 @@ export class PCAStatArbMonitor extends EventEmitter {
       this.returnHistory.set(asset, []);
       this.residualHistory.set(asset, []);
     }
+  }
+
+  setMarketContextProvider(provider: (asset: string) => { funding: number } | undefined): void {
+    this.marketContextProvider = provider;
   }
 
   start(): void {
@@ -1363,6 +1369,11 @@ export class PCAStatArbMonitor extends EventEmitter {
         ? this.pc1ReturnHistory[this.pc1ReturnHistory.length - 1]
         : 0;
       if (lastPC1 * 10000 < shortConfig.minPC1ReturnBps) return 0;
+    }
+
+    if (shortConfig.maxFundingRate != null && this.marketContextProvider) {
+      const ctx = this.marketContextProvider(asset);
+      if (ctx && ctx.funding > shortConfig.maxFundingRate) return 0;
     }
 
     if (this.config.blockedHoursUtc?.length) {

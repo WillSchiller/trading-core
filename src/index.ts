@@ -535,6 +535,8 @@ async function main() {
     marketContext = new MarketContextService(pool, pcaConfig.assets);
     await marketContext.start(60000);
 
+    pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
+
     // Helper to wire persistence for a PCA monitor
     const wirePcaPersistence = (monitor: PCAStatArbMonitor, source: string) => {
       monitor.on('signal', async (event) => {
