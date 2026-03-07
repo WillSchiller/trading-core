@@ -161,7 +161,9 @@
           "enabled": true,
           "holdMs": 300000,
           "thresholdBps": -20
-        }
+        },
+        "minPC1ReturnBps": 25,
+        "maxFundingRate": 0
       }
     },
     "heatScaling": {
