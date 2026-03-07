@@ -1,0 +1,408 @@
+{
+  "id": null,
+  "uid": "live-trading",
+  "title": "Live Trading",
+  "tags": ["pca-stat-arb", "live"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "run_id",
+        "label": "Run ID",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT run_id AS __value, run_id AS __text FROM perps_executions ORDER BY run_id DESC",
+        "multi": false,
+        "includeAll": true,
+        "allValue": "All",
+        "refresh": 1,
+        "sort": 0,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Status",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Today's PnL",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Today PnL\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Open Positions",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "blue"},
+            {"value": 5, "color": "yellow"},
+            {"value": 10, "color": "orange"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Win Rate (Today)",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 45, "color": "yellow"},
+            {"value": 55, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Win Rate (All Time)",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE realized_pnl > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 45, "color": "yellow"},
+            {"value": 55, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Consec Losses",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH recent AS (SELECT realized_pnl, ROW_NUMBER() OVER (ORDER BY updated_at DESC) as rn FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})) SELECT COALESCE(MIN(rn) FILTER (WHERE realized_pnl > 0) - 1, COUNT(*)) AS \"Consec Losses\" FROM recent",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 3, "color": "yellow"},
+            {"value": 5, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Daily Drawdown",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(SUM(realized_pnl), 0) AS \"Drawdown\" FROM perps_executions WHERE status = 'closed' AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND realized_pnl < 0 AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring})",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": -25, "color": "yellow"},
+            {"value": -50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Open Positions",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Current Open Positions",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized ($)\", leverage AS \"Lev\", ROUND(z_score::numeric, 3) AS \"Z\", ROUND((EXTRACT(EPOCH FROM (now() - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", created_at AS \"Opened\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Opened", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Dir"},
+            "properties": [
+              {"id": "custom.width", "value": 70},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+                {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Unrealized ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Hold (min)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 60, "color": "red"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Today's PnL",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Cumulative PnL (Today)",
+      "gridPos": {"x": 0, "y": 14, "w": 16, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT updated_at AS time, run_id AS metric, SUM(realized_pnl) OVER (PARTITION BY run_id ORDER BY updated_at) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "gradientMode": "scheme"
+          },
+          "color": {"mode": "palette-classic"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "PnL per Trade (Today)",
+      "gridPos": {"x": 16, "y": 14, "w": 8, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT updated_at AS time, ROUND(realized_pnl::numeric, 4) AS value FROM perps_executions WHERE status = 'closed' AND realized_pnl IS NOT NULL AND DATE(updated_at AT TIME ZONE 'UTC') = CURRENT_DATE AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 8,
+            "showPoints": "always"
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Recent Trades",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "Last 20 Trades",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(exit_price::numeric, 4) AS \"Exit\", ROUND(notional_usd::numeric, 2) AS \"Size ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", ROUND(CASE WHEN entry_price > 0 THEN ((exit_price - entry_price) / entry_price * CASE direction WHEN 'long' THEN 1 ELSE -1 END) * 10000 ELSE 0 END::numeric, 1) AS \"PnL (bps)\", exit_reason AS \"Exit Reason\", ROUND((EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", ROUND(z_score::numeric, 3) AS \"Z\", updated_at AS \"Closed\" FROM perps_executions WHERE status = 'closed' AND (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY updated_at DESC LIMIT 20",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Closed", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "PnL (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Dir"},
+            "properties": [
+              {"id": "custom.width", "value": 70},
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"long": {"color": "green", "text": "LONG"}}},
+                {"type": "value", "options": {"short": {"color": "red", "text": "SHORT"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Hold (min)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 60, "color": "red"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Kill Switch",
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "table",
+      "title": "Kill Switch Events",
+      "gridPos": {"x": 0, "y": 34, "w": 24, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 2) AS \"Daily PnL ($)\", ROUND(total_pnl::numeric, 2) AS \"Total PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Closed\" FROM perps_kill_switch_events WHERE (${run_id:sqlstring} = 'All' OR run_id = ${run_id:sqlstring}) ORDER BY created_at DESC LIMIT 20",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Time", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Reason"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Daily PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,537 +1,394 @@
 {
   "id": null,
   "uid": "system-health",
-  "title": "System Health - Latency & Timing",
-  "tags": ["dislocation-trader", "system"],
+  "title": "System Health",
+  "tags": ["pca-stat-arb", "ops"],
   "timezone": "utc",
   "schemaVersion": 38,
   "version": 1,
   "refresh": "10s",
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "templating": {
-    "list": []
-  },
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {"list": []},
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "Connector Status",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
       "id": 1,
-      "type": "timeseries",
-      "title": "Clock Drift by Venue (ms)",
-      "description": "Latency between exchange timestamp and local received time. Negative = future timestamp (clock issue). High positive = network latency or exchange delay.",
-      "gridPos": {"x": 0, "y": 0, "w": 16, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.exchange_ts_ms IS NOT NULL GROUP BY 1, 2 ORDER BY time",
-          "format": "time_series"
-        }
-      ],
+      "type": "stat",
+      "title": "Connected Venues",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) FILTER (WHERE ws_connected = true) || '/' || COUNT(*) AS \"Connected\" FROM connector_health",
+        "format": "table"
+      }],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never"
-          },
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 500, "color": "yellow"},
-              {"value": 1000, "color": "red"}
-            ]
-          }
-        },
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "binance"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
-          {"matcher": {"id": "byName", "options": "coinbase"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "bybit"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
-        ]
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}]}
+        }
       },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "none"},
-        "legend": {"showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max", "min"]}
-      }
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Binance Avg Latency",
-      "description": "Average clock drift from Binance in the last 15 minutes",
-      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'binance' AND q.ts > now() - interval '15 minutes' AND q.exchange_ts_ms IS NOT NULL",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
+      "title": "Hyperliquid WS",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN ws_connected THEN 'CONNECTED' ELSE 'DISCONNECTED' END AS \"Status\" FROM connector_health ch JOIN venues v ON v.id = ch.venue_id WHERE v.name IN ('binance', 'coinbase') AND ws_connected = true ORDER BY ch.updated_at DESC LIMIT 1",
+        "format": "table"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 100, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
+          "mappings": [
+            {"type": "value", "options": {"CONNECTED": {"color": "green", "text": "CONNECTED"}}},
+            {"type": "value", "options": {"DISCONNECTED": {"color": "red", "text": "DISCONNECTED"}}}
+          ],
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}]}
         }
-      }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Coinbase Avg Latency",
-      "description": "Average clock drift from Coinbase in the last 15 minutes",
-      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'coinbase' AND q.ts > now() - interval '15 minutes' AND q.exchange_ts_ms IS NOT NULL",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
+      "title": "Total Reconnects",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT SUM(reconnect_count) AS \"Reconnects\" FROM connector_health",
+        "format": "table"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 100, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 50, "color": "yellow"},
+            {"value": 200, "color": "red"}
+          ]}
         }
-      }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Bybit Avg Latency",
-      "description": "Average clock drift from Bybit in the last 15 minutes",
-      "gridPos": {"x": 16, "y": 4, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(AVG(latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'bybit' AND q.ts > now() - interval '15 minutes' AND q.exchange_ts_ms IS NOT NULL",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
+      "title": "Total Errors",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT SUM(error_count) AS \"Errors\" FROM connector_health",
+        "format": "table"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 100, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 10, "color": "yellow"},
+            {"value": 100, "color": "red"}
+          ]}
         }
-      }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
     },
+
     {
-      "id": 5,
-      "type": "stat",
-      "title": "Future Timestamps (1h)",
-      "description": "Quotes with negative latency (exchange timestamp ahead of local clock). Indicates clock sync issue.",
-      "gridPos": {"x": 20, "y": 4, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM quotes_raw WHERE ts > now() - interval '1 hour' AND latency_ms < 0",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "background",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 1, "color": "yellow"},
-              {"value": 100, "color": "red"}
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 6,
-      "type": "heatmap",
-      "title": "Latency Distribution by Venue (1h)",
-      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT latency_ms, v.name as venue FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms BETWEEN 0 AND 2000 ORDER BY q.ts DESC LIMIT 5000",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "legend": {"showLegend": true, "displayMode": "list", "placement": "right"}
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "hideFrom": {"tooltip": false, "viz": false, "legend": false}
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "latency_ms"},
-            "properties": [
-              {"id": "unit", "value": "ms"},
-              {"id": "custom.fillOpacity", "value": 80}
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Quote Rate by Venue (per minute)",
-      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT date_trunc('minute', ts) as time, v.name as metric, COUNT(*) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY time",
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 0,
-            "fillOpacity": 80,
-            "showPoints": "never",
-            "stacking": {"mode": "normal"}
-          },
-          "decimals": 0
-        },
-        "overrides": [
-          {"matcher": {"id": "byName", "options": "binance"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
-          {"matcher": {"id": "byName", "options": "coinbase"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
-          {"matcher": {"id": "byName", "options": "bybit"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]},
-          {"matcher": {"id": "byName", "options": "uniswap_v3"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
-        ]
-      },
-      "options": {
-        "tooltip": {"mode": "multi", "sort": "none"},
-        "legend": {"showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "sum"]}
-      }
-    },
-    {
-      "id": 8,
-      "type": "stat",
-      "title": "P95 Latency (Binance)",
-      "gridPos": {"x": 0, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'binance' AND q.ts > now() - interval '1 hour' AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms >= 0",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 200, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 9,
-      "type": "stat",
-      "title": "P95 Latency (Coinbase)",
-      "gridPos": {"x": 4, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'coinbase' AND q.ts > now() - interval '1 hour' AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms >= 0",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 200, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
-        }
-      }
+      "id": 101,
+      "type": "row",
+      "title": "Connector Details",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
     },
     {
       "id": 10,
-      "type": "stat",
-      "title": "P95 Latency (Bybit)",
-      "gridPos": {"x": 8, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)) as value FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.name = 'bybit' AND q.ts > now() - interval '1 hour' AND q.exchange_ts_ms IS NOT NULL AND q.latency_ms >= 0",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 200, "color": "yellow"},
-              {"value": 500, "color": "red"}
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 11,
-      "type": "stat",
-      "title": "Max Latency (1h)",
-      "gridPos": {"x": 12, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT MAX(latency_ms) as value FROM quotes_raw WHERE ts > now() - interval '1 hour' AND exchange_ts_ms IS NOT NULL AND latency_ms >= 0",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 1000, "color": "yellow"},
-              {"value": 3000, "color": "red"}
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 12,
-      "type": "stat",
-      "title": "Stale Quotes (1h)",
-      "gridPos": {"x": 16, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM quotes_raw WHERE ts > now() - interval '1 hour' AND is_stale = true",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "background",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 10, "color": "yellow"},
-              {"value": 100, "color": "red"}
-            ]
-          }
-        }
-      }
-    },
-    {
-      "id": 13,
-      "type": "stat",
-      "title": "Total Quotes (1h)",
-      "gridPos": {"x": 20, "y": 16, "w": 4, "h": 4},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) as value FROM quotes_raw WHERE ts > now() - interval '1 hour'",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "value_and_name"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"value": null, "color": "blue"}]
-          }
-        }
-      }
-    },
-    {
-      "id": 14,
       "type": "table",
-      "title": "Connector Health Summary",
-      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 6},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT v.name as venue, COUNT(*) as quotes_1h, ROUND(AVG(latency_ms)) as avg_latency_ms, ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)) as p95_latency_ms, MAX(latency_ms) as max_latency_ms, SUM(CASE WHEN latency_ms < 0 THEN 1 ELSE 0 END) as future_ts_count, SUM(CASE WHEN is_stale THEN 1 ELSE 0 END) as stale_count, MAX(q.ts) as last_quote_at FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE q.ts > now() - interval '1 hour' GROUP BY v.name ORDER BY v.name",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "showHeader": true
-      },
+      "title": "Connector Health Details",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT v.name AS \"Venue\", ch.ws_connected AS \"Connected\", ch.last_quote_at AS \"Last Quote\", ROUND(EXTRACT(EPOCH FROM (now() - ch.last_quote_at))::numeric, 0) AS \"Stale (s)\", ch.reconnect_count AS \"Reconnects\", ch.error_count AS \"Errors\", ch.updated_at AS \"Updated\" FROM connector_health ch JOIN venues v ON v.id = ch.venue_id ORDER BY ch.ws_connected DESC, ch.last_quote_at DESC NULLS LAST",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Stale (s)", "desc": false}]},
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {"custom": {"align": "auto"}},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "avg_latency_ms"}, "properties": [{"id": "unit", "value": "ms"}]},
-          {"matcher": {"id": "byName", "options": "p95_latency_ms"}, "properties": [{"id": "unit", "value": "ms"}]},
-          {"matcher": {"id": "byName", "options": "max_latency_ms"}, "properties": [{"id": "unit", "value": "ms"}]},
-          {"matcher": {"id": "byName", "options": "future_ts_count"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 1, "color": "red"}]}}]},
-          {"matcher": {"id": "byName", "options": "stale_count"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 10, "color": "yellow"}, {"value": 100, "color": "red"}]}}]}
+          {
+            "matcher": {"id": "byName", "options": "Connected"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"true": {"color": "green", "text": "Yes"}}},
+                {"type": "value", "options": {"false": {"color": "red", "text": "No"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Stale (s)"},
+            "properties": [
+              {"id": "unit", "value": "s"},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 30, "color": "yellow"},
+                {"value": 60, "color": "red"}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Errors"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "red"}
+              ]}}
+            ]
+          }
         ]
       }
     },
+
     {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Time Alignment Skew (CEX vs DEX observed_at)",
-      "description": "Difference between when we received the CEX quote vs DEX quote. Large values indicate temporal mismatch in comparisons.",
-      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 8},
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "WITH cex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'cex' AND v.name = 'binance' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()), dex_quotes AS (SELECT ts, received_ts_ms, pair_id FROM quotes_raw q JOIN venues v ON v.id = q.venue_id WHERE v.venue_type = 'dex' AND q.ts BETWEEN $__timeFrom() AND $__timeTo()) SELECT date_trunc('minute', c.ts) as time, 'cex_dex_skew' as metric, ROUND(AVG(ABS(c.received_ts_ms - d.received_ts_ms))) as value FROM cex_quotes c JOIN dex_quotes d ON c.pair_id = d.pair_id AND ABS(EXTRACT(EPOCH FROM (c.ts - d.ts))) < 60 GROUP BY 1 ORDER BY time",
-          "format": "time_series"
-        }
-      ],
+      "id": 102,
+      "type": "row",
+      "title": "Market Context Service",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Last Market Context Poll",
+      "gridPos": {"x": 0, "y": 15, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(EXTRACT(EPOCH FROM (now() - to_timestamp(MAX(\"timestamp\") / 1000)))::numeric, 0) AS \"Seconds Ago\" FROM market_context_snapshots",
+        "format": "table"
+      }],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "thresholdsStyle": {"mode": "line+area"}
-          },
-          "unit": "ms",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "green"},
-              {"value": 1500, "color": "yellow"},
-              {"value": 3000, "color": "red"}
-            ]
-          }
+          "unit": "s",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 300, "color": "yellow"},
+            {"value": 600, "color": "red"}
+          ]}
         }
       },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Assets Tracked",
+      "gridPos": {"x": 8, "y": 15, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(DISTINCT asset) AS \"Assets\" FROM market_context_snapshots WHERE to_timestamp(\"timestamp\" / 1000) > now() - interval '1 hour'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 50, "color": "yellow"},
+            {"value": 80, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Snapshots (1h)",
+      "gridPos": {"x": 16, "y": 15, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Snapshots\" FROM market_context_snapshots WHERE to_timestamp(\"timestamp\" / 1000) > now() - interval '1 hour'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Signal Pipeline",
+      "gridPos": {"x": 0, "y": 19, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Last Signal",
+      "gridPos": {"x": 0, "y": 20, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(EXTRACT(EPOCH FROM (now() - to_timestamp(MAX(\"timestamp\") / 1000)))::numeric, 0) AS \"Seconds Ago\" FROM pca_signals",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 300, "color": "yellow"},
+            {"value": 600, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Unresolved Signals",
+      "gridPos": {"x": 8, "y": 20, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM pca_signals WHERE resolved = false",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "blue"},
+            {"value": 10, "color": "yellow"},
+            {"value": 50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Signals (1h)",
+      "gridPos": {"x": 16, "y": 20, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Signals\" FROM pca_signals WHERE to_timestamp(\"timestamp\" / 1000) > now() - interval '1 hour'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 1, "color": "yellow"},
+            {"value": 5, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Signal Rate",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Signals per Hour",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('hour', to_timestamp(\"timestamp\" / 1000)) AS time, direction AS metric, COUNT(*) AS value FROM pca_signals WHERE to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY 1, 2 ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "fillOpacity": 80, "lineWidth": 0, "stacking": {"mode": "normal"}},
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "long"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "random_short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]}
+        ]
+      },
       "options": {
-        "tooltip": {"mode": "multi", "sort": "none"},
-        "legend": {"showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Kill Switch History",
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 50,
+      "type": "table",
+      "title": "Recent Kill Switch Events",
+      "gridPos": {"x": 0, "y": 34, "w": 24, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT created_at AS \"Time\", run_id AS \"Run\", reason AS \"Reason\", ROUND(daily_pnl::numeric, 2) AS \"Daily PnL ($)\", consecutive_losses AS \"Consec Losses\", positions_closed_count AS \"Closed\" FROM perps_kill_switch_events ORDER BY created_at DESC LIMIT 10",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Time", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Reason"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}
+            ]
+          }
+        ]
       }
     }
   ]

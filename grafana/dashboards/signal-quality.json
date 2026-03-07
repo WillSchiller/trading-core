@@ -1,0 +1,412 @@
+{
+  "id": null,
+  "uid": "signal-quality",
+  "title": "Signal Quality",
+  "tags": ["pca-stat-arb", "research"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-7d", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "direction",
+        "label": "Direction",
+        "type": "custom",
+        "query": "All : All,short : short,long : long,random_short : random_short",
+        "current": {"text": "All", "value": "All"},
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "asset",
+        "label": "Asset",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT asset FROM pca_signals ORDER BY asset",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "all",
+        "refresh": 2,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Signals",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Signals\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "blue"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Avg PnL (bps)",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Win Rate",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / COUNT(*)::numeric, 1) ELSE 0 END AS \"Win %\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total PnL (bps)",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total bps\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg Hold (min)",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(hold_time_ms / 60000.0)::numeric, 1) AS \"Avg Hold\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "min", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "green"}, {"value": 30, "color": "yellow"}, {"value": 60, "color": "red"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Avg Peak (bps)",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(AVG(peak_pnl_bps)::numeric, 2) AS \"Avg Peak\" FROM pca_signals WHERE resolved = true AND peak_pnl_bps IS NOT NULL AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}')",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": 0, "color": "yellow"}, {"value": 10, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Signal vs Benchmark",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "barchart",
+      "title": "Avg PnL by Direction",
+      "gridPos": {"x": 0, "y": 6, "w": 8, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT direction AS \"Direction\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", COUNT(*) AS \"Count\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY direction ORDER BY direction",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}},
+        "overrides": []
+      },
+      "options": {"orientation": "horizontal", "xTickLabelRotation": 0, "showValue": "always", "barWidth": 0.7}
+    },
+    {
+      "id": 11,
+      "type": "piechart",
+      "title": "Exit Reason Distribution",
+      "gridPos": {"x": 8, "y": 6, "w": 8, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(exit_reason, 'unknown') AS \"Reason\", COUNT(*)::float AS \"Count\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY exit_reason ORDER BY COUNT(*) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {}},
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^Count$/"}
+      }
+    },
+    {
+      "id": 12,
+      "type": "barchart",
+      "title": "PnL by Exit Reason",
+      "gridPos": {"x": 16, "y": 6, "w": 8, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COALESCE(exit_reason, 'unknown') AS \"Exit Reason\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total (bps)\", COUNT(*) AS \"N\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY exit_reason ORDER BY AVG(pnl_bps) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+      },
+      "options": {"orientation": "horizontal", "showValue": "always", "barWidth": 0.7}
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Funding & Market Context",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "barchart",
+      "title": "PnL by Funding Bucket",
+      "gridPos": {"x": 0, "y": 15, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN (market_context->>'funding')::numeric < -0.0001 THEN 'very neg (<-1bp)' WHEN (market_context->>'funding')::numeric < 0 THEN 'slightly neg' WHEN (market_context->>'funding')::numeric < 0.0001 THEN 'slightly pos' ELSE 'very pos (>1bp)' END AS \"Funding Bucket\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", COUNT(*) AS \"N\" FROM pca_signals WHERE resolved = true AND market_context IS NOT NULL AND market_context->>'funding' IS NOT NULL AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY 1 ORDER BY MIN((market_context->>'funding')::numeric)",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+      },
+      "options": {"orientation": "vertical", "showValue": "always", "barWidth": 0.7}
+    },
+    {
+      "id": 21,
+      "type": "barchart",
+      "title": "PnL by PC1 Displacement Bucket",
+      "gridPos": {"x": 12, "y": 15, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN pc1_displacement_bps IS NULL THEN 'no data' WHEN pc1_displacement_bps < -50 THEN '< -50 bps' WHEN pc1_displacement_bps < -25 THEN '-50 to -25' WHEN pc1_displacement_bps < 0 THEN '-25 to 0' WHEN pc1_displacement_bps < 25 THEN '0 to 25' WHEN pc1_displacement_bps < 50 THEN '25 to 50' ELSE '> 50 bps' END AS \"PC1 Bucket\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", COUNT(*) AS \"N\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY 1 ORDER BY MIN(COALESCE(pc1_displacement_bps, -9999))",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+      },
+      "options": {"orientation": "vertical", "showValue": "always", "barWidth": 0.7}
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Daily Consistency",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Daily PnL (bps) by Direction",
+      "gridPos": {"x": 0, "y": 24, "w": 16, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('day', to_timestamp(\"timestamp\" / 1000)) AS time, direction AS metric, ROUND(SUM(pnl_bps)::numeric, 1) AS value FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY 1, 2 ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "fillOpacity": 80, "lineWidth": 0, "stacking": {"mode": "normal"}},
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "long"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "random_short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Signal Count / Day",
+      "gridPos": {"x": 16, "y": 24, "w": 8, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('day', to_timestamp(\"timestamp\" / 1000)) AS time, direction AS metric, COUNT(*) AS value FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY 1, 2 ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "fillOpacity": 80, "lineWidth": 0, "stacking": {"mode": "normal"}},
+          "unit": "short",
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "long"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "random_short"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Per-Asset Performance",
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "table",
+      "title": "Asset Performance Table",
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 12},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", COUNT(*) AS \"Signals\", ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total (bps)\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0)::numeric, 1) AS \"Win %\", ROUND(AVG(peak_pnl_bps)::numeric, 2) AS \"Avg Peak\", ROUND(AVG(trough_pnl_bps)::numeric, 2) AS \"Avg Trough\", ROUND(AVG(hold_time_ms / 60000.0)::numeric, 1) AS \"Avg Hold (min)\", ROUND(AVG(CASE WHEN exit_reason = 'trailing_stop' THEN pnl_bps END)::numeric, 2) AS \"TS Avg\", COUNT(*) FILTER (WHERE exit_reason = 'trailing_stop') AS \"TS Count\" FROM pca_signals WHERE resolved = true AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${direction}' = 'All' OR direction = '${direction}') GROUP BY asset HAVING COUNT(*) >= 3 ORDER BY SUM(pnl_bps) DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Total (bps)", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Total (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Win %"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Filter Analysis",
+      "gridPos": {"x": 0, "y": 45, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 50,
+      "type": "table",
+      "title": "PnL by Filter Combo (Short signals)",
+      "gridPos": {"x": 0, "y": 46, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN COALESCE(pc1_displacement_bps, 0) >= 25 THEN 'counter-trend' ELSE 'with-trend' END AS \"PC1 Filter\", CASE WHEN market_context IS NOT NULL AND (market_context->>'funding')::numeric < 0 THEN 'neg funding' ELSE 'pos/no funding' END AS \"Funding Filter\", COUNT(*) AS \"Signals\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0)::numeric, 1) AS \"Win %\", ROUND(AVG(hold_time_ms / 60000.0)::numeric, 1) AS \"Avg Hold (min)\" FROM pca_signals WHERE resolved = true AND direction = 'short' AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY 1, 2 ORDER BY AVG(pnl_bps) DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "filterable": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Avg PnL (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Total (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Win %"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": 0, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 60, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 51,
+      "type": "table",
+      "title": "Short vs Random Short Comparison",
+      "gridPos": {"x": 0, "y": 54, "w": 24, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT direction AS \"Direction\", COUNT(*) AS \"Signals\", ROUND(AVG(pnl_bps)::numeric, 2) AS \"Avg PnL (bps)\", ROUND(SUM(pnl_bps)::numeric, 1) AS \"Total (bps)\", ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_bps > 0) / NULLIF(COUNT(*), 0)::numeric, 1) AS \"Win %\", ROUND(AVG(peak_pnl_bps)::numeric, 2) AS \"Avg Peak\", ROUND(AVG(trough_pnl_bps)::numeric, 2) AS \"Avg Trough\", ROUND(AVG(hold_time_ms / 60000.0)::numeric, 1) AS \"Avg Hold (min)\", ROUND(STDDEV(pnl_bps)::numeric, 2) AS \"StdDev (bps)\" FROM pca_signals WHERE resolved = true AND direction IN ('short', 'random_short') AND to_timestamp(\"timestamp\" / 1000) BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz AND ('${asset}' = 'all' OR asset = '${asset}') GROUP BY direction ORDER BY direction",
+        "format": "table"
+      }],
+      "options": {"showHeader": true},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Avg PnL (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
