@@ -23,7 +23,8 @@
     "ec2:stop": "./scripts/ec2-control.sh stop",
     "ec2:status": "./scripts/ec2-control.sh status",
     "ec2:ssh": "./scripts/ec2-control.sh ssh",
-    "ec2:logs": "./scripts/ec2-control.sh logs"
+    "ec2:logs": "./scripts/ec2-control.sh logs",
+    "analyze": "tsx scripts/analyze-signals.ts"
   },
   "keywords": [
     "trading",
