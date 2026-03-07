@@ -204,6 +204,7 @@ export interface PCAShortConfig {
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
   bounceFail?: PCABounceFailConfig;
+  counterTrendOnly?: boolean;
 }
 
 export interface PCAHeatScalingConfig {
