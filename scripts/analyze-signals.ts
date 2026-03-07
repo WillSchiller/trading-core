@@ -130,6 +130,60 @@ async function run() {
     GROUP BY 1
   `), 'BOUNCE FAIL SHADOW RECOVERY');
 
+  // 9. Counter-trend gate simulation — across ALL historical data with bounce_fail
+  table(await query(`
+    SELECT
+      filter,
+      cnt,
+      avg_pnl,
+      total_pnl,
+      win_pct,
+      trailing_pct,
+      bf_pct,
+      avg_residual_pnl
+    FROM (
+      SELECT 'all_shorts' as filter,
+        COUNT(*) as cnt,
+        ROUND(AVG(pnl_bps)::numeric, 1) as avg_pnl,
+        ROUND(SUM(pnl_bps)::numeric, 0) as total_pnl,
+        ROUND(100.0 * COUNT(CASE WHEN pnl_bps > 0 THEN 1 END) / COUNT(*)::numeric, 1) as win_pct,
+        ROUND(100.0 * COUNT(CASE WHEN exit_reason = 'trailing_stop' THEN 1 END) / COUNT(*)::numeric, 1) as trailing_pct,
+        ROUND(100.0 * COUNT(CASE WHEN exit_reason = 'bounce_fail' THEN 1 END) / COUNT(*)::numeric, 1) as bf_pct,
+        ROUND(AVG(residual_pnl_bps)::numeric, 1) as avg_residual_pnl
+      FROM pca_signals
+      WHERE direction = 'short' AND resolved = true AND pc1_pnl_bps IS NOT NULL
+        AND ((created_at >= '2026-02-09' AND created_at < '2026-02-14') OR created_at > '2026-03-05')
+      UNION ALL
+      SELECT 'counter_trend_only' as filter,
+        COUNT(*) as cnt,
+        ROUND(AVG(pnl_bps)::numeric, 1) as avg_pnl,
+        ROUND(SUM(pnl_bps)::numeric, 0) as total_pnl,
+        ROUND(100.0 * COUNT(CASE WHEN pnl_bps > 0 THEN 1 END) / COUNT(*)::numeric, 1) as win_pct,
+        ROUND(100.0 * COUNT(CASE WHEN exit_reason = 'trailing_stop' THEN 1 END) / COUNT(*)::numeric, 1) as trailing_pct,
+        ROUND(100.0 * COUNT(CASE WHEN exit_reason = 'bounce_fail' THEN 1 END) / COUNT(*)::numeric, 1) as bf_pct,
+        ROUND(AVG(residual_pnl_bps)::numeric, 1) as avg_residual_pnl
+      FROM pca_signals
+      WHERE direction = 'short' AND resolved = true AND pc1_pnl_bps IS NOT NULL AND pc1_return > 0.001
+        AND ((created_at >= '2026-02-09' AND created_at < '2026-02-14') OR created_at > '2026-03-05')
+    ) sub ORDER BY filter
+  `), 'SIMULATION: counterTrendOnly gate (all data with bounce_fail active)');
+
+  // 10. Counter-trend gate by period
+  table(await query(`
+    SELECT
+      CASE WHEN created_at < '2026-02-14' THEN 'feb9_14' ELSE 'post_mar5' END as period,
+      CASE WHEN pc1_return > 0.001 THEN 'counter_trend' ELSE 'with_trend' END as entry_type,
+      COUNT(*) as cnt,
+      ROUND(AVG(pnl_bps)::numeric, 1) as avg_pnl,
+      ROUND(SUM(pnl_bps)::numeric, 0) as total_pnl,
+      ROUND(AVG(residual_pnl_bps)::numeric, 1) as residual_pnl,
+      ROUND(100.0 * COUNT(CASE WHEN exit_reason = 'trailing_stop' THEN 1 END) / COUNT(*)::numeric, 1) as trailing_pct
+    FROM pca_signals
+    WHERE direction = 'short' AND resolved = true AND pc1_pnl_bps IS NOT NULL
+      AND ((created_at >= '2026-02-09' AND created_at < '2026-02-14') OR created_at > '2026-03-05')
+    GROUP BY 1, 2 ORDER BY 1, 2
+  `), 'SIMULATION: counter-trend by period (consistency check)');
+
   await pool.end();
   console.log('\nDone.');
 }
