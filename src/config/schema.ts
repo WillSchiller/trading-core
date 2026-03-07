@@ -205,6 +205,7 @@ const longConfigSchema = z.object({
   zeroCrossExit: z.boolean().default(true),
   stopLossBps: z.number().positive().default(150),
   requireRegimeConfirmation: z.boolean().default(true),
+  minFundingRate: z.number().optional(),
 }).default({
   enabled: true,
   entryZScore: 3.0,

@@ -85,6 +85,7 @@ export interface LongConfig {
   zeroCrossExit: boolean;
   stopLossBps: number;
   requireRegimeConfirmation: boolean;
+  minFundingRate?: number;
 }
 
 export interface TrailingExitConfig {
@@ -1329,6 +1330,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     const longConfig = this.config.long;
     const threshold = longConfig.entryZScore ?? this.config.entryZScore;
     if (zScore > -threshold) return 0;
+
+    if (longConfig.minFundingRate != null && this.marketContextProvider) {
+      const ctx = this.marketContextProvider(asset);
+      if (!ctx || ctx.funding > longConfig.minFundingRate) return 0;
+    }
 
     if (this.config.blockedHoursUtc?.length) {
       const hourUtc = new Date().getUTCHours();

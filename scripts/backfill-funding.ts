@@ -18,7 +18,7 @@ async function run() {
   const signals = await pool.query(`
     SELECT DISTINCT asset, MIN(timestamp) as min_ts, MAX(timestamp) as max_ts
     FROM pca_signals
-    WHERE direction = 'short' AND resolved = true AND market_context IS NULL
+    WHERE resolved = true AND market_context IS NULL
     GROUP BY asset
   `);
 
@@ -44,7 +44,7 @@ async function run() {
 
       const assetSignals = await pool.query(
         `SELECT id, timestamp FROM pca_signals
-         WHERE asset = $1 AND direction = 'short' AND resolved = true AND market_context IS NULL`,
+         WHERE asset = $1 AND resolved = true AND market_context IS NULL`,
         [asset]
       );
 

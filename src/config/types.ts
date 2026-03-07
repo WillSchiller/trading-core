@@ -182,6 +182,7 @@ export interface PCALongConfig {
   zeroCrossExit: boolean;
   stopLossBps: number;
   requireRegimeConfirmation: boolean;
+  minFundingRate?: number;
 }
 
 export interface PCABounceFailConfig {
