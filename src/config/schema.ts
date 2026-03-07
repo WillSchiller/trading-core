@@ -238,6 +238,7 @@ const shortConfigSchema = z.object({
   bounceFail: bounceFailConfigSchema,
   minPC1ReturnBps: z.number().optional(),
   maxFundingRate: z.number().optional(),
+  maxBookBidImbalance: z.number().optional(),
 }).default({
   entryZScore: 2.5,
   exitZScore: 0.0,

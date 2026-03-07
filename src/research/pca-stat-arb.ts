@@ -116,6 +116,7 @@ export interface ShortConfig {
   bounceFail?: BounceFailConfig;
   minPC1ReturnBps?: number;
   maxFundingRate?: number;
+  maxBookBidImbalance?: number;
 }
 
 export interface HeatScalingConfig {
@@ -294,7 +295,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
   private smoothedPC1Loadings: Map<string, number> = new Map();
-  private marketContextProvider?: (asset: string) => { funding: number } | undefined;
+  private marketContextProvider?: (asset: string) => { funding: number; bookImbalance?: number } | undefined;
 
   constructor(config: Partial<PCAConfig>) {
     super();
@@ -308,7 +309,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     }
   }
 
-  setMarketContextProvider(provider: (asset: string) => { funding: number } | undefined): void {
+  setMarketContextProvider(provider: (asset: string) => { funding: number; bookImbalance?: number } | undefined): void {
     this.marketContextProvider = provider;
   }
 
@@ -1371,9 +1372,12 @@ export class PCAStatArbMonitor extends EventEmitter {
       if (lastPC1 * 10000 < shortConfig.minPC1ReturnBps) return 0;
     }
 
-    if (shortConfig.maxFundingRate != null && this.marketContextProvider) {
+    if (this.marketContextProvider) {
       const ctx = this.marketContextProvider(asset);
-      if (ctx && ctx.funding > shortConfig.maxFundingRate) return 0;
+      if (ctx) {
+        if (shortConfig.maxFundingRate != null && ctx.funding > shortConfig.maxFundingRate) return 0;
+        if (shortConfig.maxBookBidImbalance != null && ctx.bookImbalance !== undefined && ctx.bookImbalance > shortConfig.maxBookBidImbalance) return 0;
+      }
     }
 
     if (this.config.blockedHoursUtc?.length) {

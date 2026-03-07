@@ -206,6 +206,7 @@ export interface PCAShortConfig {
   bounceFail?: PCABounceFailConfig;
   minPC1ReturnBps?: number;
   maxFundingRate?: number;
+  maxBookBidImbalance?: number;
 }
 
 export interface PCAHeatScalingConfig {

@@ -8,6 +8,8 @@ export interface AssetContext {
   premium: number;
   oraclePx: number;
   markPx: number;
+  bookImbalance?: number;
+  bookImbalanceTs?: number;
 }
 
 export class MarketContextService {
@@ -46,7 +48,7 @@ export class MarketContextService {
   getContextSnapshot(asset: string): Record<string, number> | null {
     const ctx = this.context.get(asset);
     if (!ctx) return null;
-    return {
+    const snap: Record<string, number> = {
       funding: ctx.funding,
       openInterest: ctx.openInterest,
       dayNtlVlm: ctx.dayNtlVlm,
@@ -54,6 +56,43 @@ export class MarketContextService {
       oraclePx: ctx.oraclePx,
       markPx: ctx.markPx,
     };
+    if (ctx.bookImbalance !== undefined) snap.bookImbalance = ctx.bookImbalance;
+    return snap;
+  }
+
+  async fetchBookImbalance(asset: string, nLevels = 10): Promise<number | undefined> {
+    try {
+      const resp = await fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'l2Book', coin: asset, nSigFigs: 5, depth: nLevels }),
+      });
+      if (!resp.ok) return undefined;
+
+      const data = await resp.json() as { levels: [Array<{ px: string; sz: string; n: number }>, Array<{ px: string; sz: string; n: number }>] };
+      const [bids, asks] = data.levels;
+      if (!bids?.length || !asks?.length) return undefined;
+
+      let bidVol = 0;
+      let askVol = 0;
+      for (const b of bids) bidVol += parseFloat(b.sz) * parseFloat(b.px);
+      for (const a of asks) askVol += parseFloat(a.sz) * parseFloat(a.px);
+
+      const total = bidVol + askVol;
+      if (total === 0) return undefined;
+
+      const imbalance = (bidVol - askVol) / total;
+
+      const ctx = this.context.get(asset);
+      if (ctx) {
+        ctx.bookImbalance = imbalance;
+        ctx.bookImbalanceTs = Date.now();
+      }
+
+      return imbalance;
+    } catch {
+      return undefined;
+    }
   }
 
   private async poll(): Promise<void> {
@@ -92,6 +131,8 @@ export class MarketContextService {
 
       this.logger.debug({ updated }, 'Market context updated');
 
+      await this.pollBooks();
+
       const now = Date.now();
       if (now - this.lastSnapshot >= this.snapshotIntervalMs) {
         this.lastSnapshot = now;
@@ -99,6 +140,15 @@ export class MarketContextService {
       }
     } catch (err) {
       this.logger.warn({ error: (err as Error).message }, 'Market context poll failed');
+    }
+  }
+
+  private async pollBooks(): Promise<void> {
+    const assets = Array.from(this.assets);
+    const BATCH = 10;
+    for (let i = 0; i < assets.length; i += BATCH) {
+      const batch = assets.slice(i, i + BATCH);
+      await Promise.all(batch.map(a => this.fetchBookImbalance(a)));
     }
   }
 
