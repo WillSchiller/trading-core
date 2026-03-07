@@ -114,7 +114,7 @@ export interface ShortConfig {
   stallExitMs?: number;
   stallExitMinPeakBps?: number;
   bounceFail?: BounceFailConfig;
-  counterTrendOnly?: boolean;
+  minPC1ReturnBps?: number;
 }
 
 export interface HeatScalingConfig {
@@ -1358,11 +1358,11 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (zScore < threshold) return 0;
     if (shortConfig.maxEntryZScore && zScore > shortConfig.maxEntryZScore) return 0;
 
-    if (shortConfig.counterTrendOnly) {
+    if (shortConfig.minPC1ReturnBps != null) {
       const lastPC1 = this.pc1ReturnHistory.length > 0
         ? this.pc1ReturnHistory[this.pc1ReturnHistory.length - 1]
         : 0;
-      if (lastPC1 <= 0) return 0;
+      if (lastPC1 * 10000 < shortConfig.minPC1ReturnBps) return 0;
     }
 
     if (this.config.blockedHoursUtc?.length) {

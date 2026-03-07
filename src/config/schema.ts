@@ -236,7 +236,7 @@ const shortConfigSchema = z.object({
   stallExitMs: z.number().int().positive().optional(),
   stallExitMinPeakBps: z.number().nonnegative().optional(),
   bounceFail: bounceFailConfigSchema,
-  counterTrendOnly: z.boolean().default(false),
+  minPC1ReturnBps: z.number().optional(),
 }).default({
   entryZScore: 2.5,
   exitZScore: 0.0,
