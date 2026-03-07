@@ -121,17 +121,21 @@ export class PCAPersistence {
   async resolveBenchmarkSignal(event: {
     asset: string; exitPrice: number; pnlBps: number; peakPnlBps: number;
     troughPnlBps: number; holdTimeMs: number; exitReason: string; timestamp: number;
+    pc1PnlBps?: number; residualPnlBps?: number; pc1PctOfTotal?: number;
   }): Promise<void> {
     await this.pool.query(
       `UPDATE pca_signals
        SET resolved = true, exit_timestamp = $1, hold_time_ms = $2, exit_price = $3,
            pnl_bps = $4, exit_reason = $5, peak_pnl_bps = $6, trough_pnl_bps = $7,
-           pnl_usd = $8
-       WHERE id = (SELECT id FROM pca_signals WHERE asset = $9 AND direction = 'random_short' AND resolved = false AND timestamp = $10 LIMIT 1)`,
+           pnl_usd = $8, pc1_pnl_bps = $9, residual_pnl_bps = $10,
+           pc1_pct_of_total = $11
+       WHERE id = (SELECT id FROM pca_signals WHERE asset = $12 AND direction = 'random_short' AND resolved = false AND timestamp = $13 LIMIT 1)`,
       [
         Date.now(), event.holdTimeMs, event.exitPrice, event.pnlBps,
         event.exitReason, event.peakPnlBps, event.troughPnlBps,
         100 * event.pnlBps / 10000,
+        event.pc1PnlBps ?? null, event.residualPnlBps ?? null,
+        event.pc1PctOfTotal != null ? (event.pc1PctOfTotal * 100).toFixed(0) + '%' : null,
         event.asset, event.timestamp,
       ]
     );

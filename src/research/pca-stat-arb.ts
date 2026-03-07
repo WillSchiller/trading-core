@@ -462,7 +462,8 @@ export class PCAStatArbMonitor extends EventEmitter {
 
     this.updateResidualDispersion(signals);
     this.processSignals(signals, now);
-    this.checkBenchmarkExits(now);
+    const currentPC1Return = signals.length > 0 ? (signals[0].factorReturns[0] ?? 0) : 0;
+    this.checkBenchmarkExits(now, currentPC1Return);
     this.updateShadowPositions(signals, now);
     this.logSummary(returns, signals);
 
@@ -609,14 +610,14 @@ export class PCAStatArbMonitor extends EventEmitter {
       lastPnlBps: 0,
       trailingActivated: false,
       cumulativePC1Return: 0,
-      entryPC1Loading: 0,
+      entryPC1Loading: this.getPC1Loading(randomAsset),
     };
 
     this.benchmarkPositions.set(benchmarkKey, position);
     this.emit('benchmark_signal', { ...position, direction: 'random_short' as const });
   }
 
-  private checkBenchmarkExits(now: number): void {
+  private checkBenchmarkExits(now: number, currentPC1Return: number): void {
     const toRemove: string[] = [];
     const trailingCfg = this.config.short.trailingExit;
     const maxHoldTimeMs = this.config.short.maxHoldTimeMs ?? 14400000;
@@ -624,6 +625,8 @@ export class PCAStatArbMonitor extends EventEmitter {
     for (const [key, pos] of this.benchmarkPositions) {
       const currentPrice = this.getCurrentPrice(pos.asset);
       if (currentPrice <= 0) continue;
+
+      pos.cumulativePC1Return += currentPC1Return;
 
       const holdTimeMs = now - pos.timestamp;
       const priceChange = (currentPrice - pos.entryPrice) / pos.entryPrice;
@@ -649,6 +652,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
 
       if (exitReason) {
+        const attribution = this.computeAttribution(pos);
         this.emit('benchmark_exit', {
           asset: pos.asset,
           direction: 'random_short',
@@ -660,6 +664,9 @@ export class PCAStatArbMonitor extends EventEmitter {
           holdTimeMs,
           exitReason,
           timestamp: pos.timestamp,
+          pc1PnlBps: attribution.pc1PnlBps,
+          residualPnlBps: attribution.residualPnlBps,
+          pc1PctOfTotal: attribution.pc1PctOfTotal,
         });
         toRemove.push(key);
       }
