@@ -229,10 +229,7 @@
         "maxTotalExposureUsd": 600,
         "cooldownMs": 30000,
         "maxHoldTimeMsShort": 3600000,
-        "orderType": "maker",
-        "makerTimeoutMs": 60000,
-        "exitMakerTimeoutMs": 10000,
-        "exitFallbackToTaker": true,
+        "orderType": "taker",
         "killSwitch": {
           "dailyDrawdownLimitUsd": 50,
           "maxTotalLossUsd": 200,
