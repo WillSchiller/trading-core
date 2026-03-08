@@ -462,6 +462,7 @@ describe('Grafana Dashboard Validation', () => {
         'v_perps_daily_pnl',
         'v_perps_open_positions',
         'v_perps_performance_by_asset',
+        'market_context_snapshots',
       ];
 
       for (const [file, dashboard] of dashboards) {

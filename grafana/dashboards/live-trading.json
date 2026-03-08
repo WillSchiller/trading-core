@@ -2,7 +2,7 @@
   "id": null,
   "uid": "live-trading",
   "title": "Live Trading",
-  "tags": ["pca-stat-arb", "live"],
+  "tags": ["dislocation-trader", "pca-stat-arb", "live"],
   "timezone": "utc",
   "schemaVersion": 38,
   "version": 1,
@@ -196,7 +196,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized ($)\", leverage AS \"Lev\", ROUND(z_score::numeric, 3) AS \"Z\", ROUND((EXTRACT(EPOCH FROM (now() - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", created_at AS \"Opened\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC",
+        "rawSql": "SELECT run_id AS \"Run\", asset AS \"Asset\", direction AS \"Dir\", ROUND(entry_price::numeric, 4) AS \"Entry\", ROUND(quantity::numeric, 6) AS \"Qty\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(COALESCE(unrealized_pnl, 0)::numeric, 4) AS \"Unrealized ($)\", leverage AS \"Lev\", ROUND(z_score::numeric, 3) AS \"Z\", ROUND((EXTRACT(EPOCH FROM (now() - created_at)) / 60)::numeric, 1) AS \"Hold (min)\", created_at AS \"Opened\" FROM perps_executions WHERE status IN ('open', 'pending_open', 'closing') AND ('${run_id}' = 'All' OR run_id = '${run_id}') ORDER BY created_at DESC LIMIT 50",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Opened", "desc": true}]},

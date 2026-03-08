@@ -2,7 +2,7 @@
   "id": null,
   "uid": "signal-quality",
   "title": "Signal Quality",
-  "tags": ["pca-stat-arb", "research"],
+  "tags": ["dislocation-trader", "pca-stat-arb", "research"],
   "timezone": "utc",
   "schemaVersion": 38,
   "version": 1,
@@ -15,6 +15,12 @@
         "label": "Direction",
         "type": "custom",
         "query": "All : All,short : short,long : long,random_short : random_short",
+        "options": [
+          {"text": "All", "value": "All", "selected": true},
+          {"text": "short", "value": "short", "selected": false},
+          {"text": "long", "value": "long", "selected": false},
+          {"text": "random_short", "value": "random_short", "selected": false}
+        ],
         "current": {"text": "All", "value": "All"},
         "multi": false,
         "includeAll": false
