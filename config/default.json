@@ -203,7 +203,7 @@
       "checkIntervalMs": 60000
     },
     "orderType": "maker",
-    "makerTimeoutMs": 15000,
+    "makerTimeoutMs": 60000,
     "exitMakerTimeoutMs": 10000,
     "exitFallbackToTaker": true,
     "paperFill": {
@@ -230,7 +230,7 @@
         "cooldownMs": 30000,
         "maxHoldTimeMsShort": 3600000,
         "orderType": "maker",
-        "makerTimeoutMs": 15000,
+        "makerTimeoutMs": 60000,
         "exitMakerTimeoutMs": 10000,
         "exitFallbackToTaker": true,
         "killSwitch": {
