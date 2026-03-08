@@ -24,7 +24,8 @@
     "ec2:status": "./scripts/ec2-control.sh status",
     "ec2:ssh": "./scripts/ec2-control.sh ssh",
     "ec2:logs": "./scripts/ec2-control.sh logs",
-    "analyze": "tsx scripts/analyze-signals.ts"
+    "analyze": "tsx scripts/analyze-signals.ts",
+    "analyze:slices": "tsx scripts/analyze-slices.ts"
   },
   "keywords": [
     "trading",
