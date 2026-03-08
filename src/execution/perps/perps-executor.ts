@@ -256,10 +256,19 @@ export class PerpsExecutor {
       if (fillResult.status === 'FILLED') {
         orderResponse = { ...orderResponse, status: 'FILLED', filledQty: roundedQty };
       } else {
-        await this.client.cancelOrder(oid);
-        this.log.info({ asset, oid }, 'Entry ALO timed out — canceled');
-        await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'maker_timeout' });
-        return;
+        try { await this.client.cancelOrder(oid); } catch (e) {
+          this.log.warn({ asset, oid, error: (e as Error).message }, 'Cancel failed (order may have filled)');
+        }
+        const positions = await this.client.getPositions();
+        const pos = positions.find(p => p.symbol === symbol);
+        if (pos) {
+          this.log.warn({ asset, oid, qty: pos.qty, side: pos.side }, 'Position exists after timeout — treating as filled');
+          orderResponse = { ...orderResponse, status: 'FILLED', filledQty: pos.qty };
+        } else {
+          this.log.info({ asset, oid }, 'Entry ALO timed out — canceled, no position');
+          await this.persistence.updateExecution(clientOrderId, { status: 'failed', exitReason: 'maker_timeout' });
+          return;
+        }
       }
     }
 
