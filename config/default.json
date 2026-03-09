@@ -107,7 +107,7 @@
         "regimeThreshold": 0.5,
         "hysteresisTicks": 3,
         "trendGateThresholdBps": 0,
-        "minVolatilityBps": 100
+        "minVolatilityBps": 125
       },
       "exposureLimits": {
         "maxPositionsLong": 3,
