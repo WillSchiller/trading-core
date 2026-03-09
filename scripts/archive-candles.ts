@@ -38,6 +38,11 @@ async function getLatestTimestamp(asset: string): Promise<number | null> {
   return res.rows[0]?.max_ts ?? null;
 }
 
+async function getEarliestTimestamp(asset: string): Promise<number | null> {
+  const res = await pool.query('SELECT MIN(timestamp) as min_ts FROM hl_candles WHERE asset = $1', [asset]);
+  return res.rows[0]?.min_ts ?? null;
+}
+
 async function insertCandles(asset: string, candles: Candle[]) {
   if (candles.length === 0) return 0;
   const values: string[] = [];
@@ -65,26 +70,38 @@ async function run() {
   await pool.query(createSQL);
 
   const hoursBack = parseInt(process.argv[3] || '24', 10);
+  const backfill = process.argv.includes('--backfill');
   const now = Date.now();
   let totalInserted = 0;
 
-  console.log(`Archiving ${hoursBack}h of 1m candles for ${ASSETS.length} assets...`);
+  console.log(`${backfill ? 'Backfilling' : 'Archiving'} ${hoursBack}h of 1m candles for ${ASSETS.length} assets...`);
 
   for (const asset of ASSETS) {
     try {
-      const latest = await getLatestTimestamp(asset);
-      const startTime = latest ? latest + 60000 : now - hoursBack * 3600000;
-      const endTime = now;
+      if (backfill) {
+        const earliest = await getEarliestTimestamp(asset);
+        if (earliest) {
+          const endTime = earliest - 60000;
+          const startTime = endTime - hoursBack * 3600000;
+          const candles = await fetchCandles(asset, startTime, endTime);
+          if (candles.length > 0) {
+            const inserted = await insertCandles(asset, candles);
+            totalInserted += inserted;
+            console.log(`  ${asset}: ${inserted} candles (${new Date(candles[0].t).toISOString().slice(0,16)} → ${new Date(candles[candles.length-1].t).toISOString().slice(0,16)})`);
+          }
+        }
+      } else {
+        const latest = await getLatestTimestamp(asset);
+        const startTime = latest ? latest + 60000 : now - hoursBack * 3600000;
+        const endTime = now;
+        if (startTime >= endTime) continue;
 
-      if (startTime >= endTime) {
-        continue;
-      }
-
-      const candles = await fetchCandles(asset, startTime, endTime);
-      if (candles.length > 0) {
-        const inserted = await insertCandles(asset, candles);
-        totalInserted += inserted;
-        console.log(`  ${asset}: ${inserted} candles (${new Date(candles[0].t).toISOString().slice(0,16)} → ${new Date(candles[candles.length-1].t).toISOString().slice(0,16)})`);
+        const candles = await fetchCandles(asset, startTime, endTime);
+        if (candles.length > 0) {
+          const inserted = await insertCandles(asset, candles);
+          totalInserted += inserted;
+          console.log(`  ${asset}: ${inserted} candles (${new Date(candles[0].t).toISOString().slice(0,16)} → ${new Date(candles[candles.length-1].t).toISOString().slice(0,16)})`);
+        }
       }
 
       await new Promise(r => setTimeout(r, 100));
