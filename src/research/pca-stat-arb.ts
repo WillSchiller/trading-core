@@ -1361,8 +1361,8 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (trendGate !== undefined && this.ewmaMean * 10000 < -trendGate) return 0;
 
     const volMult = this.computeVolMultiplier();
-    if (volMult < 0.1) return 0;
-    return volMult;
+    if (volMult < 1) return 0;
+    return 1;
   }
 
   private shouldEnterShort(zScore: number, asset: string): number {
@@ -1405,8 +1405,8 @@ export class PCAStatArbMonitor extends EventEmitter {
     if (trendGate !== undefined && this.ewmaMean * 10000 > trendGate) return 0;
 
     const volMult = this.computeVolMultiplier();
-    if (volMult < 0.1) return 0;
-    return volMult;
+    if (volMult < 1) return 0;
+    return 1;
   }
 
   private checkExitConditions(
