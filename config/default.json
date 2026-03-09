@@ -124,7 +124,7 @@
       },
       "blockedHoursUtc": [12],
       "long": {
-        "enabled": true,
+        "enabled": false,
         "entryZScore": 2.75,
         "exitZScore": 0.5,
         "maxHoldTimeMs": 3600000,
