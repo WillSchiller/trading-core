@@ -30,7 +30,8 @@ ENV GIT_SHA=$GIT_SHA
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g tsx
 
 RUN groupadd -r trader && \
     useradd -r -g trader -u 1001 trader
@@ -42,6 +43,7 @@ COPY --from=builder --chown=trader:trader /build/dist ./dist
 COPY --from=builder --chown=trader:trader /build/package*.json ./
 COPY --chown=trader:trader config ./config
 COPY --chown=trader:trader sql ./sql
+COPY --chown=trader:trader scripts ./scripts
 
 USER trader
 
