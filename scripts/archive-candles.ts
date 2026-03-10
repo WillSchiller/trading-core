@@ -2,7 +2,7 @@
 import pg from 'pg';
 
 const connString = process.argv[2] || process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'trader'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'dislocation_trader'}`;
-const pool = new pg.Pool({ connectionString: connString, ssl: false });
+const pool = new pg.Pool({ connectionString: connString, ssl: false, max: 1 });
 
 const ASSETS = [
   'BTC','ETH','SOL','HYPE','XRP','BNB','SUI','DOGE','LTC','kPEPE',
