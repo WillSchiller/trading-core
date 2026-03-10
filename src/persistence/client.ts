@@ -31,7 +31,7 @@ export function createPool(config: DbConfig): pg.Pool {
     database: config.database,
     user: config.user,
     password: config.password,
-    max: config.max ?? 10,
+    max: config.max ?? 20,
     connectionTimeoutMillis: config.connectionTimeoutMillis ?? 5000,
     idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
     statement_timeout: config.statementTimeoutMillis ?? 10000,
