@@ -144,6 +144,7 @@ export interface PCATrailingExitConfig {
   enabled: boolean;
   activationPnlBps: number;
   trailStopBps: number;
+  minHoldTimeMs?: number;
 }
 
 export interface PCARegimeGatingConfig {
@@ -237,6 +238,7 @@ export interface PCAStatArbConfig {
   regimeGating: PCARegimeGatingConfig;
   exposureLimits: PCAExposureLimitsConfig;
   sizing: PCASizingConfig;
+  blockedHoursUtc?: number[];
   long: PCALongConfig;
   short: PCAShortConfig;
   orphanCleanup?: PCAOrphanCleanupConfig;

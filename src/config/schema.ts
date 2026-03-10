@@ -146,6 +146,7 @@ const trailingExitConfigSchema = z.object({
   enabled: z.boolean().default(true),
   activationPnlBps: z.number().default(25),
   trailStopBps: z.number().default(20),
+  minHoldTimeMs: z.number().int().nonnegative().optional(),
 }).default({
   enabled: true,
   activationPnlBps: 25,
@@ -283,6 +284,7 @@ export const pcaStatArbConfigSchema = z.object({
   regimeGating: regimeGatingConfigSchema,
   exposureLimits: exposureLimitsConfigSchema,
   sizing: sizingConfigSchema,
+  blockedHoursUtc: z.array(z.number().int().min(0).max(23)).optional(),
   long: longConfigSchema,
   short: shortConfigSchema,
   orphanCleanup: orphanCleanupConfigSchema,

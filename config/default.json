@@ -166,13 +166,13 @@
         },
         "minPC1ReturnBps": 25,
         "maxFundingRate": 0
+      },
+      "heatScaling": {
+        "enabled": true,
+        "decayPerPosition": 0.4,
+        "dispersionThresholdBps": 8,
+        "dispersionPenalty": 0.5
       }
-    },
-    "heatScaling": {
-      "enabled": true,
-      "decayPerPosition": 0.4,
-      "dispersionThresholdBps": 8,
-      "dispersionPenalty": 0.5
     }
   },
   "perpsExecution": {
