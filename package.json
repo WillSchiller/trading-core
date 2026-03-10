@@ -26,7 +26,8 @@
     "ec2:logs": "./scripts/ec2-control.sh logs",
     "analyze": "tsx scripts/analyze-signals.ts",
     "analyze:slices": "tsx scripts/analyze-slices.ts",
-    "archive:candles": "tsx scripts/archive-candles.ts"
+    "archive:candles": "tsx scripts/archive-candles.ts",
+    "archive:funding": "tsx scripts/archive-funding.ts"
   },
   "keywords": [
     "trading",
