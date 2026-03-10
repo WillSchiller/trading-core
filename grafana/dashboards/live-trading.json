@@ -403,6 +403,270 @@
           }
         ]
       }
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Regime Metrics",
+      "gridPos": {"x": 0, "y": 40, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 201,
+      "type": "stat",
+      "title": "Current EWMA Vol",
+      "gridPos": {"x": 0, "y": 41, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(ewma_vol_bps::numeric, 1) AS \"Vol (bps)\" FROM regime_metrics ORDER BY created_at DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 100, "color": "yellow"},
+            {"value": 125, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 202,
+      "type": "stat",
+      "title": "Current PC1",
+      "gridPos": {"x": 4, "y": 41, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(pc1_bps::numeric, 1) AS \"PC1 (bps)\" FROM regime_metrics ORDER BY created_at DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": -50, "color": "red"},
+            {"value": 50, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 203,
+      "type": "stat",
+      "title": "Regime State",
+      "gridPos": {"x": 8, "y": 41, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT regime_state AS \"State\" FROM regime_metrics ORDER BY created_at DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]},
+          "mappings": [
+            {"type": "value", "options": {"neutral": {"text": "NEUTRAL", "color": "blue"}, "trending_up": {"text": "TRENDING UP", "color": "green"}, "trending_down": {"text": "TRENDING DOWN", "color": "red"}}}
+          ]
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "id": 204,
+      "type": "stat",
+      "title": "Dispersion",
+      "gridPos": {"x": 12, "y": 41, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(dispersion_bps::numeric, 1) AS \"Disp (bps)\" FROM regime_metrics ORDER BY created_at DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": 5, "color": "yellow"},
+            {"value": 10, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 210,
+      "type": "timeseries",
+      "title": "EWMA Volatility (bps)",
+      "gridPos": {"x": 0, "y": 45, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, ewma_vol_bps AS \"EWMA Vol\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, 125 AS \"Gate (125bps)\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "pointSize": 3, "spanNulls": true}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Gate (125bps)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 10]}},
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "custom.lineWidth", "value": 1}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "EWMA Vol"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}
+            ]
+          }
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 211,
+      "type": "timeseries",
+      "title": "PC1 Return & Momentum (bps)",
+      "gridPos": {"x": 12, "y": 45, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, pc1_bps AS \"PC1\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, pc1_displacement_bps AS \"PC1 Displacement\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {"lineWidth": 2, "fillOpacity": 5, "pointSize": 3, "spanNulls": true}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "PC1"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "PC1 Displacement"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]
+          }
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 212,
+      "type": "timeseries",
+      "title": "Dispersion & Heat Factor",
+      "gridPos": {"x": 0, "y": 53, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, dispersion_bps AS \"Dispersion\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {"lineWidth": 2, "fillOpacity": 10, "pointSize": 3, "spanNulls": true},
+          "color": {"mode": "fixed", "fixedColor": "purple"}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 213,
+      "type": "timeseries",
+      "title": "EWMA Vol vs Signals",
+      "gridPos": {"x": 12, "y": 53, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, ewma_vol_bps AS \"EWMA Vol\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        },
+        {
+          "refId": "B",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, 125 AS \"Gate\" FROM regime_metrics WHERE $__timeFilter(created_at) ORDER BY created_at",
+          "format": "time_series"
+        },
+        {
+          "refId": "C",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT created_at AS time, ewma_vol_bps AS \"Signal (vol)\" FROM pca_signals WHERE direction = 'short' AND $__timeFilter(created_at) AND z_score BETWEEN 2.75 AND 3.0 AND pc1_return >= 0.0025 ORDER BY created_at",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {"lineWidth": 2, "fillOpacity": 5, "spanNulls": true}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "EWMA Vol"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Gate"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}},
+              {"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [10, 10]}},
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "custom.lineWidth", "value": 1}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Signal (vol)"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "white"}},
+              {"id": "custom.showPoints", "value": "always"},
+              {"id": "custom.pointSize", "value": 8},
+              {"id": "custom.lineWidth", "value": 0}
+            ]
+          }
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}}
     }
   ]
 }
