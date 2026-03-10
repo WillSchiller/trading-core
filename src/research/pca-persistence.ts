@@ -2,6 +2,17 @@ import type { Pool } from 'pg';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { FactorModel, PCASignalEvent, PCAExitEvent, PCAShadowExitEvent, AssetSignal, RegimeState } from './pca-stat-arb.js';
 
+export interface RegimeMetrics {
+  ewmaVolBps: number;
+  pc1Bps: number;
+  pc1Momentum: number;
+  pc1DisplacementBps: number;
+  dispersionBps: number;
+  regimeState: string;
+  heatFactor: number;
+  ewmaMeanBps: number;
+}
+
 export class PCAPersistence {
   private pool: Pool;
   private logger: Logger;
@@ -412,6 +423,18 @@ export class PCAPersistence {
     }
 
     return history;
+  }
+
+  async saveRegimeMetrics(m: RegimeMetrics): Promise<void> {
+    try {
+      await this.pool.query(
+        `INSERT INTO regime_metrics (ewma_vol_bps, pc1_bps, pc1_momentum, pc1_displacement_bps, dispersion_bps, regime_state, heat_factor, ewma_mean_bps)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [m.ewmaVolBps, m.pc1Bps, m.pc1Momentum, m.pc1DisplacementBps, m.dispersionBps, m.regimeState, m.heatFactor, m.ewmaMeanBps]
+      );
+    } catch (error) {
+      this.logger.error({ error: (error as Error).message }, 'Failed to save regime metrics');
+    }
   }
 
   async resolveShadow(event: PCAShadowExitEvent): Promise<void> {

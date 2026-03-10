@@ -600,6 +600,7 @@ async function main() {
         }
       });
 
+      let residualTick = 0;
       monitor.on('residuals', async (signals) => {
         try {
           if (pcaPersistence) {
@@ -607,6 +608,10 @@ async function main() {
             const prices = monitor.getCurrentPrices();
             if (Object.keys(prices).length > 0) {
               await pcaPersistence.updateCurrentPrices(prices);
+            }
+            if (++residualTick % 5 === 0) {
+              const metrics = monitor.getRegimeMetrics();
+              if (metrics) await pcaPersistence.saveRegimeMetrics(metrics);
             }
           }
         } catch (err) {

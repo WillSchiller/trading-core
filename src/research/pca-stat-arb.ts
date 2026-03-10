@@ -292,6 +292,7 @@ export class PCAStatArbMonitor extends EventEmitter {
   private ewmaVar: number = 0;
   private ewmaVol: number = 0;
   private pc1DisplacementBps: number = 0;
+  private lastPc1Return: number = 0;
   private residualDispersionBps: number = 0;
   private pendingRegime: RegimeState = 'neutral';
   private regimeTickCount: number = 0;
@@ -466,6 +467,7 @@ export class PCAStatArbMonitor extends EventEmitter {
     const signals = this.computeSignals(returns, now);
 
     if (signals.length > 0 && signals[0].factorReturns[0] !== undefined) {
+      this.lastPc1Return = signals[0].factorReturns[0];
       this.computeRegimeState(signals[0].factorReturns[0]);
     }
 
@@ -1664,6 +1666,20 @@ export class PCAStatArbMonitor extends EventEmitter {
 
   getRegimeState(): { state: RegimeState; pc1Momentum: number } {
     return { state: this.regimeState, pc1Momentum: this.pc1Momentum };
+  }
+
+  getRegimeMetrics(): { ewmaVolBps: number; pc1Bps: number; pc1Momentum: number; pc1DisplacementBps: number; dispersionBps: number; regimeState: string; heatFactor: number; ewmaMeanBps: number } | null {
+    if (this.tickCount === 0) return null;
+    return {
+      ewmaVolBps: this.ewmaVol * 10000,
+      pc1Bps: this.lastPc1Return * 10000,
+      pc1Momentum: this.pc1Momentum,
+      pc1DisplacementBps: this.pc1DisplacementBps,
+      dispersionBps: this.residualDispersionBps,
+      regimeState: this.regimeState,
+      heatFactor: this.computeHeatFactor(),
+      ewmaMeanBps: this.ewmaMean * 10000,
+    };
   }
 
   getActivePositions(): Map<string, ActivePosition> {
