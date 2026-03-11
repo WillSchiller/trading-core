@@ -594,7 +594,7 @@ async function main() {
         takerFeeBps: 11.5, // spot 7.0 + perp 4.5
         makerFeeBps: 3.5,  // spot 2.0 + perp 1.5
         useMakerOrders: process.env.FUNDING_ARB_USE_MAKER === 'true',
-        spotAssetWhitelist: process.env.FUNDING_ARB_ASSETS?.split(','),
+        spotAssetWhitelist: process.env.FUNDING_ARB_ASSETS?.split(',').filter(Boolean),
       }, pool);
       await fundingArb.start();
 
