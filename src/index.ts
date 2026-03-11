@@ -12,6 +12,7 @@ import { OpportunityDetector } from './detection/index.js';
 import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence, MarketContextService, VolumeTracker } from './research/index.js';
+import { PaperMarketMaker } from './execution/market-maker/index.js';
 import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
@@ -501,6 +502,7 @@ async function main() {
   let pcaPersistence: PCAPersistence | null = null;
   let marketContext: MarketContextService | null = null;
   let volumeTracker: VolumeTracker | null = null;
+  let paperMM: PaperMarketMaker | null = null;
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
@@ -539,6 +541,23 @@ async function main() {
     // Start volume tracker for trade-level data collection
     volumeTracker = new VolumeTracker(pool, pcaConfig.assets);
     await volumeTracker.start();
+
+    // Start paper market maker if enabled
+    if (process.env.PAPER_MM_ENABLED === 'true') {
+      const mmAssets = (process.env.MM_ASSETS || 'kPEPE,ARB,POPCAT,MOODENG,SAGA,DYM,MEME,MANTA,IO').split(',');
+      paperMM = new PaperMarketMaker({
+        assets: mmAssets,
+        positionSizeUsd: Number(process.env.MM_POSITION_SIZE_USD || '200'),
+        maxInventoryUsd: Number(process.env.MM_MAX_INVENTORY_USD || '500'),
+        requoteIntervalMs: 5000,
+        minSpreadBps: 2,
+        skewBpsPerUnit: 1,
+        maxOpenOrders: 4,
+        paperMode: true,
+      }, pool);
+      await paperMM.start();
+      logger.info({ assets: mmAssets }, 'Paper market maker started');
+    }
 
     pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
 
@@ -864,6 +883,7 @@ async function main() {
     logger.info('RankSpace detector stopped');
 
     // Stop PCA first (stops emitting new signals/exits), then executor
+    if (paperMM) paperMM.stop();
     if (volumeTracker) volumeTracker.stop();
     if (marketContext) marketContext.stop();
     if (pcaMonitor) {
