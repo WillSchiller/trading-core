@@ -141,19 +141,17 @@ export class FundingScanner {
     opportunities.sort((a, b) => b.annualizedPct - a.annualizedPct);
     this.lastScan = opportunities;
 
-    if (opportunities.length > 0) {
-      log.info({
-        total: opportunities.length,
-        top: opportunities.slice(0, 10).map(o => ({
-          asset: o.asset,
-          apy: `${o.annualizedPct.toFixed(1)}%`,
-          rate: o.currentFundingRate.toFixed(6),
-          predicted: o.predictedFundingRate.toFixed(6),
-          breakEven: `${o.breakEvenHours.toFixed(1)}h`,
-          hasSpot: o.hasSpot,
-        })),
-      }, 'Funding scan complete');
-    }
+    const above20 = opportunities.filter(o => o.annualizedPct >= 20);
+    log.info({
+      total: opportunities.length,
+      above20pct: above20.length,
+      top: opportunities.slice(0, 5).map(o => ({
+        asset: o.asset,
+        apy: `${o.annualizedPct.toFixed(1)}%`,
+        rate: o.currentFundingRate.toFixed(6),
+        breakEven: `${o.breakEvenHours.toFixed(1)}h`,
+      })),
+    }, 'Funding scan complete');
 
     return opportunities;
   }
