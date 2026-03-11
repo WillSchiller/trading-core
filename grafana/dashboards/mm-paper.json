@@ -18,7 +18,7 @@
         "query": "SELECT DISTINCT asset AS __value, asset AS __text FROM mm_paper_fills ORDER BY asset",
         "multi": true,
         "includeAll": true,
-        "allValue": "%",
+        "allValue": "ALL",
         "refresh": 1,
         "sort": 1,
         "current": {"text": "All", "value": "$__all"}
@@ -257,7 +257,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'buy') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'sell') AS \"Sells\", COUNT(*) AS \"Total\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'buy') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'sell') AS \"Sells\", COUNT(*) AS \"Total\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = 'ALL' OR asset IN (${asset:sqlstring}))",
           "format": "table"
         }
       ],
@@ -443,7 +443,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT to_timestamp(f.timestamp/1000) AS time, f.edge_bps AS \"Edge (bps)\", f.adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills f WHERE to_timestamp(f.timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR f.asset IN (${asset:sqlstring})) ORDER BY f.timestamp",
+          "rawSql": "SELECT to_timestamp(f.timestamp/1000) AS time, f.edge_bps AS \"Edge (bps)\", f.adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills f WHERE to_timestamp(f.timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = 'ALL' OR f.asset IN (${asset:sqlstring})) ORDER BY f.timestamp",
           "format": "table"
         }
       ],
@@ -496,7 +496,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+        "rawSql": "SELECT adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = 'ALL' OR asset IN (${asset:sqlstring}))",
         "format": "table"
       }],
       "fieldConfig": {
@@ -527,7 +527,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT edge_bps AS \"Edge (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+        "rawSql": "SELECT edge_bps AS \"Edge (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = 'ALL' OR asset IN (${asset:sqlstring}))",
         "format": "table"
       }],
       "fieldConfig": {

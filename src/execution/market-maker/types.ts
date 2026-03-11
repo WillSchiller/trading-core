@@ -1,10 +1,13 @@
+export type SideFilter = 'both' | 'buy' | 'sell';
+
 export interface MMConfig {
   assets: string[];
+  assetSideFilter?: Record<string, SideFilter>;
   positionSizeUsd: number;
   maxInventoryUsd: number;
   requoteIntervalMs: number;
   minSpreadBps: number;
-  skewBpsPerUnit: number;  // how much to skew quotes per unit of inventory
+  skewBpsPerUnit: number;
   maxOpenOrders: number;
   paperMode: boolean;
 }
@@ -46,8 +49,8 @@ export interface MMFill {
   notional: number;
   timestamp: number;
   midAtFill: number;
-  edgeBps: number;       // distance from mid in bps
-  // filled in later
+  edgeBps: number;
+  filtered: boolean;  // true = would have been blocked by side filter
   priceAfter1m?: number;
   priceAfter5m?: number;
   adverseSelectionBps?: number;

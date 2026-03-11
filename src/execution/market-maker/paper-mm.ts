@@ -160,19 +160,19 @@ export class PaperMarketMaker {
       // Simple model: if trade notional > $50, we get a proportional fill
       const ourSizeUsd = this.config.positionSizeUsd;
 
+      const sideFilter = this.config.assetSideFilter?.[asset] ?? 'both';
+
       if (isBuy && tradePx >= ourAsk) {
-        // Aggressor bought at our ask level — we sell
         const levelTotal = (book.asks[0]?.sz || 0) * tradePx;
         if (levelTotal <= 0) continue;
         const fillProbability = Math.min(1, ourSizeUsd / (levelTotal + ourSizeUsd));
-        // Only fill if trade is big enough and we win the probability check
         if (tradeNotional < 50 || Math.random() > fillProbability) continue;
 
         const fillSz = Math.min(ourSizeUsd / tradePx, tradeSz * fillProbability);
         const fillNotional = fillSz * ourAsk;
-        this.recordFill(asset, 'sell', ourAsk, fillSz, fillNotional, book.midPrice);
+        const filtered = sideFilter !== 'both' && sideFilter !== 'sell';
+        this.recordFill(asset, 'sell', ourAsk, fillSz, fillNotional, book.midPrice, filtered);
       } else if (!isBuy && tradePx <= ourBid) {
-        // Aggressor sold at our bid level — we buy
         const levelTotal = (book.bids[0]?.sz || 0) * tradePx;
         if (levelTotal <= 0) continue;
         const fillProbability = Math.min(1, ourSizeUsd / (levelTotal + ourSizeUsd));
@@ -180,22 +180,28 @@ export class PaperMarketMaker {
 
         const fillSz = Math.min(ourSizeUsd / tradePx, tradeSz * fillProbability);
         const fillNotional = fillSz * ourBid;
-        this.recordFill(asset, 'buy', ourBid, fillSz, fillNotional, book.midPrice);
+        const filtered = sideFilter !== 'both' && sideFilter !== 'buy';
+        this.recordFill(asset, 'buy', ourBid, fillSz, fillNotional, book.midPrice, filtered);
       }
     }
   }
 
-  private recordFill(asset: string, side: 'buy' | 'sell', price: number, size: number, notional: number, midAtFill: number): void {
+  private recordFill(asset: string, side: 'buy' | 'sell', price: number, size: number, notional: number, midAtFill: number, filtered = false): void {
     const edgeBps = Math.abs(price - midAtFill) / midAtFill * 10000;
     const fill: MMFill = {
       asset, side, price, size, notional,
-      timestamp: Date.now(), midAtFill, edgeBps,
+      timestamp: Date.now(), midAtFill, edgeBps, filtered,
     };
 
     this.fills.push(fill);
     this.pendingAdverseChecks.push({ fill, checkAt: Date.now() + ADVERSE_CHECK_MS });
 
-    // Update position
+    if (filtered) {
+      log.debug({ asset, side, edgeBps: edgeBps.toFixed(2) }, 'Fill blocked by side filter (shadow only)');
+      return;
+    }
+
+    // Update position only for non-filtered fills
     const pos = this.positions.get(asset)!;
     const signedQty = side === 'buy' ? size : -size;
     const oldQty = pos.netQty;
@@ -261,14 +267,15 @@ export class PaperMarketMaker {
     this.pendingAdverseChecks = remaining;
   }
 
-  private getStats(): MMStats {
-    const completedFills = this.fills.filter(f => f.adverseSelectionBps !== undefined);
-    const totalFills = this.fills.length;
-    const totalVolume = this.fills.reduce((sum, f) => sum + f.notional, 0);
+  private getStats(onlyActive = true): MMStats {
+    const fills = onlyActive ? this.fills.filter(f => !f.filtered) : this.fills;
+    const completedFills = fills.filter(f => f.adverseSelectionBps !== undefined);
+    const totalFills = fills.length;
+    const totalVolume = fills.reduce((sum, f) => sum + f.notional, 0);
 
     const rebates = totalFills * MAKER_REBATE_BPS * this.config.positionSizeUsd / 10000;
     const avgEdge = totalFills > 0
-      ? this.fills.reduce((sum, f) => sum + f.edgeBps, 0) / totalFills
+      ? fills.reduce((sum, f) => sum + f.edgeBps, 0) / totalFills
       : 0;
 
     const adverseCost = completedFills.reduce((sum, f) => {
@@ -279,7 +286,7 @@ export class PaperMarketMaker {
     const toxicFills = completedFills.filter(f => (f.adverseSelectionBps || 0) > 0).length;
     const toxicPct = completedFills.length > 0 ? toxicFills / completedFills.length : 0;
 
-    const spreadPnl = this.fills.reduce((sum, f) => sum + f.edgeBps * f.notional / 10000, 0);
+    const spreadPnl = fills.reduce((sum, f) => sum + f.edgeBps * f.notional / 10000, 0);
     const runHours = (Date.now() - this.startTime) / 3600_000;
 
     return {
@@ -296,20 +303,24 @@ export class PaperMarketMaker {
   }
 
   private printStats(): void {
-    const stats = this.getStats();
+    const active = this.getStats(true);
+    const all = this.getStats(false);
     const runHours = (Date.now() - this.startTime) / 3600_000;
 
     log.info({
       runHours: runHours.toFixed(1),
-      fills: stats.totalFills,
-      fillsPerHour: stats.fillsPerHour.toFixed(1),
-      volumeUsd: stats.totalVolumeUsd.toFixed(0),
-      spreadPnl: stats.grossPnl.toFixed(4),
-      rebates: stats.rebatesPnl.toFixed(4),
-      adverseCost: stats.adverseSelectionCost.toFixed(4),
-      netPnl: stats.netPnl.toFixed(4),
-      avgEdgeBps: stats.avgEdgeBps.toFixed(2),
-      toxicPct: (stats.toxicFillPct * 100).toFixed(1) + '%',
+      activeFills: active.totalFills,
+      filteredFills: all.totalFills - active.totalFills,
+      fillsPerHour: active.fillsPerHour.toFixed(1),
+      volumeUsd: active.totalVolumeUsd.toFixed(0),
+      spreadPnl: active.grossPnl.toFixed(4),
+      rebates: active.rebatesPnl.toFixed(4),
+      adverseCost: active.adverseSelectionCost.toFixed(4),
+      netPnl: active.netPnl.toFixed(4),
+      avgEdgeBps: active.avgEdgeBps.toFixed(2),
+      toxicPct: (active.toxicFillPct * 100).toFixed(1) + '%',
+      unfilteredNetPnl: all.netPnl.toFixed(4),
+      unfilteredToxicPct: (all.toxicFillPct * 100).toFixed(1) + '%',
     }, 'Paper MM stats');
 
     // Per-asset breakdown
@@ -367,14 +378,14 @@ export class PaperMarketMaker {
     let idx = 1;
 
     for (const f of unpersisted) {
-      placeholders.push(`($${idx}, $${idx+1}, $${idx+2}, $${idx+3}, $${idx+4}, $${idx+5}, $${idx+6}, $${idx+7})`);
-      values.push(f.timestamp, f.asset, f.side, f.price, f.notional, f.edgeBps, f.adverseSelectionBps, f.midAtFill);
-      idx += 8;
+      placeholders.push(`($${idx}, $${idx+1}, $${idx+2}, $${idx+3}, $${idx+4}, $${idx+5}, $${idx+6}, $${idx+7}, $${idx+8})`);
+      values.push(f.timestamp, f.asset, f.side, f.price, f.notional, f.edgeBps, f.adverseSelectionBps, f.midAtFill, f.filtered);
+      idx += 9;
     }
 
     try {
       await this.pool.query(
-        `INSERT INTO mm_paper_fills (timestamp, asset, side, price, notional, edge_bps, adverse_bps, mid_at_fill)
+        `INSERT INTO mm_paper_fills (timestamp, asset, side, price, notional, edge_bps, adverse_bps, mid_at_fill, filtered)
          VALUES ${placeholders.join(', ')}
          ON CONFLICT DO NOTHING`,
         values

@@ -545,8 +545,21 @@ async function main() {
     // Start paper market maker if enabled
     if (process.env.PAPER_MM_ENABLED === 'true') {
       const mmAssets = (process.env.MM_ASSETS || 'kPEPE,ARB,POPCAT,MOODENG,SAGA,DYM,MEME,MANTA,IO').split(',');
+      // Side filter from env: "kPEPE:buy,DYM:sell,MOODENG:both"
+      const sideFilterMap: Record<string, 'both' | 'buy' | 'sell'> = {};
+      const sideFilterStr = process.env.MM_SIDE_FILTER || '';
+      if (sideFilterStr) {
+        for (const entry of sideFilterStr.split(',')) {
+          const [asset, side] = entry.split(':');
+          if (asset && (side === 'both' || side === 'buy' || side === 'sell')) {
+            sideFilterMap[asset] = side;
+          }
+        }
+      }
+
       paperMM = new PaperMarketMaker({
         assets: mmAssets,
+        assetSideFilter: Object.keys(sideFilterMap).length > 0 ? sideFilterMap : undefined,
         positionSizeUsd: Number(process.env.MM_POSITION_SIZE_USD || '200'),
         maxInventoryUsd: Number(process.env.MM_MAX_INVENTORY_USD || '500'),
         requoteIntervalMs: 5000,
