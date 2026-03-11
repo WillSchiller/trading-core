@@ -591,8 +591,9 @@ async function main() {
         minAnnualizedPct: Number(process.env.FUNDING_ARB_MIN_APY || '20'),
         rotationThresholdPct: Number(process.env.FUNDING_ARB_ROTATION_THRESHOLD || '10'),
         exitBelowAnnualizedPct: Number(process.env.FUNDING_ARB_EXIT_BELOW_APY || '5'),
-        takerFeeBps: 11.5, // spot 7.0 + perp 4.5
-        makerFeeBps: 3.5,  // spot 2.0 + perp 1.5
+        takerFeeBps: 4.5,   // HL perp taker per side
+        makerFeeBps: 1.5,   // HL perp maker per side
+        spotFeeBps: 7.5,    // Binance spot taker per side (0.075% with BNB discount)
         useMakerOrders: process.env.FUNDING_ARB_USE_MAKER === 'true',
         spotAssetWhitelist: process.env.FUNDING_ARB_ASSETS?.split(',').filter(Boolean),
       }, pool);

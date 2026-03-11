@@ -1,8 +1,9 @@
--- Funding rate arbitrage tables
+-- Funding rate arbitrage tables (HL perp short + Binance spot long)
 
 CREATE TABLE IF NOT EXISTS funding_arb_positions (
   id VARCHAR(64) PRIMARY KEY,
   asset VARCHAR(20) NOT NULL,
+  binance_symbol VARCHAR(20),
   status VARCHAR(10) NOT NULL DEFAULT 'open',
   perp_short_qty NUMERIC(24,12) NOT NULL,
   perp_entry_price NUMERIC(24,12) NOT NULL,
@@ -32,11 +33,17 @@ CREATE TABLE IF NOT EXISTS funding_arb_scans (
   current_funding_rate NUMERIC(12,8) NOT NULL,
   predicted_funding_rate NUMERIC(12,8) NOT NULL,
   annualized_pct NUMERIC(10,2) NOT NULL,
-  break_even_hours NUMERIC(8,2) NOT NULL,
-  spot_mid_price NUMERIC(24,12) NOT NULL,
+  break_even_hours NUMERIC(10,2) NOT NULL,
   perp_mid_price NUMERIC(24,12) NOT NULL,
-  basis_bps NUMERIC(8,2) NOT NULL
+  binance_symbol VARCHAR(20)
 );
+
+-- Drop old columns if they exist from previous schema
+DO $$ BEGIN
+  ALTER TABLE funding_arb_scans DROP COLUMN IF EXISTS spot_mid_price;
+  ALTER TABLE funding_arb_scans DROP COLUMN IF EXISTS basis_bps;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_farb_scans_ts ON funding_arb_scans(timestamp);
 CREATE INDEX IF NOT EXISTS idx_farb_scans_asset ON funding_arb_scans(asset, timestamp);

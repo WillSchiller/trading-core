@@ -9,7 +9,7 @@ export class FundingArbManager {
   private config: FundingArbConfig;
   private scanner: FundingScanner;
   private pool: pg.Pool;
-  private positions = new Map<string, FundingArbPosition>(); // asset → position
+  private positions = new Map<string, FundingArbPosition>();
   private rotationTimer: ReturnType<typeof setInterval> | null = null;
   private persistTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -33,7 +33,6 @@ export class FundingArbManager {
       60_000,
     );
 
-    // Initial evaluation after 10s to let scanner populate
     setTimeout(() => this.evaluateRotations().catch(e => log.error({ err: e }, 'Initial rotation error')), 10_000);
 
     log.info({
@@ -62,31 +61,26 @@ export class FundingArbManager {
     const opps = this.scanner.getOpportunities();
     if (opps.length === 0) return;
 
-    // Check existing positions for exit
     for (const [asset, pos] of this.positions) {
       if (pos.status !== 'open') continue;
       const currentOpp = this.scanner.getOpportunityForAsset(asset);
       const currentApy = currentOpp?.annualizedPct ?? 0;
       pos.hoursHeld = (Date.now() - pos.openedAt) / 3_600_000;
 
-      // Exit if funding dropped below threshold
       if (currentApy < this.config.exitBelowAnnualizedPct) {
         log.info({ asset, currentApy: currentApy.toFixed(1), threshold: this.config.exitBelowAnnualizedPct }, 'Funding dropped — closing position');
         await this.closePosition(asset, 'funding_dropped');
         continue;
       }
 
-      // Check rotation: is there a better asset?
       for (const opp of opps) {
         if (opp.asset === asset) continue;
         if (this.positions.has(opp.asset)) continue;
         const apyGain = opp.annualizedPct - currentApy;
         if (apyGain >= this.config.rotationThresholdPct) {
           log.info({
-            from: asset,
-            to: opp.asset,
-            fromApy: currentApy.toFixed(1),
-            toApy: opp.annualizedPct.toFixed(1),
+            from: asset, to: opp.asset,
+            fromApy: currentApy.toFixed(1), toApy: opp.annualizedPct.toFixed(1),
             gain: apyGain.toFixed(1),
           }, 'Rotation opportunity found');
           await this.closePosition(asset, 'rotation');
@@ -96,15 +90,14 @@ export class FundingArbManager {
       }
     }
 
-    // Fill empty slots
     const openSlots = this.config.maxPositions - this.countOpenPositions();
     if (openSlots <= 0) return;
 
     for (const opp of opps) {
       if (this.countOpenPositions() >= this.config.maxPositions) break;
       if (this.positions.has(opp.asset)) continue;
-      if (opp.annualizedPct < this.config.minAnnualizedPct) break; // sorted desc, so stop
-      if (opp.breakEvenHours > 72) continue; // skip if break-even > 3 days
+      if (opp.annualizedPct < this.config.minAnnualizedPct) break;
+      if (opp.breakEvenHours > 72) continue;
       await this.openPosition(opp);
     }
   }
@@ -121,15 +114,18 @@ export class FundingArbManager {
     const id = `farb_${Date.now()}_${opp.asset}`;
     const notional = this.config.positionSizeUsd;
     const perpQty = notional / opp.perpMidPrice;
-    const spotPrice = opp.spotMidPrice > 0 ? opp.spotMidPrice : 0;
-    const spotQty = spotPrice > 0 ? notional / spotPrice : 0;
+    // Spot price ≈ perp price for delta-neutral (close enough for paper)
+    const spotPrice = opp.perpMidPrice;
+    const spotQty = notional / spotPrice;
 
+    // Entry fees: HL perp + Binance spot
     const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
-    const entryFees = (perpFeeBps / 10000) * notional; // perp entry only
+    const entryFees = ((perpFeeBps + this.config.spotFeeBps) / 10000) * notional;
 
     const position: FundingArbPosition = {
       id,
       asset: opp.asset,
+      binanceSymbol: opp.binanceSymbol,
       status: 'open',
       perpShortQty: perpQty.toFixed(6),
       perpEntryPrice: opp.perpMidPrice.toFixed(6),
@@ -141,7 +137,7 @@ export class FundingArbManager {
       accumulatedFunding: 0,
       entryFeesUsd: entryFees,
       exitFeesUsd: 0,
-      realizedPnl: -entryFees, // start negative by entry fees
+      realizedPnl: -entryFees,
       spotPnl: 0,
       perpPnl: 0,
       hoursHeld: 0,
@@ -154,15 +150,14 @@ export class FundingArbManager {
     if (this.config.paperMode) {
       log.info({
         asset: opp.asset,
+        binance: opp.binanceSymbol,
         notional,
         apy: `${opp.annualizedPct.toFixed(1)}%`,
         breakEven: `${opp.breakEvenHours.toFixed(1)}h`,
         entryFees: entryFees.toFixed(2),
         perpPrice: opp.perpMidPrice,
-        spotPrice: opp.spotMidPrice,
-      }, 'PAPER: Opened funding arb position');
+      }, 'PAPER: Opened funding arb (HL short + Binance spot long)');
     } else {
-      // TODO: implement live execution — place spot buy + perp short
       log.warn({ asset: opp.asset }, 'Live execution not yet implemented');
     }
 
@@ -175,21 +170,19 @@ export class FundingArbManager {
 
     const opp = this.scanner.getOpportunityForAsset(asset);
     const currentPerpPrice = opp?.perpMidPrice ?? parseFloat(pos.perpEntryPrice);
-    const currentSpotPrice = opp?.spotMidPrice ?? parseFloat(pos.spotEntryPrice);
+    // Delta-neutral: spot tracks perp, so spot PnL ≈ -perpPnl (net ~0)
+    const currentSpotPrice = currentPerpPrice;
 
-    // Calculate PnL
     const perpEntry = parseFloat(pos.perpEntryPrice);
     const spotEntry = parseFloat(pos.spotEntryPrice);
     const perpQty = parseFloat(pos.perpShortQty);
     const spotQty = parseFloat(pos.spotLongQty);
 
-    // Short perp PnL: (entry - current) * qty
     pos.perpPnl = (perpEntry - currentPerpPrice) * perpQty;
-    // Long spot PnL: (current - entry) * qty
     pos.spotPnl = (currentSpotPrice - spotEntry) * spotQty;
 
     const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
-    pos.exitFeesUsd = (perpFeeBps / 10000) * pos.notionalUsd;
+    pos.exitFeesUsd = ((perpFeeBps + this.config.spotFeeBps) / 10000) * pos.notionalUsd;
 
     pos.realizedPnl = pos.perpPnl + pos.spotPnl + pos.accumulatedFunding - pos.entryFeesUsd - pos.exitFeesUsd;
     pos.status = 'closed';
@@ -197,8 +190,7 @@ export class FundingArbManager {
     pos.hoursHeld = (pos.closedAt - pos.openedAt) / 3_600_000;
 
     log.info({
-      asset,
-      reason,
+      asset, reason,
       hoursHeld: pos.hoursHeld.toFixed(1),
       perpPnl: pos.perpPnl.toFixed(4),
       spotPnl: pos.spotPnl.toFixed(4),
@@ -211,30 +203,25 @@ export class FundingArbManager {
     this.positions.delete(asset);
   }
 
-  // Simulate funding accrual for paper positions
   async accrueHourlyFunding(): Promise<void> {
     for (const [asset, pos] of this.positions) {
       if (pos.status !== 'open') continue;
       const opp = this.scanner.getOpportunityForAsset(asset);
       if (!opp) continue;
 
-      // Funding accrual: rate * notional (positive rate = we receive as shorts)
       const fundingPayment = opp.currentFundingRate * pos.notionalUsd;
       pos.accumulatedFunding += fundingPayment;
 
-      // Update mark-to-market
       const perpEntry = parseFloat(pos.perpEntryPrice);
-      const spotEntry = parseFloat(pos.spotEntryPrice);
       const perpQty = parseFloat(pos.perpShortQty);
-      const spotQty = parseFloat(pos.spotLongQty);
       pos.perpPnl = (perpEntry - opp.perpMidPrice) * perpQty;
-      pos.spotPnl = (opp.spotMidPrice - spotEntry) * spotQty;
+      // Delta-neutral: spot PnL mirrors perp inversely
+      pos.spotPnl = -pos.perpPnl;
 
       log.debug({
         asset,
         fundingPayment: fundingPayment.toFixed(6),
         totalFunding: pos.accumulatedFunding.toFixed(4),
-        mtmPnl: (pos.perpPnl + pos.spotPnl).toFixed(4),
         rate: opp.currentFundingRate.toFixed(6),
       }, 'Funding accrued');
     }
@@ -277,25 +264,24 @@ export class FundingArbManager {
       let idx = 1;
 
       for (const opp of opps) {
-        values.push(`($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++})`);
+        values.push(`($${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++},$${idx++})`);
         params.push(
           new Date(opp.timestamp), opp.asset, opp.currentFundingRate,
           opp.predictedFundingRate, opp.annualizedPct, opp.breakEvenHours,
-          opp.spotMidPrice, opp.perpMidPrice, opp.basisBps,
+          opp.perpMidPrice, opp.binanceSymbol,
         );
       }
 
       await this.pool.query(`
         INSERT INTO funding_arb_scans (
           timestamp, asset, current_funding_rate, predicted_funding_rate,
-          annualized_pct, break_even_hours, spot_mid_price, perp_mid_price, basis_bps
+          annualized_pct, break_even_hours, perp_mid_price, binance_symbol
         ) VALUES ${values.join(',')}
       `, params);
     } catch (err) {
       log.error({ err }, 'Failed to persist scan snapshot');
     }
 
-    // Persist open position snapshots
     for (const pos of this.positions.values()) {
       if (pos.status === 'open') await this.persistPosition(pos);
     }
@@ -310,6 +296,7 @@ export class FundingArbManager {
         const pos: FundingArbPosition = {
           id: row.id,
           asset: row.asset,
+          binanceSymbol: row.binance_symbol ?? '',
           status: row.status,
           perpShortQty: row.perp_short_qty,
           perpEntryPrice: row.perp_entry_price,

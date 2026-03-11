@@ -12,38 +12,37 @@ async function main() {
     minAnnualizedPct: 20,
     rotationThresholdPct: 10,
     exitBelowAnnualizedPct: 5,
-    takerFeeBps: 4.5, // perp-only fees
+    takerFeeBps: 4.5,
     makerFeeBps: 1.5,
+    spotFeeBps: 7.5,
     useMakerOrders: false,
   });
 
-  const opps = await scanner.scan();
-  console.log('Total opportunities (positive funding):', opps.length);
+  await scanner.start();
+  const opps = scanner.getOpportunities();
+
+  console.log('\nTotal delta-neutral opportunities (HL perp + Binance spot):', opps.length);
   console.log('\nTop 20 by APY:');
-  console.log('  ' + 'Asset'.padEnd(10) + 'APY'.padStart(8) + '  ' + 'Rate/hr'.padStart(12) + '  ' + 'Predicted'.padStart(12) + '  ' + 'BreakEven'.padStart(10) + '  ' + 'Price'.padStart(10) + '  Spot?');
-  console.log('  ' + '-'.repeat(75));
+  console.log('  ' + 'Asset'.padEnd(10) + 'APY'.padStart(8) + '  ' + 'Rate/hr'.padStart(12) + '  ' + 'BreakEven'.padStart(10) + '  ' + 'Price'.padStart(10) + '  Binance');
+  console.log('  ' + '-'.repeat(70));
   for (const o of opps.slice(0, 20)) {
     console.log(
       '  ' + o.asset.padEnd(10) +
       (o.annualizedPct.toFixed(1) + '%').padStart(8) + '  ' +
       o.currentFundingRate.toFixed(8).padStart(12) + '  ' +
-      o.predictedFundingRate.toFixed(8).padStart(12) + '  ' +
       (o.breakEvenHours.toFixed(1) + 'h').padStart(10) + '  ' +
       ('$' + o.perpMidPrice.toFixed(2)).padStart(10) + '  ' +
-      (o.hasSpot ? 'YES' : 'no')
+      o.binanceSymbol
     );
   }
 
   console.log('\n--- Summary ---');
-  console.log('Total with positive funding:', opps.length);
   console.log('  >20% APY:', opps.filter(o => o.annualizedPct >= 20).length);
   console.log('  >50% APY:', opps.filter(o => o.annualizedPct >= 50).length);
   console.log('  >100% APY:', opps.filter(o => o.annualizedPct >= 100).length);
-  console.log('  With HL spot pair:', opps.filter(o => o.hasSpot).length);
+  console.log('  At baseline (~10.9%):', opps.filter(o => Math.abs(o.annualizedPct - 10.95) < 0.5).length);
 
-  const baseline = opps.filter(o => Math.abs(o.annualizedPct - 10.95) < 0.5);
-  console.log('  At baseline (10.9% floor):', baseline.length);
-  console.log('  Above baseline:', opps.filter(o => o.annualizedPct > 11.5).length);
+  scanner.stop();
 }
 
 main().catch(console.error);
