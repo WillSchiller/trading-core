@@ -563,10 +563,14 @@ async function main() {
         positionSizeUsd: Number(process.env.MM_POSITION_SIZE_USD || '200'),
         maxInventoryUsd: Number(process.env.MM_MAX_INVENTORY_USD || '500'),
         requoteIntervalMs: 5000,
-        minSpreadBps: 2,
+        minSpreadBps: Number(process.env.MM_MIN_SPREAD_BPS || '2.5'),
         skewBpsPerUnit: 1,
         maxOpenOrders: 4,
         paperMode: true,
+        gamma: Number(process.env.MM_GAMMA || '0.3'),
+        ofiThreshold: Number(process.env.MM_OFI_THRESHOLD || '0.6'),
+        vpinThreshold: Number(process.env.MM_VPIN_THRESHOLD || '0.7'),
+        volCutoffPct: Number(process.env.MM_VOL_CUTOFF_PCT || '95'),
       }, pool);
       await paperMM.start();
       logger.info({ assets: mmAssets }, 'Paper market maker started');

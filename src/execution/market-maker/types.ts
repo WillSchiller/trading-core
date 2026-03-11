@@ -10,6 +10,10 @@ export interface MMConfig {
   skewBpsPerUnit: number;
   maxOpenOrders: number;
   paperMode: boolean;
+  gamma: number;         // A-S risk aversion (0.1 = aggressive, 1.0 = conservative)
+  ofiThreshold: number;  // skip fills when |OFI| > this (0-1, default 0.6)
+  vpinThreshold: number; // skip fills when VPIN > this (0-1, default 0.7)
+  volCutoffPct: number;  // stop quoting when vol > this percentile (default 95)
 }
 
 export interface BookLevel {
@@ -50,10 +54,16 @@ export interface MMFill {
   timestamp: number;
   midAtFill: number;
   edgeBps: number;
-  filtered: boolean;  // true = would have been blocked by side filter
+  filtered: boolean;
   priceAfter1m?: number;
   priceAfter5m?: number;
   adverseSelectionBps?: number;
+  ofi?: number;
+  vpin?: number;
+  ewmaVol?: number;
+  bookImbalance?: number;
+  skipped?: boolean;
+  skipReason?: string;
 }
 
 export interface MMPosition {

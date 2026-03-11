@@ -37,6 +37,11 @@ services:
       ENABLE_EXECUTION: ${ENABLE_EXECUTION:-false}
       ENABLE_BASE: ${ENABLE_BASE:-false}
       ENABLE_MAINNET: ${ENABLE_MAINNET:-false}
+
+      PAPER_MM_ENABLED: ${PAPER_MM_ENABLED:-true}
+      MM_ASSETS: ${MM_ASSETS:-kPEPE,ARB,POPCAT,MOODENG,SAGA,DYM,MEME,MANTA,IO}
+      MM_POSITION_SIZE_USD: ${MM_POSITION_SIZE_USD:-200}
+      MM_MAX_INVENTORY_USD: ${MM_MAX_INVENTORY_USD:-500}
     # Config is baked into the Docker image (not volume-mounted) to ensure
     # config and code are always in sync. The Dockerfile COPY includes config/.
     # SQL migrations are still mounted for flexibility.
