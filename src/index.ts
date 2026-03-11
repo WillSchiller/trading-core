@@ -563,7 +563,7 @@ async function main() {
         positionSizeUsd: Number(process.env.MM_POSITION_SIZE_USD || '200'),
         maxInventoryUsd: Number(process.env.MM_MAX_INVENTORY_USD || '500'),
         requoteIntervalMs: 5000,
-        minSpreadBps: Number(process.env.MM_MIN_SPREAD_BPS || '2.5'),
+        minSpreadBps: Number(process.env.MM_MIN_SPREAD_BPS || '3'),
         skewBpsPerUnit: 1,
         maxOpenOrders: 4,
         paperMode: true,
