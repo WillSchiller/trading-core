@@ -121,7 +121,7 @@ export class PaperMarketMaker {
         if (msg.channel === 'trades') {
           this.handleTrades(msg.data);
         }
-      } catch {}
+      } catch { /* ignore malformed WS messages */ }
     });
 
     this.tradeWs.on('close', () => {

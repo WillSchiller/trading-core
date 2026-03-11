@@ -61,7 +61,7 @@ export class BookFeed {
         if (msg.channel === 'l2Book') {
           this.handleBook(msg.data);
         }
-      } catch {}
+      } catch { /* ignore malformed WS messages */ }
     });
 
     this.ws.on('close', () => {
