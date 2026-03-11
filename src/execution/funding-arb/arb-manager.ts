@@ -121,12 +121,11 @@ export class FundingArbManager {
     const id = `farb_${Date.now()}_${opp.asset}`;
     const notional = this.config.positionSizeUsd;
     const perpQty = notional / opp.perpMidPrice;
-    const spotQty = notional / opp.spotMidPrice;
+    const spotPrice = opp.spotMidPrice > 0 ? opp.spotMidPrice : 0;
+    const spotQty = spotPrice > 0 ? notional / spotPrice : 0;
 
-    const roundTripFeeBps = this.config.useMakerOrders
-      ? this.config.makerFeeBps * 2
-      : this.config.takerFeeBps * 2;
-    const entryFees = (roundTripFeeBps / 2 / 10000) * notional * 2; // entry only, both legs
+    const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
+    const entryFees = (perpFeeBps / 10000) * notional; // perp entry only
 
     const position: FundingArbPosition = {
       id,
@@ -135,7 +134,7 @@ export class FundingArbManager {
       perpShortQty: perpQty.toFixed(6),
       perpEntryPrice: opp.perpMidPrice.toFixed(6),
       spotLongQty: spotQty.toFixed(6),
-      spotEntryPrice: opp.spotMidPrice.toFixed(6),
+      spotEntryPrice: spotPrice.toFixed(6),
       notionalUsd: notional,
       leverage: this.config.perpLeverage,
       entryFundingRate: opp.currentFundingRate,
@@ -189,10 +188,8 @@ export class FundingArbManager {
     // Long spot PnL: (current - entry) * qty
     pos.spotPnl = (currentSpotPrice - spotEntry) * spotQty;
 
-    const roundTripFeeBps = this.config.useMakerOrders
-      ? this.config.makerFeeBps * 2
-      : this.config.takerFeeBps * 2;
-    pos.exitFeesUsd = (roundTripFeeBps / 2 / 10000) * pos.notionalUsd * 2;
+    const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
+    pos.exitFeesUsd = (perpFeeBps / 10000) * pos.notionalUsd;
 
     pos.realizedPnl = pos.perpPnl + pos.spotPnl + pos.accumulatedFunding - pos.entryFeesUsd - pos.exitFeesUsd;
     pos.status = 'closed';
