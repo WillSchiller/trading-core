@@ -160,7 +160,10 @@ export class PaperMarketMaker {
       // Simple model: if trade notional > $50, we get a proportional fill
       const ourSizeUsd = this.config.positionSizeUsd;
 
-      const sideFilter = this.config.assetSideFilter?.[asset] ?? 'both';
+      // If side filter is configured, assets not in the map are shadow-only
+      const hasFilter = this.config.assetSideFilter && Object.keys(this.config.assetSideFilter).length > 0;
+      const sideFilter = this.config.assetSideFilter?.[asset];
+      const assetAllowed = !hasFilter || sideFilter !== undefined;
 
       if (isBuy && tradePx >= ourAsk) {
         const levelTotal = (book.asks[0]?.sz || 0) * tradePx;
@@ -170,7 +173,7 @@ export class PaperMarketMaker {
 
         const fillSz = Math.min(ourSizeUsd / tradePx, tradeSz * fillProbability);
         const fillNotional = fillSz * ourAsk;
-        const filtered = sideFilter !== 'both' && sideFilter !== 'sell';
+        const filtered = !assetAllowed || (sideFilter !== 'both' && sideFilter !== 'sell');
         this.recordFill(asset, 'sell', ourAsk, fillSz, fillNotional, book.midPrice, filtered);
       } else if (!isBuy && tradePx <= ourBid) {
         const levelTotal = (book.bids[0]?.sz || 0) * tradePx;
@@ -180,7 +183,7 @@ export class PaperMarketMaker {
 
         const fillSz = Math.min(ourSizeUsd / tradePx, tradeSz * fillProbability);
         const fillNotional = fillSz * ourBid;
-        const filtered = sideFilter !== 'both' && sideFilter !== 'buy';
+        const filtered = !assetAllowed || (sideFilter !== 'both' && sideFilter !== 'buy');
         this.recordFill(asset, 'buy', ourBid, fillSz, fillNotional, book.midPrice, filtered);
       }
     }
