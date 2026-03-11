@@ -42,6 +42,16 @@ services:
       MM_ASSETS: ${MM_ASSETS:-kPEPE,ARB,POPCAT,MOODENG,SAGA,DYM,MEME,MANTA,IO}
       MM_POSITION_SIZE_USD: ${MM_POSITION_SIZE_USD:-200}
       MM_MAX_INVENTORY_USD: ${MM_MAX_INVENTORY_USD:-500}
+      MM_OFI_THRESHOLD: ${MM_OFI_THRESHOLD:-0.85}
+      MM_MIN_SPREAD_BPS: ${MM_MIN_SPREAD_BPS:-3}
+
+      FUNDING_ARB_ENABLED: ${FUNDING_ARB_ENABLED:-false}
+      FUNDING_ARB_PAPER: ${FUNDING_ARB_PAPER:-true}
+      FUNDING_ARB_MAX_POSITIONS: ${FUNDING_ARB_MAX_POSITIONS:-3}
+      FUNDING_ARB_POSITION_SIZE_USD: ${FUNDING_ARB_POSITION_SIZE_USD:-150}
+      FUNDING_ARB_LEVERAGE: ${FUNDING_ARB_LEVERAGE:-3}
+      FUNDING_ARB_MIN_APY: ${FUNDING_ARB_MIN_APY:-20}
+      FUNDING_ARB_ASSETS: ${FUNDING_ARB_ASSETS:-}
     # Config is baked into the Docker image (not volume-mounted) to ensure
     # config and code are always in sync. The Dockerfile COPY includes config/.
     # SQL migrations are still mounted for flexibility.

@@ -13,6 +13,7 @@ import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence, MarketContextService, VolumeTracker } from './research/index.js';
 import { PaperMarketMaker } from './execution/market-maker/index.js';
+import { FundingArbManager } from './execution/funding-arb/index.js';
 import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
@@ -503,6 +504,7 @@ async function main() {
   let marketContext: MarketContextService | null = null;
   let volumeTracker: VolumeTracker | null = null;
   let paperMM: PaperMarketMaker | null = null;
+  let fundingArb: FundingArbManager | null = null;
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
@@ -568,12 +570,38 @@ async function main() {
         maxOpenOrders: 4,
         paperMode: true,
         gamma: Number(process.env.MM_GAMMA || '0.3'),
-        ofiThreshold: Number(process.env.MM_OFI_THRESHOLD || '0.6'),
+        ofiThreshold: Number(process.env.MM_OFI_THRESHOLD || '0.85'),
         vpinThreshold: Number(process.env.MM_VPIN_THRESHOLD || '0.7'),
         volCutoffPct: Number(process.env.MM_VOL_CUTOFF_PCT || '95'),
       }, pool);
       await paperMM.start();
       logger.info({ assets: mmAssets }, 'Paper market maker started');
+    }
+
+    // Start funding rate arb scanner if enabled
+    if (process.env.FUNDING_ARB_ENABLED === 'true') {
+      fundingArb = new FundingArbManager({
+        enabled: true,
+        paperMode: process.env.FUNDING_ARB_PAPER !== 'false',
+        scanIntervalMs: Number(process.env.FUNDING_ARB_SCAN_INTERVAL_MS || '60000'),
+        rotationCheckIntervalMs: Number(process.env.FUNDING_ARB_ROTATION_INTERVAL_MS || '300000'),
+        maxPositions: Number(process.env.FUNDING_ARB_MAX_POSITIONS || '3'),
+        positionSizeUsd: Number(process.env.FUNDING_ARB_POSITION_SIZE_USD || '150'),
+        perpLeverage: Number(process.env.FUNDING_ARB_LEVERAGE || '3'),
+        minAnnualizedPct: Number(process.env.FUNDING_ARB_MIN_APY || '20'),
+        rotationThresholdPct: Number(process.env.FUNDING_ARB_ROTATION_THRESHOLD || '10'),
+        exitBelowAnnualizedPct: Number(process.env.FUNDING_ARB_EXIT_BELOW_APY || '5'),
+        takerFeeBps: 11.5, // spot 7.0 + perp 4.5
+        makerFeeBps: 3.5,  // spot 2.0 + perp 1.5
+        useMakerOrders: process.env.FUNDING_ARB_USE_MAKER === 'true',
+        spotAssetWhitelist: process.env.FUNDING_ARB_ASSETS?.split(','),
+      }, pool);
+      await fundingArb.start();
+
+      // Hourly funding accrual for paper positions
+      setInterval(() => fundingArb?.accrueHourlyFunding().catch(e => logger.error({ err: e }, 'Funding accrual error')), 3_600_000);
+
+      logger.info('Funding rate arb manager started');
     }
 
     pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
@@ -900,6 +928,7 @@ async function main() {
     logger.info('RankSpace detector stopped');
 
     // Stop PCA first (stops emitting new signals/exits), then executor
+    if (fundingArb) fundingArb.stop();
     if (paperMM) paperMM.stop();
     if (volumeTracker) volumeTracker.stop();
     if (marketContext) marketContext.stop();
