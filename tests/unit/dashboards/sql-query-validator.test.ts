@@ -225,7 +225,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
           const hasColumn = new RegExp(`\\b${col}\\b`, 'i').test(query);
           if (hasColumn && query.toUpperCase().includes('WHERE')) {
             const hasProperTimeFilter =
-              query.includes('$__timeFrom()') || query.includes('$__timeTo()');
+              query.includes('$__timeFrom()') || query.includes('$__timeTo()') || query.includes('$__timeFilter');
             const hasFixedTimeRange = allowedFixedTimePatterns.some(p => p.test(query));
             const isSubqueryOrWindow = /OVER\s*\(|LAG\s*\(|LEAD\s*\(|ROW_NUMBER/i.test(query);
             const wherePredicates = query.match(/WHERE\s+(.*?)(?=\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|\s*$)/is)?.[1] || '';
@@ -363,7 +363,7 @@ describe('SQL Query Anti-Pattern Detection', () => {
             const inPattern = new RegExp(`\\b${col}\\b\\s+IN\\s*\\(`, 'i');
             return eqPattern.test(query) || betweenPattern.test(query) || inPattern.test(query);
           });
-          const hasTimeMacro = query.includes('$__timeFrom()') || query.includes('$__timeTo()');
+          const hasTimeMacro = query.includes('$__timeFrom()') || query.includes('$__timeTo()') || query.includes('$__timeFilter');
           const hasIntervalFilter = /NOW\s*\(\)\s*-\s*INTERVAL/i.test(query);
           const usesSmallTable = smallTables.some(t => new RegExp(`FROM\\s+${t}\\b`, 'i').test(query));
           const hasSubquery = /WHERE.*IN\s*\(\s*SELECT/i.test(query);

@@ -189,10 +189,14 @@ describe('Template Variable Deep Validation', () => {
               `${file}: multi-select variable "${variable.name}" missing allValue`
             ).toBeDefined();
 
-            expect(
-              variable.allValue,
-              `${file}: multi-select variable "${variable.name}" has empty allValue`
-            ).not.toBe('');
+            const dashboardJson = JSON.stringify(dashboard);
+            const usesEmptyStringCheck = dashboardJson.includes(`\${${variable.name}:raw}' = ''`);
+            if (!usesEmptyStringCheck) {
+              expect(
+                variable.allValue,
+                `${file}: multi-select variable "${variable.name}" has empty allValue`
+              ).not.toBe('');
+            }
           }
         }
       }

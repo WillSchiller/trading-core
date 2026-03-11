@@ -300,6 +300,7 @@ describe('Grafana Dashboard Validation', () => {
         'graph',
         'logs',
         'barchart',
+        'histogram',
       ];
 
       for (const [file, dashboard] of dashboards) {
@@ -463,6 +464,9 @@ describe('Grafana Dashboard Validation', () => {
         'v_perps_open_positions',
         'v_perps_performance_by_asset',
         'market_context_snapshots',
+        'regime_metrics',
+        'mm_paper_fills',
+        'mm_paper_stats',
       ];
 
       for (const [file, dashboard] of dashboards) {
@@ -572,7 +576,8 @@ describe('Grafana Dashboard Validation', () => {
                 query.includes(`\${${varName}} = 0 OR`) ||
                 query.includes(`\${${varName}} IS NULL OR`) ||
                 queryLower.includes(`'all'`) ||
-                queryLower.includes(`= 'all'`);
+                queryLower.includes(`= 'all'`) ||
+                query.includes(`\${${varName}:raw}' = ''`);
 
               expect(
                 hasConditional,
