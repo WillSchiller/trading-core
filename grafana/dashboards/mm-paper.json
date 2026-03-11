@@ -1,0 +1,552 @@
+{
+  "id": null,
+  "uid": "mm-paper",
+  "title": "MM Paper Trading",
+  "tags": ["dislocation-trader", "market-making", "paper"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "asset",
+        "label": "Asset",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT asset AS __value, asset AS __text FROM mm_paper_fills ORDER BY asset",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "%",
+        "refresh": 1,
+        "sort": 1,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Running Stats",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Fills",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT total_fills AS \"Total Fills\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Net PnL",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT net_pnl AS \"Net PnL\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg Edge (bps)",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT avg_edge_bps AS \"Avg Edge\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "orange"},
+            {"value": 1, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Toxic Fill %",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT toxic_pct * 100 AS \"Toxic %\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 30, "color": "yellow"},
+            {"value": 50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total Volume",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT total_volume_usd AS \"Volume\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Run Hours",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT run_hours AS \"Hours\" FROM mm_paper_stats ORDER BY timestamp DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "purple"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "PnL & Performance",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Net P&L Over Time",
+      "description": "Spread PnL, rebates, adverse cost, and net PnL from periodic snapshots",
+      "gridPos": {"x": 0, "y": 6, "w": 16, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT to_timestamp(timestamp/1000) AS time, spread_pnl AS \"Spread PnL\", rebates_pnl AS \"Rebates\", adverse_cost * -1 AS \"Adverse Cost\", net_pnl AS \"Net PnL\" FROM mm_paper_stats WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() ORDER BY timestamp",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "axisLabel": "USD"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Adverse Cost"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}},
+              {"id": "custom.fillOpacity", "value": 5}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Net PnL"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}},
+              {"id": "custom.lineWidth", "value": 3}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Spread PnL"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Rebates"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "purple", "mode": "fixed"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Fill Side Balance",
+      "description": "Buy vs Sell fill counts",
+      "gridPos": {"x": 16, "y": 6, "w": 8, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'buy') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'sell') AS \"Sells\", COUNT(*) AS \"Total\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Buys"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Sells"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "orientation": "horizontal"}
+    },
+    {
+      "id": 12,
+      "type": "piechart",
+      "title": "Volume by Asset",
+      "gridPos": {"x": 16, "y": 10, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", SUM(notional) AS \"Volume\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY asset ORDER BY \"Volume\" DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 0,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "pieType": "donut",
+        "reduceOptions": {"values": true, "calcs": ["sum"]}
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Toxicity & Fill Rate",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Toxic Fill % Over Time",
+      "gridPos": {"x": 0, "y": 15, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp/1000) AS time, toxic_pct * 100 AS \"Toxic %\" FROM mm_paper_stats WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() ORDER BY timestamp",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 30, "color": "yellow"},
+            {"value": 50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Fills per Hour",
+      "gridPos": {"x": 12, "y": 15, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT to_timestamp(timestamp/1000) AS time, fills_per_hour AS \"Fills/hr\" FROM mm_paper_stats WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() ORDER BY timestamp",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "gradientMode": "scheme"
+          },
+          "color": {"mode": "continuous-blues"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Fill Analysis",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "barchart",
+      "title": "Fills by Asset",
+      "gridPos": {"x": 0, "y": 23, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", COUNT(*) FILTER (WHERE side = 'buy') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'sell') AS \"Sells\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() GROUP BY asset ORDER BY COUNT(*) DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "stacking": {"mode": "normal"},
+            "fillOpacity": 80,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Buys"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Sells"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "barWidth": 0.7
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Edge vs Adverse Selection per Fill",
+      "description": "Each fill's captured edge (green) vs adverse price movement (red). Points above zero on edge = good. Points above zero on adverse = price moved against us.",
+      "gridPos": {"x": 12, "y": 23, "w": 12, "h": 7},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT to_timestamp(f.timestamp/1000) AS time, f.edge_bps AS \"Edge (bps)\", f.adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills f WHERE to_timestamp(f.timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR f.asset IN (${asset:sqlstring})) ORDER BY f.timestamp",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 8,
+            "showPoints": "always",
+            "lineWidth": 0,
+            "axisLabel": "bps"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Edge (bps)"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Adverse (bps)"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Distributions",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "histogram",
+      "title": "Adverse Selection Distribution (bps)",
+      "description": "Distribution of adverse_bps across all fills. Higher values = more adverse selection.",
+      "gridPos": {"x": 0, "y": 31, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT adverse_bps AS \"Adverse (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 3, "color": "yellow"},
+            {"value": 6, "color": "red"}
+          ]}
+        }
+      },
+      "options": {
+        "bucketSize": 1,
+        "combine": false,
+        "fillOpacity": 80,
+        "gradientMode": "scheme",
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+    {
+      "id": 41,
+      "type": "histogram",
+      "title": "Edge Distribution (bps)",
+      "description": "Distribution of captured edge across all fills.",
+      "gridPos": {"x": 12, "y": 31, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT edge_bps AS \"Edge (bps)\" FROM mm_paper_fills WHERE to_timestamp(timestamp/1000) BETWEEN $__timeFrom() AND $__timeTo() AND ('${asset:raw}' = '%' OR asset IN (${asset:sqlstring}))",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed"},
+          "custom": {},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {
+        "bucketSize": 0.5,
+        "combine": false,
+        "fillOpacity": 80,
+        "gradientMode": "none",
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    }
+  ]
+}
