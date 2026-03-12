@@ -13,7 +13,7 @@ import { RankSpaceDetector } from './detection/rank-space/index.js';
 import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence, MarketContextService, VolumeTracker } from './research/index.js';
 import { PaperMarketMaker } from './execution/market-maker/index.js';
-import { FundingArbManager } from './execution/funding-arb/index.js';
+import { FundingArbManager, SpreadMonitor } from './execution/funding-arb/index.js';
 import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
@@ -505,6 +505,7 @@ async function main() {
   let volumeTracker: VolumeTracker | null = null;
   let paperMM: PaperMarketMaker | null = null;
   let fundingArb: FundingArbManager | null = null;
+  let spreadMonitor: SpreadMonitor | null = null;
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
@@ -604,6 +605,18 @@ async function main() {
       setInterval(() => fundingArb?.accrueHourlyFunding().catch(e => logger.error({ err: e }, 'Funding accrual error')), 3_600_000);
 
       logger.info('Funding rate arb manager started');
+
+      // Real-time spread monitor using WS feeds from both venues
+      const scanner = fundingArb.getScanner();
+      const symbolList = scanner.getOpportunities()
+        .filter(o => !o.asset.startsWith('k'))
+        .map(o => ({ hlAsset: o.asset, binanceSymbol: o.binanceSymbol }));
+
+      if (symbolList.length > 0) {
+        spreadMonitor = new SpreadMonitor(symbolList, pool, 12);
+        await spreadMonitor.start();
+        logger.info({ symbols: symbolList.length }, 'Real-time spread monitor started');
+      }
     }
 
     pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
@@ -930,6 +943,7 @@ async function main() {
     logger.info('RankSpace detector stopped');
 
     // Stop PCA first (stops emitting new signals/exits), then executor
+    if (spreadMonitor) spreadMonitor.stop();
     if (fundingArb) fundingArb.stop();
     if (paperMM) paperMM.stop();
     if (volumeTracker) volumeTracker.stop();
