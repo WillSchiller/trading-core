@@ -52,6 +52,7 @@ services:
       FUNDING_ARB_LEVERAGE: ${FUNDING_ARB_LEVERAGE:-3}
       FUNDING_ARB_MIN_APY: ${FUNDING_ARB_MIN_APY:-20}
       FUNDING_ARB_ASSETS: ${FUNDING_ARB_ASSETS:-}
+      FUNDING_ARB_MAX_BREAKEVEN_HOURS: ${FUNDING_ARB_MAX_BREAKEVEN_HOURS:-48}
     # Config is baked into the Docker image (not volume-mounted) to ensure
     # config and code are always in sync. The Dockerfile COPY includes config/.
     # SQL migrations are still mounted for flexibility.

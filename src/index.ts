@@ -595,6 +595,7 @@ async function main() {
         makerFeeBps: 1.5,   // HL perp maker per side
         spotFeeBps: 7.5,    // Binance spot taker per side (0.075% with BNB discount)
         useMakerOrders: process.env.FUNDING_ARB_USE_MAKER === 'true',
+        maxBreakEvenHours: Number(process.env.FUNDING_ARB_MAX_BREAKEVEN_HOURS || '48'),
         spotAssetWhitelist: process.env.FUNDING_ARB_ASSETS?.split(',').filter(Boolean),
       }, pool);
       await fundingArb.start();

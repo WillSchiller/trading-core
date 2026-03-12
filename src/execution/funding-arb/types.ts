@@ -13,6 +13,7 @@ export interface FundingArbConfig {
   makerFeeBps: number;             // HL perp maker fee per side
   spotFeeBps: number;              // Binance spot fee per side
   useMakerOrders: boolean;
+  maxBreakEvenHours: number;
   spotAssetWhitelist?: string[];
 }
 
@@ -23,6 +24,9 @@ export interface FundingOpportunity {
   currentFundingRate: number;      // per-hour rate on HL
   predictedFundingRate: number;
   annualizedPct: number;           // (rate * 8760) * 100
+  conservativeApy: number;         // median rate over lookback window
+  minRateLookback: number;         // min rate seen in lookback window
+  rateSamples: number;             // number of samples in lookback
   breakEvenHours: number;          // hours to recoup round-trip fees
   perpMidPrice: number;
   timestamp: number;

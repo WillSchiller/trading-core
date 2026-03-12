@@ -16,6 +16,7 @@ async function main() {
     makerFeeBps: 1.5,
     spotFeeBps: 7.5,
     useMakerOrders: false,
+    maxBreakEvenHours: 48,
   });
 
   await scanner.start();

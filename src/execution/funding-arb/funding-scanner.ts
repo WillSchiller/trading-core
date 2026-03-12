@@ -10,11 +10,19 @@ const HOURS_PER_YEAR = 8760;
 interface PerpMeta { name: string; szDecimals: number; maxLeverage: number }
 interface AssetCtx { funding: string; openInterest: string; prevDayPx: string; dayNtlVlm: string; premium: string; oraclePx: string; markPx: string; midPx?: string }
 
+interface RateHistory {
+  rates: number[];       // rolling window of hourly rates
+  timestamps: number[];
+}
+
 export class FundingScanner {
   private config: FundingArbConfig;
-  private binanceSpotSymbols = new Map<string, string>(); // HL asset name → Binance symbol (e.g. ETHUSDC)
+  private binanceSpotSymbols = new Map<string, string>();
+  private rateHistory = new Map<string, RateHistory>(); // asset → rolling rate history
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastScan: FundingOpportunity[] = [];
+
+  private static readonly HISTORY_WINDOW = 60; // keep last 60 samples (1hr at 1min scan)
 
   constructor(config: FundingArbConfig) {
     this.config = config;
@@ -35,16 +43,11 @@ export class FundingScanner {
     return this.lastScan;
   }
 
-  getBestOpportunity(): FundingOpportunity | null {
-    return this.lastScan[0] ?? null;
-  }
-
   getOpportunityForAsset(asset: string): FundingOpportunity | null {
     return this.lastScan.find(o => o.asset === asset) ?? null;
   }
 
   private hlToBinanceBase(hlAsset: string): string {
-    // HL kilo-tokens: kPEPE → PEPE, kSHIB → SHIB
     return hlAsset.startsWith('k') ? hlAsset.slice(1) : hlAsset;
   }
 
@@ -56,14 +59,12 @@ export class FundingScanner {
     this.binanceSpotSymbols.clear();
     const usdcSymbols = new Map<string, string>();
     const usdtSymbols = new Map<string, string>();
-
     for (const s of data.symbols) {
       if (s.status !== 'TRADING') continue;
       if (s.quoteAsset === 'USDC') usdcSymbols.set(s.baseAsset, s.symbol);
       if (s.quoteAsset === 'USDT') usdtSymbols.set(s.baseAsset, s.symbol);
     }
 
-    // Prefer USDC pairs, fall back to USDT
     const hlResp = await this.hlPost({ type: 'metaAndAssetCtxs' });
     for (const asset of hlResp[0].universe) {
       const base = this.hlToBinanceBase(asset.name);
@@ -73,8 +74,47 @@ export class FundingScanner {
         this.binanceSpotSymbols.set(asset.name, usdtSymbols.get(base)!);
       }
     }
-
     log.info({ binanceSpotPairs: this.binanceSpotSymbols.size }, 'Binance spot metadata refreshed');
+  }
+
+  private recordRate(asset: string, rate: number): void {
+    let h = this.rateHistory.get(asset);
+    if (!h) {
+      h = { rates: [], timestamps: [] };
+      this.rateHistory.set(asset, h);
+    }
+    h.rates.push(rate);
+    h.timestamps.push(Date.now());
+    if (h.rates.length > FundingScanner.HISTORY_WINDOW) {
+      h.rates.shift();
+      h.timestamps.shift();
+    }
+  }
+
+  getMedianRate(asset: string, lookbackMinutes: number): number {
+    const h = this.rateHistory.get(asset);
+    if (!h || h.rates.length === 0) return 0;
+    const cutoff = Date.now() - lookbackMinutes * 60_000;
+    const recent = h.rates.filter((_, i) => h.timestamps[i] >= cutoff);
+    if (recent.length === 0) return 0;
+    const sorted = [...recent].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  getMinRate(asset: string, lookbackMinutes: number): number {
+    const h = this.rateHistory.get(asset);
+    if (!h || h.rates.length === 0) return 0;
+    const cutoff = Date.now() - lookbackMinutes * 60_000;
+    const recent = h.rates.filter((_, i) => h.timestamps[i] >= cutoff);
+    if (recent.length === 0) return 0;
+    return Math.min(...recent);
+  }
+
+  getSampleCount(asset: string, lookbackMinutes: number): number {
+    const h = this.rateHistory.get(asset);
+    if (!h) return 0;
+    const cutoff = Date.now() - lookbackMinutes * 60_000;
+    return h.timestamps.filter(t => t >= cutoff).length;
   }
 
   async scan(): Promise<FundingOpportunity[]> {
@@ -86,7 +126,6 @@ export class FundingScanner {
     const perpCtxs: AssetCtx[] = metaAndCtx[1];
     const universe: PerpMeta[] = metaAndCtx[0].universe;
 
-    // predictedFundings: [[coin, [[exchange, {fundingRate, fundingIntervalHours}], ...]], ...]
     const predictedMap = new Map<string, number>();
     if (Array.isArray(predicted)) {
       for (const entry of predicted) {
@@ -103,7 +142,6 @@ export class FundingScanner {
     }
 
     const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
-    // Round-trip: HL perp entry+exit + Binance spot entry+exit
     const totalRoundTripBps = (perpFeeBps * 2) + (this.config.spotFeeBps * 2);
 
     const opportunities: FundingOpportunity[] = [];
@@ -112,10 +150,8 @@ export class FundingScanner {
       const asset = universe[i].name;
       const ctx = perpCtxs[i];
       if (!ctx) continue;
-
       if (this.config.spotAssetWhitelist?.length && !this.config.spotAssetWhitelist.includes(asset)) continue;
 
-      // Must have Binance spot for delta-neutral hedge
       const binanceSymbol = this.binanceSpotSymbols.get(asset);
       if (!binanceSymbol) continue;
 
@@ -124,7 +160,8 @@ export class FundingScanner {
       const perpMid = parseFloat(ctx.midPx ?? ctx.markPx ?? '0');
       if (perpMid <= 0) continue;
 
-      // For funding arb (short perp): positive funding = we receive
+      this.recordRate(asset, currentRate);
+
       if (currentRate <= 0 && predictedRate <= 0) continue;
 
       const avgRate = (currentRate + predictedRate) / 2;
@@ -134,6 +171,13 @@ export class FundingScanner {
         ? (totalRoundTripBps / 10000) / avgRate
         : 99999;
 
+      // Use median rate over lookback as conservative estimate
+      const medianRate = this.getMedianRate(asset, 30);
+      const minRate = this.getMinRate(asset, 30);
+      const samples = this.getSampleCount(asset, 30);
+      const conservativeRate = samples >= 10 ? medianRate : currentRate;
+      const conservativeApy = conservativeRate * HOURS_PER_YEAR * 100;
+
       opportunities.push({
         asset,
         perpAssetIndex: i,
@@ -141,25 +185,28 @@ export class FundingScanner {
         currentFundingRate: currentRate,
         predictedFundingRate: predictedRate,
         annualizedPct,
+        conservativeApy,
+        minRateLookback: minRate,
+        rateSamples: samples,
         breakEvenHours,
         perpMidPrice: perpMid,
         timestamp: Date.now(),
       });
     }
 
-    opportunities.sort((a, b) => b.annualizedPct - a.annualizedPct);
+    opportunities.sort((a, b) => b.conservativeApy - a.conservativeApy);
     this.lastScan = opportunities;
 
-    const above20 = opportunities.filter(o => o.annualizedPct >= 20);
+    const above20 = opportunities.filter(o => o.conservativeApy >= 20);
     log.info({
       total: opportunities.length,
       above20pct: above20.length,
       top: opportunities.slice(0, 5).map(o => ({
         asset: o.asset,
         apy: `${o.annualizedPct.toFixed(1)}%`,
-        rate: o.currentFundingRate.toFixed(6),
+        conserv: `${o.conservativeApy.toFixed(1)}%`,
+        samples: o.rateSamples,
         breakEven: `${o.breakEvenHours.toFixed(1)}h`,
-        binance: o.binanceSymbol,
       })),
     }, 'Funding scan complete');
 
