@@ -254,6 +254,109 @@
       "fieldConfig": {
         "defaults": {"custom": {"align": "auto"}}
       }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Spread Duration Analysis",
+      "gridPos": {"x": 0, "y": 44, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Spread Episodes >12bps (how long each stays open)",
+      "gridPos": {"x": 0, "y": 45, "w": 24, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH numbered AS (SELECT asset, \"timestamp\", spread_bps, abs_spread_bps, ROW_NUMBER() OVER (PARTITION BY asset ORDER BY \"timestamp\") - ROW_NUMBER() OVER (PARTITION BY asset, (abs_spread_bps > 12)::int ORDER BY \"timestamp\") AS grp FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz), episodes AS (SELECT asset, grp, MIN(\"timestamp\") AS start_time, MAX(\"timestamp\") AS end_time, COUNT(*) AS ticks, ROUND(AVG(spread_bps)::numeric, 1) AS avg_spread, ROUND(MAX(abs_spread_bps)::numeric, 1) AS peak_spread, EXTRACT(EPOCH FROM MAX(\"timestamp\") - MIN(\"timestamp\")) / 60.0 AS duration_min FROM numbered WHERE abs_spread_bps > 12 GROUP BY asset, grp HAVING COUNT(*) >= 2) SELECT asset AS \"Asset\", start_time AS \"Start\", ROUND(duration_min::numeric, 0) AS \"Duration (min)\", ticks AS \"Ticks\", avg_spread AS \"Avg Spread (bps)\", peak_spread AS \"Peak (bps)\" FROM episodes ORDER BY duration_min DESC LIMIT 50",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Duration (min)", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}},
+        "overrides": [{
+          "matcher": {"id": "byName", "options": "Duration (min)"},
+          "properties": [
+            {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+            {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+              {"value": null, "color": "blue"},
+              {"value": 5, "color": "yellow"},
+              {"value": 15, "color": "green"}
+            ]}}
+          ]
+        }]
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Avg Episode Duration (min)",
+      "gridPos": {"x": 0, "y": 55, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH numbered AS (SELECT asset, \"timestamp\", abs_spread_bps, ROW_NUMBER() OVER (PARTITION BY asset ORDER BY \"timestamp\") - ROW_NUMBER() OVER (PARTITION BY asset, (abs_spread_bps > 12)::int ORDER BY \"timestamp\") AS grp FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz), episodes AS (SELECT asset, grp, EXTRACT(EPOCH FROM MAX(\"timestamp\") - MIN(\"timestamp\")) / 60.0 AS duration_min FROM numbered WHERE abs_spread_bps > 12 GROUP BY asset, grp HAVING COUNT(*) >= 2) SELECT ROUND(AVG(duration_min)::numeric, 1) AS \"Avg Min\" FROM episodes",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "min",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 3, "color": "yellow"},
+            {"value": 10, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Total Episodes >12bps",
+      "gridPos": {"x": 8, "y": 55, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH numbered AS (SELECT asset, \"timestamp\", abs_spread_bps, ROW_NUMBER() OVER (PARTITION BY asset ORDER BY \"timestamp\") - ROW_NUMBER() OVER (PARTITION BY asset, (abs_spread_bps > 12)::int ORDER BY \"timestamp\") AS grp FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz), episodes AS (SELECT asset, grp FROM numbered WHERE abs_spread_bps > 12 GROUP BY asset, grp HAVING COUNT(*) >= 2) SELECT COUNT(*) AS \"Episodes\" FROM episodes",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Longest Episode (min)",
+      "gridPos": {"x": 16, "y": 55, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH numbered AS (SELECT asset, \"timestamp\", abs_spread_bps, ROW_NUMBER() OVER (PARTITION BY asset ORDER BY \"timestamp\") - ROW_NUMBER() OVER (PARTITION BY asset, (abs_spread_bps > 12)::int ORDER BY \"timestamp\") AS grp FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz), episodes AS (SELECT EXTRACT(EPOCH FROM MAX(\"timestamp\") - MIN(\"timestamp\")) / 60.0 AS duration_min FROM numbered WHERE abs_spread_bps > 12 GROUP BY asset, grp HAVING COUNT(*) >= 2) SELECT ROUND(MAX(duration_min)::numeric, 0) AS \"Max Min\" FROM episodes",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "min",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": 10, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     }
   ]
 }
