@@ -1,0 +1,339 @@
+{
+  "id": null,
+  "uid": "funding-arb",
+  "title": "Funding Arb",
+  "tags": ["dislocation-trader", "funding-arb"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Open Positions",
+      "gridPos": {"x": 0, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*) AS \"Open\" FROM funding_arb_positions WHERE status = 'open'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Realized PnL",
+      "gridPos": {"x": 5, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(realized_pnl), 0)::numeric, 2) AS \"PnL\" FROM funding_arb_positions WHERE status = 'closed'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Total Fees Paid",
+      "gridPos": {"x": 10, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(entry_fees_usd + exit_fees_usd), 0)::numeric, 2) AS \"Fees\" FROM funding_arb_positions",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "orange"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Funding Earned",
+      "gridPos": {"x": 15, "y": 1, "w": 5, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(accumulated_funding), 0)::numeric, 2) AS \"Funding\" FROM funding_arb_positions",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg Hours Held",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(AVG(hours_held), 0)::numeric, 1) AS \"Hours\" FROM funding_arb_positions WHERE status = 'closed'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "purple"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Scan Data",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Top 5 Assets by APY Over Time",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH top_assets AS (SELECT asset FROM funding_arb_scans WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(annualized_pct) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, s.annualized_pct::float AS value FROM funding_arb_scans s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "pointSize": 5, "showPoints": "auto"},
+          "unit": "percent",
+          "decimals": 1,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Funding Rates Over Time",
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH top_assets AS (SELECT asset FROM funding_arb_scans WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(annualized_pct) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, s.current_funding_rate::float AS value FROM funding_arb_scans s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "pointSize": 5, "showPoints": "auto"},
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Position Performance",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "All Positions",
+      "gridPos": {"x": 0, "y": 15, "w": 16, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", status AS \"Status\", ROUND(notional_usd::numeric, 2) AS \"Notional ($)\", ROUND(hours_held::numeric, 1) AS \"Hours Held\", ROUND(accumulated_funding::numeric, 4) AS \"Funding ($)\", ROUND((entry_fees_usd + exit_fees_usd)::numeric, 4) AS \"Total Fees ($)\", ROUND(realized_pnl::numeric, 4) AS \"PnL ($)\", opened_at AS \"Opened\", closed_at AS \"Closed\" FROM funding_arb_positions ORDER BY opened_at DESC LIMIT 100",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Opened", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Status"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-background-solid"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"open": {"color": "green", "text": "open"}}},
+                {"type": "value", "options": {"closed": {"color": "blue", "text": "closed"}}},
+                {"type": "value", "options": {"opening": {"color": "yellow", "text": "opening"}}},
+                {"type": "value", "options": {"closing": {"color": "orange", "text": "closing"}}}
+              ]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "PnL ($)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"value": null, "color": "red"},
+                {"value": 0, "color": "green"}
+              ]}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Cumulative PnL",
+      "gridPos": {"x": 16, "y": 15, "w": 8, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT closed_at AS time, SUM(realized_pnl::float) OVER (ORDER BY closed_at) AS \"Cumulative PnL\" FROM funding_arb_positions WHERE status = 'closed' AND closed_at IS NOT NULL AND closed_at BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY closed_at",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "gradientMode": "scheme"},
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Break-Even Analysis",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Break-Even Hours by Asset",
+      "gridPos": {"x": 0, "y": 26, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH top_assets AS (SELECT asset FROM funding_arb_scans WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(annualized_pct) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, s.break_even_hours::float AS value FROM funding_arb_scans s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "pointSize": 5, "showPoints": "auto"},
+          "unit": "h",
+          "decimals": 1,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "asc"}
+      }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Current Best Opportunities",
+      "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT s.asset AS \"Asset\", s.annualized_pct::float AS \"APY (%)\" FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {"mode": "continuous-GrYlRd"},
+          "min": 0,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 50, "color": "yellow"},
+            {"value": 100, "color": "red"}
+          ]}
+        }
+      },
+      "options": {
+        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^APY \\(%\\)$/"},
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "namePlacement": "auto",
+        "valueMode": "text"
+      },
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {"regex": "(.+)", "renamePattern": "$1"}
+        }
+      ]
+    }
+  ]
+}
