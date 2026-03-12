@@ -252,7 +252,12 @@ export class FundingScanner {
       const binMid = binancePrices.get(opp.binanceSymbol);
       if (!binMid || binMid <= 0) continue;
 
+      // Skip kilo-token unit mismatches (HL kXYZ = 1000x Binance XYZ)
+      if (opp.asset.startsWith('k')) continue;
+
       const spreadBps = ((opp.perpMidPrice - binMid) / binMid) * 10000;
+      if (Math.abs(spreadBps) > 500) continue; // filter obvious data errors
+
       spreads.push({
         asset: opp.asset,
         binanceSymbol: opp.binanceSymbol,
