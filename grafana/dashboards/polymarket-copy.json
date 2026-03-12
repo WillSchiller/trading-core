@@ -145,7 +145,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT address, alias, rank, pnl::float, volume::float, bankroll_estimate::float AS \"bankroll\", enabled, last_activity_at AS \"last_activity\" FROM pm_tracked_traders ORDER BY rank ASC",
+        "rawSql": "SELECT address, alias, rank, pnl::float, volume::float, bankroll_estimate::float AS \"bankroll\", enabled, last_activity_at AS \"last_activity\" FROM pm_tracked_traders ORDER BY rank ASC LIMIT 50",
         "format": "table"
       }],
       "fieldConfig": {
@@ -173,7 +173,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT market_slug AS \"market\", outcome, side, size::float, avg_entry::float AS \"entry\", current_price::float AS \"current\", unrealized_pnl::float AS \"unrealized_pnl\", paper, opened_at FROM pm_positions WHERE status = 'open' ORDER BY opened_at DESC",
+        "rawSql": "SELECT market_slug AS \"market\", outcome, side, size::float, avg_entry::float AS \"entry\", current_price::float AS \"current\", unrealized_pnl::float AS \"unrealized_pnl\", paper, opened_at FROM pm_positions WHERE status = 'open' ORDER BY opened_at DESC LIMIT 50",
         "format": "table"
       }],
       "fieldConfig": {
