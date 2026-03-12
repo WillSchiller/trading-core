@@ -304,8 +304,8 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT s.asset AS \"Asset\", (s.annualized_pct * 0.75)::float AS \"APY (%)\" FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
-        "format": "table"
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT l.ts AS time, s.asset AS metric, (s.annualized_pct * 0.75)::float AS value FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
+        "format": "time_series"
       }],
       "fieldConfig": {
         "defaults": {
@@ -321,19 +321,13 @@
         }
       },
       "options": {
-        "reduceOptions": {"values": true, "calcs": ["lastNotNull"], "fields": "/^APY \\(%\\)$/"},
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
         "displayMode": "gradient",
         "orientation": "horizontal",
         "showUnfilled": true,
         "namePlacement": "auto",
         "valueMode": "text"
-      },
-      "transformations": [
-        {
-          "id": "renameByRegex",
-          "options": {"regex": "(.+)", "renamePattern": "$1"}
-        }
-      ]
+      }
     }
   ]
 }
