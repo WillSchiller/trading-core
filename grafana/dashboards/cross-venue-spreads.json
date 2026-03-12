@@ -1,0 +1,259 @@
+{
+  "id": null,
+  "uid": "cross-venue-spreads",
+  "title": "Cross-Venue Spreads",
+  "tags": ["dislocation-trader", "arb"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Assets > 12bps (actionable)",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT COUNT(*) AS \"Count\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.abs_spread_bps > 12",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": 1, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Max Spread Right Now",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT ROUND(MAX(abs_spread_bps)::numeric, 1) AS \"Max bps\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": 12, "color": "yellow"},
+            {"value": 25, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg Absolute Spread",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT ROUND(AVG(abs_spread_bps)::numeric, 1) AS \"Avg bps\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Assets Tracked",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT COUNT(DISTINCT asset) AS \"Assets\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "purple"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Spread Time Series",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Top 5 Widest Spreads Over Time (bps)",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 10},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH top_assets AS (SELECT asset FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(abs_spread_bps) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, s.spread_bps::float AS value FROM cross_venue_spreads s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "pointSize": 3, "showPoints": "auto"},
+          "unit": "none",
+          "decimals": 1,
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Actionable Spread Count (>12bps)",
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('minute', \"timestamp\") AS time, COUNT(DISTINCT asset) AS \"Assets >12bps\" FROM cross_venue_spreads WHERE abs_spread_bps > 12 AND \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "bars", "lineWidth": 1, "fillOpacity": 50},
+          "unit": "short",
+          "color": {"fixedColor": "green", "mode": "fixed"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Current Snapshot",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Latest Spreads (all assets)",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 12},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT s.asset AS \"Asset\", s.binance_symbol AS \"Binance Pair\", ROUND(s.spread_bps::numeric, 1) AS \"Spread (bps)\", ROUND(s.abs_spread_bps::numeric, 1) AS \"Abs Spread\", ROUND(s.hl_mid::numeric, 6) AS \"HL Mid\", ROUND(s.binance_mid::numeric, 6) AS \"Binance Mid\", CASE WHEN s.spread_bps > 0 THEN 'HL premium' ELSE 'Binance premium' END AS \"Direction\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts ORDER BY s.abs_spread_bps DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Abs Spread", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Spread (bps)"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"value": null, "color": "blue"},
+                {"value": 12, "color": "yellow"},
+                {"value": 25, "color": "red"}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Direction"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"HL premium": {"color": "orange", "text": "HL premium"}}},
+                {"type": "value", "options": {"Binance premium": {"color": "blue", "text": "Binance premium"}}}
+              ]}
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Distribution",
+      "gridPos": {"x": 0, "y": 35, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "histogram",
+      "title": "Spread Distribution (bps)",
+      "gridPos": {"x": 0, "y": 36, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT spread_bps::float AS \"Spread\" FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {
+        "bucketSize": 2,
+        "combine": false,
+        "fillOpacity": 80,
+        "tooltip": {"mode": "single"}
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Assets with Persistent Wide Spreads (avg >10bps)",
+      "gridPos": {"x": 12, "y": 36, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT asset AS \"Asset\", COUNT(*) AS \"Samples\", ROUND(AVG(spread_bps)::numeric, 1) AS \"Avg Spread\", ROUND(AVG(abs_spread_bps)::numeric, 1) AS \"Avg Abs Spread\", ROUND(MIN(spread_bps)::numeric, 1) AS \"Min\", ROUND(MAX(spread_bps)::numeric, 1) AS \"Max\", ROUND(STDDEV(spread_bps)::numeric, 1) AS \"StdDev\" FROM cross_venue_spreads WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset HAVING AVG(abs_spread_bps) > 10 ORDER BY AVG(abs_spread_bps) DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Avg Abs Spread", "desc": true}]},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto"}}
+      }
+    }
+  ]
+}
