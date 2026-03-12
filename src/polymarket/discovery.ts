@@ -64,7 +64,7 @@ export class TraderDiscovery {
   }
 
   private async fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-    const url = `${this.config.dataApiUrl}/leaderboard?window=1w&limit=${this.config.maxTraders}&offset=0`;
+    const url = `${this.config.dataApiUrl}/v1/leaderboard?category=OVERALL&timePeriod=WEEK&orderBy=PNL&limit=${this.config.maxTraders}&offset=0`;
     const resp = await fetch(url);
 
     if (!resp.ok) {
@@ -72,19 +72,18 @@ export class TraderDiscovery {
     }
 
     const data = await resp.json() as Array<{
-      address?: string;
-      maker_address?: string;
-      display_name?: string;
+      proxyWallet?: string;
+      userName?: string;
       pnl?: number;
-      volume?: number;
+      vol?: number;
       rank?: number;
     }>;
 
     return data.map((item, i) => ({
-      address: (item.address || item.maker_address || '').toLowerCase(),
-      displayName: item.display_name || '',
+      address: (item.proxyWallet || '').toLowerCase(),
+      displayName: item.userName || '',
       pnl: item.pnl || 0,
-      volume: item.volume || 0,
+      volume: item.vol || 0,
       rank: item.rank || i + 1,
     }));
   }

@@ -98,15 +98,15 @@ export class ActivityMonitor {
   }
 
   private async fetchActivity(address: string): Promise<TraderActivity[]> {
-    const url = `${this.config.dataApiUrl}/activity?user=${address}&limit=20&sortBy=TIMESTAMP&sortDirection=DESC`;
+    const url = `${this.config.dataApiUrl}/trades?user=${address}&limit=20`;
     const resp = await fetch(url);
 
     if (!resp.ok) {
-      throw new Error(`Activity API ${resp.status}`);
+      throw new Error(`Trades API ${resp.status}`);
     }
 
     const data = await resp.json() as Array<{
-      id?: string;
+      transactionHash?: string;
       proxyWallet?: string;
       timestamp?: string;
       conditionId?: string;
@@ -114,13 +114,14 @@ export class ActivityMonitor {
       side?: string;
       size?: string | number;
       price?: string | number;
-      type?: string;
+      outcome?: string;
+      slug?: string;
+      title?: string;
     }>;
 
     return data
-      .filter(item => item.type === 'TRADE' || !item.type)
       .map(item => ({
-        id: item.id || `${item.timestamp}_${item.conditionId}_${item.side}`,
+        id: item.transactionHash || `${item.timestamp}_${item.conditionId}_${item.side}`,
         traderAddress: address,
         timestamp: new Date(item.timestamp || 0).getTime(),
         conditionId: item.conditionId || '',
@@ -128,9 +129,9 @@ export class ActivityMonitor {
         side: (item.side === 'BUY' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
         size: Number(item.size || 0),
         price: Number(item.price || 0),
-        outcome: '',
-        marketSlug: '',
-        marketQuestion: '',
+        outcome: item.outcome || '',
+        marketSlug: item.slug || '',
+        marketQuestion: item.title || '',
         negRisk: false,
       }));
   }
