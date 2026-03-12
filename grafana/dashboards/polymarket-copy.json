@@ -1,0 +1,264 @@
+{
+  "id": null,
+  "uid": "polymarket-copy",
+  "title": "Polymarket Copy Trader",
+  "tags": ["dislocation-trader", "polymarket"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Risk Status",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Exposure",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(size * avg_entry), 0)::numeric, 2) AS \"Exposure\" FROM pm_positions WHERE status = 'open'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 400, "color": "yellow"},
+            {"value": 500, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Daily PnL",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(realized_pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_positions WHERE status = 'closed' AND closed_at >= (NOW() AT TIME ZONE 'UTC')::date",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Open Markets",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(DISTINCT condition_id)::int AS \"Markets\" FROM pm_positions WHERE status = 'open'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"},
+            {"value": 8, "color": "yellow"},
+            {"value": 10, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Kill Switch",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_kill_switch_events WHERE triggered_at >= NOW() - INTERVAL '24h') THEN 'TRIGGERED' ELSE 'OK' END AS \"Status\"",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"OK": {"text": "OK", "color": "green"}, "TRIGGERED": {"text": "TRIGGERED", "color": "red"}}}
+          ]
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Trades (24h)",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*)::int AS \"Trades\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h'",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Active Traders",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Tracked Traders",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT address, alias, rank, pnl::float, volume::float, bankroll_estimate::float AS \"bankroll\", enabled, last_activity_at AS \"last_activity\" FROM pm_tracked_traders ORDER BY rank ASC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]},
+          {"matcher": {"id": "byName", "options": "volume"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 0}]},
+          {"matcher": {"id": "byName", "options": "bankroll"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 0}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "rank", "desc": false}]}
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Open Positions",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Open Positions",
+      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT market_slug AS \"market\", outcome, side, size::float, avg_entry::float AS \"entry\", current_price::float AS \"current\", unrealized_pnl::float AS \"unrealized_pnl\", paper, opened_at FROM pm_positions WHERE status = 'open' ORDER BY opened_at DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "entry"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "current"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "unrealized_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "opened_at", "desc": true}]}
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "PnL & Trades",
+      "gridPos": {"x": 0, "y": 21, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Cumulative Realized PnL",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT closed_at AS time, SUM(realized_pnl::float) OVER (ORDER BY closed_at) AS \"Cumulative PnL\" FROM pm_positions WHERE status = 'closed' AND closed_at IS NOT NULL ORDER BY closed_at",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "custom": {"fillOpacity": 10, "lineWidth": 2}
+        }
+      },
+      "options": {"tooltip": {"mode": "single"}}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Copy Trades (24h)",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('hour', created_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(size * price)::numeric, 2)::float AS \"Volume USD\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h' GROUP BY 1 ORDER BY 1",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"fillOpacity": 20, "lineWidth": 2, "drawStyle": "bars"}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Trade Log",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Recent Trades",
+      "gridPos": {"x": 0, "y": 31, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT t.created_at, tr.alias AS trader, t.market_slug AS market, t.outcome, t.side, t.size::float, t.price::float, t.fill_price::float AS \"fill\", t.status, t.paper FROM pm_copy_trades t LEFT JOIN pm_tracked_traders tr ON t.trader_address = tr.address ORDER BY t.created_at DESC LIMIT 50",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "size"}, "properties": [{"id": "decimals", "value": 2}]},
+          {"matcher": {"id": "byName", "options": "price"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "fill"}, "properties": [{"id": "decimals", "value": 4}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "created_at", "desc": true}]}
+    }
+  ]
+}
