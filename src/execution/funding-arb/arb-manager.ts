@@ -269,11 +269,11 @@ export class FundingArbManager {
         const sParams: unknown[] = [];
         let sIdx = 1;
         for (const s of spreads) {
-          sValues.push(`($${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++})`);
-          sParams.push(new Date(s.timestamp), s.asset, s.binanceSymbol, s.hlMid, s.binanceMid, s.spreadBps, s.absSpreadBps);
+          sValues.push(`($${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++})`);
+          sParams.push(new Date(s.timestamp), s.asset, s.binanceSymbol, s.hlMid, s.binanceMid, s.spreadBps, s.absSpreadBps, s.fetchLatencyMs);
         }
         await this.pool.query(`
-          INSERT INTO cross_venue_spreads (timestamp, asset, binance_symbol, hl_mid, binance_mid, spread_bps, abs_spread_bps)
+          INSERT INTO cross_venue_spreads (timestamp, asset, binance_symbol, hl_mid, binance_mid, spread_bps, abs_spread_bps, fetch_latency_ms)
           VALUES ${sValues.join(',')}
         `, sParams);
       } catch (err) {

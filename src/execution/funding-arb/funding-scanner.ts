@@ -21,8 +21,9 @@ export interface SpreadSnapshot {
   binanceSymbol: string;
   hlMid: number;
   binanceMid: number;
-  spreadBps: number;     // (HL - Binance) / Binance * 10000
+  spreadBps: number;
   absSpreadBps: number;
+  fetchLatencyMs: number;
   timestamp: number;
 }
 
@@ -134,10 +135,28 @@ export class FundingScanner {
   }
 
   async scan(): Promise<FundingOpportunity[]> {
-    const [metaAndCtx, predicted] = await Promise.all([
+    const allSymbols = Array.from(this.binanceSpotSymbols.values());
+    const binanceReq = allSymbols.length > 0
+      ? fetch(`${BINANCE_TICKER_URL}?symbols=${encodeURIComponent(JSON.stringify(allSymbols))}`)
+      : null;
+
+    const t0 = Date.now();
+    const [metaAndCtx, predicted, binanceResp] = await Promise.all([
       this.hlPost({ type: 'metaAndAssetCtxs' }),
       this.hlPost({ type: 'predictedFundings' }),
+      binanceReq,
     ]);
+    const fetchLatencyMs = Date.now() - t0;
+
+    let binancePrices = new Map<string, number>();
+    if (binanceResp?.ok) {
+      const tickers = await binanceResp.json() as Array<{ symbol: string; bidPrice: string; askPrice: string }>;
+      for (const t of tickers) {
+        const bid = parseFloat(t.bidPrice);
+        const ask = parseFloat(t.askPrice);
+        if (bid > 0 && ask > 0) binancePrices.set(t.symbol, (bid + ask) / 2);
+      }
+    }
 
     const perpCtxs: AssetCtx[] = metaAndCtx[1];
     const universe: PerpMeta[] = metaAndCtx[0].universe;
@@ -226,37 +245,23 @@ export class FundingScanner {
       })),
     }, 'Funding scan complete');
 
-    await this.scanSpreads(opportunities).catch(e => log.error({ err: e }, 'Spread scan error'));
+    this.computeSpreads(opportunities, binancePrices, fetchLatencyMs);
 
     return opportunities;
   }
 
-  private async scanSpreads(opps: FundingOpportunity[]): Promise<void> {
-    if (opps.length === 0) return;
-
-    const symbols = opps.map(o => o.binanceSymbol);
-    const resp = await fetch(`${BINANCE_TICKER_URL}?symbols=${encodeURIComponent(JSON.stringify(symbols))}`);
-    if (!resp.ok) return;
-
-    const tickers = await resp.json() as Array<{ symbol: string; bidPrice: string; askPrice: string }>;
-    const binancePrices = new Map<string, number>();
-    for (const t of tickers) {
-      const bid = parseFloat(t.bidPrice);
-      const ask = parseFloat(t.askPrice);
-      if (bid > 0 && ask > 0) binancePrices.set(t.symbol, (bid + ask) / 2);
-    }
+  private computeSpreads(opps: FundingOpportunity[], binancePrices: Map<string, number>, fetchLatencyMs: number): void {
+    if (opps.length === 0 || binancePrices.size === 0) return;
 
     const spreads: SpreadSnapshot[] = [];
     const now = Date.now();
     for (const opp of opps) {
       const binMid = binancePrices.get(opp.binanceSymbol);
       if (!binMid || binMid <= 0) continue;
-
-      // Skip kilo-token unit mismatches (HL kXYZ = 1000x Binance XYZ)
       if (opp.asset.startsWith('k')) continue;
 
       const spreadBps = ((opp.perpMidPrice - binMid) / binMid) * 10000;
-      if (Math.abs(spreadBps) > 500) continue; // filter obvious data errors
+      if (Math.abs(spreadBps) > 500) continue;
 
       spreads.push({
         asset: opp.asset,
@@ -265,6 +270,7 @@ export class FundingScanner {
         binanceMid: binMid,
         spreadBps,
         absSpreadBps: Math.abs(spreadBps),
+        fetchLatencyMs,
         timestamp: now,
       });
     }
@@ -276,13 +282,14 @@ export class FundingScanner {
     if (wide.length > 0) {
       log.info({
         wideCount: wide.length,
+        fetchLatencyMs,
         top: wide.slice(0, 5).map(s => ({
           asset: s.asset,
           spread: `${s.spreadBps.toFixed(1)}bps`,
           hl: s.hlMid.toFixed(4),
           bin: s.binanceMid.toFixed(4),
         })),
-      }, 'HL vs Binance spreads');
+      }, 'HL vs Binance spreads (concurrent fetch)');
     }
   }
 

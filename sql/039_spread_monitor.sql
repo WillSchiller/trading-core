@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS cross_venue_spreads (
   hl_mid NUMERIC(24,12) NOT NULL,
   binance_mid NUMERIC(24,12) NOT NULL,
   spread_bps NUMERIC(10,2) NOT NULL,
-  abs_spread_bps NUMERIC(10,2) NOT NULL
+  abs_spread_bps NUMERIC(10,2) NOT NULL,
+  fetch_latency_ms INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_cv_spreads_ts ON cross_venue_spreads (timestamp);
