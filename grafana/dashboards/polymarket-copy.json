@@ -201,7 +201,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT closed_at AS time, SUM(realized_pnl::float) OVER (ORDER BY closed_at) AS \"Cumulative PnL\" FROM pm_positions WHERE status = 'closed' AND closed_at IS NOT NULL ORDER BY closed_at",
+        "rawSql": "SELECT closed_at AS time, SUM(realized_pnl::float) OVER (ORDER BY closed_at) AS \"Cumulative PnL\" FROM pm_positions WHERE status = 'closed' AND closed_at IS NOT NULL ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -222,7 +222,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT date_trunc('hour', created_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(size * price)::numeric, 2)::float AS \"Volume USD\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h' GROUP BY 1 ORDER BY 1",
+        "rawSql": "SELECT date_trunc('hour', created_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(size * price)::numeric, 2)::float AS \"Volume USD\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h' GROUP BY 1 ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
