@@ -467,6 +467,14 @@ describe('Grafana Dashboard Validation', () => {
         'regime_metrics',
         'mm_paper_fills',
         'mm_paper_stats',
+        'cross_venue_spreads',
+        'spread_episodes',
+        'funding_arb_positions',
+        'funding_arb_scans',
+        'pm_tracked_traders',
+        'pm_copy_trades',
+        'pm_positions',
+        'pm_kill_switch_events',
       ];
 
       for (const [file, dashboard] of dashboards) {
