@@ -25,7 +25,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT COUNT(*) AS \"Count\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.abs_spread_bps > 12",
+        "rawSql": "SELECT COUNT(*) AS \"Count\" FROM cross_venue_spreads WHERE abs_spread_bps > 12 AND \"timestamp\" > NOW() - INTERVAL '30 seconds'",
         "format": "table"
       }],
       "fieldConfig": {
@@ -47,7 +47,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT ROUND(MAX(abs_spread_bps)::numeric, 1) AS \"Max bps\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "rawSql": "SELECT ROUND(MAX(abs_spread_bps)::numeric, 1) AS \"Max bps\" FROM cross_venue_spreads WHERE \"timestamp\" > NOW() - INTERVAL '30 seconds'",
         "format": "table"
       }],
       "fieldConfig": {
@@ -72,7 +72,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT ROUND(AVG(abs_spread_bps)::numeric, 1) AS \"Avg bps\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "rawSql": "SELECT ROUND(AVG(abs_spread_bps)::numeric, 1) AS \"Avg bps\" FROM cross_venue_spreads WHERE \"timestamp\" > NOW() - INTERVAL '30 seconds'",
         "format": "table"
       }],
       "fieldConfig": {
@@ -95,7 +95,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT COUNT(DISTINCT asset) AS \"Assets\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts",
+        "rawSql": "SELECT COUNT(DISTINCT asset) AS \"Assets\" FROM cross_venue_spreads WHERE \"timestamp\" > NOW() - INTERVAL '30 seconds'",
         "format": "table"
       }],
       "fieldConfig": {
@@ -177,7 +177,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM cross_venue_spreads) SELECT s.asset AS \"Asset\", s.binance_symbol AS \"Binance Pair\", ROUND(s.spread_bps::numeric, 1) AS \"Spread (bps)\", ROUND(s.abs_spread_bps::numeric, 1) AS \"Abs Spread\", ROUND(s.hl_mid::numeric, 6) AS \"HL Mid\", ROUND(s.binance_mid::numeric, 6) AS \"Binance Mid\", CASE WHEN s.spread_bps > 0 THEN 'HL premium' ELSE 'Binance premium' END AS \"Direction\" FROM cross_venue_spreads s JOIN latest l ON s.\"timestamp\" = l.ts ORDER BY s.abs_spread_bps DESC",
+        "rawSql": "SELECT DISTINCT ON (asset) asset AS \"Asset\", binance_symbol AS \"Binance Pair\", ROUND(spread_bps::numeric, 1) AS \"Spread (bps)\", ROUND(abs_spread_bps::numeric, 1) AS \"Abs Spread\", ROUND(hl_mid::numeric, 6) AS \"HL Mid\", ROUND(binance_mid::numeric, 6) AS \"Binance Mid\", CASE WHEN spread_bps > 0 THEN 'HL premium' ELSE 'Binance premium' END AS \"Direction\" FROM cross_venue_spreads WHERE \"timestamp\" > NOW() - INTERVAL '30 seconds' ORDER BY asset, \"timestamp\" DESC",
         "format": "table"
       }],
       "options": {"showHeader": true, "sortBy": [{"displayName": "Abs Spread", "desc": true}]},
