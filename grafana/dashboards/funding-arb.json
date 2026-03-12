@@ -304,7 +304,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT l.ts AS time, s.asset AS metric, (s.annualized_pct * 0.75)::float AS value FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT l.ts AS time, s.asset AS metric, (s.annualized_pct * 0.75)::float AS value FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 AND s.\"timestamp\" > NOW() - INTERVAL '1h' ORDER BY s.annualized_pct DESC LIMIT 10",
         "format": "time_series"
       }],
       "fieldConfig": {

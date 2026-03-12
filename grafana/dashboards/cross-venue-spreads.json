@@ -146,7 +146,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT date_trunc('minute', \"timestamp\") AS time, COUNT(DISTINCT asset) AS \"Assets >12bps\" FROM cross_venue_spreads WHERE abs_spread_bps > 12 AND \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY 1 ORDER BY 1",
+        "rawSql": "SELECT date_trunc('minute', \"timestamp\") AS time, COUNT(DISTINCT asset) AS \"Assets >12bps\" FROM cross_venue_spreads WHERE abs_spread_bps > 12 AND \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY 1 ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
