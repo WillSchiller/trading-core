@@ -5,22 +5,34 @@ const log = createChildLogger({ component: 'funding-scanner' });
 
 const HL_INFO_URL = 'https://api.hyperliquid.xyz/info';
 const BINANCE_INFO_URL = 'https://api.binance.com/api/v3/exchangeInfo';
+const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/bookTicker';
 const HOURS_PER_YEAR = 8760;
 
 interface PerpMeta { name: string; szDecimals: number; maxLeverage: number }
 interface AssetCtx { funding: string; openInterest: string; prevDayPx: string; dayNtlVlm: string; premium: string; oraclePx: string; markPx: string; midPx?: string }
 
 interface RateHistory {
-  rates: number[];       // rolling window of hourly rates
+  rates: number[];
   timestamps: number[];
+}
+
+export interface SpreadSnapshot {
+  asset: string;
+  binanceSymbol: string;
+  hlMid: number;
+  binanceMid: number;
+  spreadBps: number;     // (HL - Binance) / Binance * 10000
+  absSpreadBps: number;
+  timestamp: number;
 }
 
 export class FundingScanner {
   private config: FundingArbConfig;
   private binanceSpotSymbols = new Map<string, string>();
-  private rateHistory = new Map<string, RateHistory>(); // asset → rolling rate history
+  private rateHistory = new Map<string, RateHistory>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastScan: FundingOpportunity[] = [];
+  private lastSpreads: SpreadSnapshot[] = [];
 
   private static readonly HISTORY_WINDOW = 60; // keep last 60 samples (1hr at 1min scan)
 
@@ -41,6 +53,10 @@ export class FundingScanner {
 
   getOpportunities(): FundingOpportunity[] {
     return this.lastScan;
+  }
+
+  getSpreads(): SpreadSnapshot[] {
+    return this.lastSpreads;
   }
 
   getOpportunityForAsset(asset: string): FundingOpportunity | null {
@@ -210,7 +226,59 @@ export class FundingScanner {
       })),
     }, 'Funding scan complete');
 
+    await this.scanSpreads(opportunities).catch(e => log.error({ err: e }, 'Spread scan error'));
+
     return opportunities;
+  }
+
+  private async scanSpreads(opps: FundingOpportunity[]): Promise<void> {
+    if (opps.length === 0) return;
+
+    const symbols = opps.map(o => o.binanceSymbol);
+    const resp = await fetch(`${BINANCE_TICKER_URL}?symbols=${encodeURIComponent(JSON.stringify(symbols))}`);
+    if (!resp.ok) return;
+
+    const tickers = await resp.json() as Array<{ symbol: string; bidPrice: string; askPrice: string }>;
+    const binancePrices = new Map<string, number>();
+    for (const t of tickers) {
+      const bid = parseFloat(t.bidPrice);
+      const ask = parseFloat(t.askPrice);
+      if (bid > 0 && ask > 0) binancePrices.set(t.symbol, (bid + ask) / 2);
+    }
+
+    const spreads: SpreadSnapshot[] = [];
+    const now = Date.now();
+    for (const opp of opps) {
+      const binMid = binancePrices.get(opp.binanceSymbol);
+      if (!binMid || binMid <= 0) continue;
+
+      const spreadBps = ((opp.perpMidPrice - binMid) / binMid) * 10000;
+      spreads.push({
+        asset: opp.asset,
+        binanceSymbol: opp.binanceSymbol,
+        hlMid: opp.perpMidPrice,
+        binanceMid: binMid,
+        spreadBps,
+        absSpreadBps: Math.abs(spreadBps),
+        timestamp: now,
+      });
+    }
+
+    spreads.sort((a, b) => b.absSpreadBps - a.absSpreadBps);
+    this.lastSpreads = spreads;
+
+    const wide = spreads.filter(s => s.absSpreadBps > 10);
+    if (wide.length > 0) {
+      log.info({
+        wideCount: wide.length,
+        top: wide.slice(0, 5).map(s => ({
+          asset: s.asset,
+          spread: `${s.spreadBps.toFixed(1)}bps`,
+          hl: s.hlMid.toFixed(4),
+          bin: s.binanceMid.toFixed(4),
+        })),
+      }, 'HL vs Binance spreads');
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

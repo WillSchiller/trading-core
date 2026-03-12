@@ -260,6 +260,26 @@ export class FundingArbManager {
     for (const pos of this.positions.values()) {
       if (pos.status === 'open') await this.persistPosition(pos);
     }
+
+    // Persist cross-venue spreads (top 20 widest)
+    const spreads = this.scanner.getSpreads().slice(0, 20);
+    if (spreads.length > 0) {
+      try {
+        const sValues: string[] = [];
+        const sParams: unknown[] = [];
+        let sIdx = 1;
+        for (const s of spreads) {
+          sValues.push(`($${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++},$${sIdx++})`);
+          sParams.push(new Date(s.timestamp), s.asset, s.binanceSymbol, s.hlMid, s.binanceMid, s.spreadBps, s.absSpreadBps);
+        }
+        await this.pool.query(`
+          INSERT INTO cross_venue_spreads (timestamp, asset, binance_symbol, hl_mid, binance_mid, spread_bps, abs_spread_bps)
+          VALUES ${sValues.join(',')}
+        `, sParams);
+      } catch (err) {
+        log.error({ err }, 'Failed to persist spreads');
+      }
+    }
   }
 
   private async loadPositions(): Promise<void> {
