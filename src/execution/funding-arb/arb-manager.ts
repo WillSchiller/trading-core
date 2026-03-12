@@ -5,15 +5,15 @@ import type { FundingArbConfig, FundingArbPosition, FundingOpportunity } from '.
 
 const log = createChildLogger({ component: 'funding-arb' });
 
-const HOURS_PER_YEAR = 8760;
-const MIN_SAMPLES_TO_ENTER = 10;
+const NEGATIVE_EXIT_HOURS = 8; // consecutive hours of negative rate before exit
 
 export class FundingArbManager {
   private config: FundingArbConfig;
   private scanner: FundingScanner;
   private pool: pg.Pool;
   private positions = new Map<string, FundingArbPosition>();
-  private rotationTimer: ReturnType<typeof setInterval> | null = null;
+  private negativeStreaks = new Map<string, number>(); // asset → consecutive negative readings
+  private checkTimer: ReturnType<typeof setInterval> | null = null;
   private persistTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: FundingArbConfig, pool: pg.Pool) {
@@ -26,153 +26,82 @@ export class FundingArbManager {
     await this.scanner.start();
     await this.loadPositions();
 
-    this.rotationTimer = setInterval(
-      () => this.evaluateRotations().catch(e => log.error({ err: e }, 'Rotation check error')),
+    this.checkTimer = setInterval(
+      () => this.evaluate().catch(e => log.error({ err: e }, 'Evaluate error')),
       this.config.rotationCheckIntervalMs,
     );
     this.persistTimer = setInterval(
       () => this.persistSnapshot().catch(e => log.error({ err: e }, 'Persist error')),
       60_000,
     );
-    setTimeout(() => this.evaluateRotations().catch(e => log.error({ err: e }, 'Initial rotation error')), 10_000);
+    setTimeout(() => this.evaluate().catch(e => log.error({ err: e }, 'Initial evaluate error')), 10_000);
 
     log.info({
       paperMode: this.config.paperMode,
       maxPositions: this.config.maxPositions,
       positionSizeUsd: this.config.positionSizeUsd,
-      minApy: this.config.minAnnualizedPct,
-    }, 'Funding arb manager started');
+      leverage: this.config.perpLeverage,
+      targetAssets: this.config.spotAssetWhitelist ?? 'auto',
+    }, 'Funding arb manager started (buy-and-hold mode)');
   }
 
   stop(): void {
     this.scanner.stop();
-    if (this.rotationTimer) { clearInterval(this.rotationTimer); this.rotationTimer = null; }
+    if (this.checkTimer) { clearInterval(this.checkTimer); this.checkTimer = null; }
     if (this.persistTimer) { clearInterval(this.persistTimer); this.persistTimer = null; }
   }
 
   getPositions(): FundingArbPosition[] { return Array.from(this.positions.values()); }
   getScanner(): FundingScanner { return this.scanner; }
 
-  private roundTripFeeBps(): number {
-    const perpFee = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
-    return (perpFee + this.config.spotFeeBps) * 2;
-  }
-
-  private breakEvenHours(rate: number): number {
-    if (rate <= 0) return 99999;
-    return (this.roundTripFeeBps() / 10000) / rate;
-  }
-
-  private shouldEnter(opp: FundingOpportunity): { enter: boolean; reason: string } {
-    // Gate 1: Need enough samples to trust the rate isn't a momentary spike
-    if (opp.rateSamples < MIN_SAMPLES_TO_ENTER) {
-      return { enter: false, reason: `insufficient_samples (${opp.rateSamples}/${MIN_SAMPLES_TO_ENTER})` };
-    }
-
-    // Gate 2: Conservative (median) APY must exceed minimum
-    if (opp.conservativeApy < this.config.minAnnualizedPct) {
-      return { enter: false, reason: `conservative_apy_too_low (${opp.conservativeApy.toFixed(1)}%)` };
-    }
-
-    // Gate 3: Even the MIN rate in lookback must be positive (no flip-flopping)
-    if (opp.minRateLookback <= 0) {
-      return { enter: false, reason: 'rate_went_negative_in_lookback' };
-    }
-
-    // Gate 4: Break-even using conservative rate must be < max allowed
-    const conservativeBreakEven = this.breakEvenHours(opp.minRateLookback);
-    if (conservativeBreakEven > this.config.maxBreakEvenHours) {
-      return { enter: false, reason: `break_even_too_long (${conservativeBreakEven.toFixed(0)}h)` };
-    }
-
-    return { enter: true, reason: 'passed_all_gates' };
-  }
-
-  private shouldRotate(currentPos: FundingArbPosition, newOpp: FundingOpportunity): { rotate: boolean; reason: string } {
-    const currentOpp = this.scanner.getOpportunityForAsset(currentPos.asset);
-    const currentRate = currentOpp?.currentFundingRate ?? 0;
-
-    // Never rotate before we've broken even on current position
-    const totalFees = currentPos.entryFeesUsd + this.exitFeesUsd();
-    if (currentPos.accumulatedFunding < totalFees) {
-      return { rotate: false, reason: 'not_broken_even_yet' };
-    }
-
-    // Rotation costs: close current (exit fees) + open new (entry fees) = 2x one-side fees
-    const rotationCostBps = this.roundTripFeeBps(); // full round trip on both sides
-    const rateGain = newOpp.conservativeApy / 100 / HOURS_PER_YEAR - currentRate;
-    if (rateGain <= 0) {
-      return { rotate: false, reason: 'no_rate_improvement' };
-    }
-
-    // How many hours to recoup rotation cost from the extra rate?
-    const hoursToRecoup = (rotationCostBps / 10000) / rateGain;
-    // Only rotate if we recoup within reasonable time
-    if (hoursToRecoup > this.config.maxBreakEvenHours) {
-      return { rotate: false, reason: `rotation_recoup_too_slow (${hoursToRecoup.toFixed(0)}h)` };
-    }
-
-    // New opportunity must also pass entry gates
-    const entryCheck = this.shouldEnter(newOpp);
-    if (!entryCheck.enter) {
-      return { rotate: false, reason: `new_opp_fails: ${entryCheck.reason}` };
-    }
-
-    return { rotate: true, reason: `rate_gain +${(rateGain * HOURS_PER_YEAR * 100).toFixed(1)}% APY, recoup in ${hoursToRecoup.toFixed(0)}h` };
-  }
-
-  private exitFeesUsd(): number {
+  private entryFeesUsd(): number {
     const perpFee = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
     return ((perpFee + this.config.spotFeeBps) / 10000) * this.config.positionSizeUsd;
   }
 
-  private async evaluateRotations(): Promise<void> {
+  private exitFeesUsd(): number {
+    return this.entryFeesUsd();
+  }
+
+  private async evaluate(): Promise<void> {
     const opps = this.scanner.getOpportunities();
     if (opps.length === 0) return;
 
-    // Check existing positions
+    // Check existing positions for persistent negative funding
     for (const [asset, pos] of this.positions) {
       if (pos.status !== 'open') continue;
       pos.hoursHeld = (Date.now() - pos.openedAt) / 3_600_000;
-      const currentOpp = this.scanner.getOpportunityForAsset(asset);
-      const currentApy = currentOpp?.conservativeApy ?? 0;
 
-      // Only exit if: rate dropped AND we've already broken even on fees
-      const totalFees = pos.entryFeesUsd + this.exitFeesUsd();
-      const brokenEven = pos.accumulatedFunding >= totalFees;
+      const opp = this.scanner.getOpportunityForAsset(asset);
+      const rate = opp?.currentFundingRate ?? 0;
 
-      if (currentApy < this.config.exitBelowAnnualizedPct && brokenEven) {
-        log.info({ asset, currentApy: currentApy.toFixed(1), funding: pos.accumulatedFunding.toFixed(4), fees: totalFees.toFixed(4) }, 'Funding dropped + broken even — closing');
-        await this.closePosition(asset, 'funding_dropped');
-        continue;
-      }
+      if (rate <= 0) {
+        const streak = (this.negativeStreaks.get(asset) ?? 0) + 1;
+        this.negativeStreaks.set(asset, streak);
+        const negativeHours = streak * (this.config.rotationCheckIntervalMs / 3_600_000);
 
-      // Check rotation only if we've broken even
-      if (!brokenEven) continue;
-
-      for (const opp of opps) {
-        if (opp.asset === asset || this.positions.has(opp.asset)) continue;
-        const check = this.shouldRotate(pos, opp);
-        if (check.rotate) {
-          log.info({ from: asset, to: opp.asset, reason: check.reason }, 'Rotation');
-          await this.closePosition(asset, 'rotation');
-          await this.openPosition(opp);
-          break;
+        if (negativeHours >= NEGATIVE_EXIT_HOURS) {
+          log.info({ asset, negativeHours: negativeHours.toFixed(1), rate }, 'Persistent negative funding — closing');
+          await this.closePosition(asset, 'persistent_negative');
+          this.negativeStreaks.delete(asset);
+        } else {
+          log.debug({ asset, negativeHours: negativeHours.toFixed(1), rate }, 'Negative rate tick');
         }
+      } else {
+        this.negativeStreaks.set(asset, 0);
       }
     }
 
-    // Fill empty slots
+    // Fill empty slots — pick highest-rate assets with positive funding
+    const openCount = this.countOpenPositions();
+    if (openCount >= this.config.maxPositions) return;
+
     for (const opp of opps) {
       if (this.countOpenPositions() >= this.config.maxPositions) break;
       if (this.positions.has(opp.asset)) continue;
+      if (opp.currentFundingRate <= 0) continue;
 
-      const check = this.shouldEnter(opp);
-      if (check.enter) {
-        await this.openPosition(opp);
-      } else if (opp.conservativeApy >= this.config.minAnnualizedPct) {
-        log.debug({ asset: opp.asset, reason: check.reason, apy: opp.conservativeApy.toFixed(1) }, 'Skipped entry');
-      }
+      await this.openPosition(opp);
     }
   }
 
@@ -188,16 +117,13 @@ export class FundingArbManager {
     const id = `farb_${Date.now()}_${opp.asset}`;
     const notional = this.config.positionSizeUsd;
     const perpQty = notional / opp.perpMidPrice;
-    const spotPrice = opp.perpMidPrice;
-    const spotQty = notional / spotPrice;
-
-    const perpFeeBps = this.config.useMakerOrders ? this.config.makerFeeBps : this.config.takerFeeBps;
-    const entryFees = ((perpFeeBps + this.config.spotFeeBps) / 10000) * notional;
+    const spotQty = perpQty;
+    const entryFees = this.entryFeesUsd();
 
     const position: FundingArbPosition = {
       id, asset: opp.asset, binanceSymbol: opp.binanceSymbol, status: 'open',
       perpShortQty: perpQty.toFixed(6), perpEntryPrice: opp.perpMidPrice.toFixed(6),
-      spotLongQty: spotQty.toFixed(6), spotEntryPrice: spotPrice.toFixed(6),
+      spotLongQty: spotQty.toFixed(6), spotEntryPrice: opp.perpMidPrice.toFixed(6),
       notionalUsd: notional, leverage: this.config.perpLeverage,
       entryFundingRate: opp.currentFundingRate, accumulatedFunding: 0,
       entryFeesUsd: entryFees, exitFeesUsd: 0, realizedPnl: -entryFees,
@@ -207,16 +133,18 @@ export class FundingArbManager {
 
     this.positions.set(opp.asset, position);
 
-    const expectedBreakEven = this.breakEvenHours(opp.minRateLookback);
+    const capitalRequired = notional + (notional / this.config.perpLeverage);
+    const annualFunding = opp.currentFundingRate * 8760 * notional;
+    const netAnnual = annualFunding - (entryFees * 2);
+    const roic = (netAnnual / capitalRequired) * 100;
+
     log.info({
       asset: opp.asset, binance: opp.binanceSymbol, notional,
-      conservApy: `${opp.conservativeApy.toFixed(1)}%`,
-      currentApy: `${opp.annualizedPct.toFixed(1)}%`,
-      breakEven: `${expectedBreakEven.toFixed(1)}h`,
+      rate: opp.currentFundingRate.toFixed(8),
+      apy: `${opp.annualizedPct.toFixed(1)}%`,
+      roic: `${roic.toFixed(1)}%`,
       entryFees: entryFees.toFixed(2),
-      samples: opp.rateSamples,
-      minRate: opp.minRateLookback.toFixed(8),
-    }, 'PAPER: Opened funding arb (HL short + Binance spot long)');
+    }, 'PAPER: Opened buy-and-hold funding arb');
 
     await this.persistPosition(position);
   }
@@ -226,15 +154,14 @@ export class FundingArbManager {
     if (!pos) return;
 
     const opp = this.scanner.getOpportunityForAsset(asset);
-    const currentPerpPrice = opp?.perpMidPrice ?? parseFloat(pos.perpEntryPrice);
-    const currentSpotPrice = currentPerpPrice;
+    const currentPrice = opp?.perpMidPrice ?? parseFloat(pos.perpEntryPrice);
     const perpEntry = parseFloat(pos.perpEntryPrice);
     const spotEntry = parseFloat(pos.spotEntryPrice);
     const perpQty = parseFloat(pos.perpShortQty);
     const spotQty = parseFloat(pos.spotLongQty);
 
-    pos.perpPnl = (perpEntry - currentPerpPrice) * perpQty;
-    pos.spotPnl = (currentSpotPrice - spotEntry) * spotQty;
+    pos.perpPnl = (perpEntry - currentPrice) * perpQty;
+    pos.spotPnl = (currentPrice - spotEntry) * spotQty;
     pos.exitFeesUsd = this.exitFeesUsd();
     pos.realizedPnl = pos.perpPnl + pos.spotPnl + pos.accumulatedFunding - pos.entryFeesUsd - pos.exitFeesUsd;
     pos.status = 'closed';
@@ -264,17 +191,16 @@ export class FundingArbManager {
       const perpQty = parseFloat(pos.perpShortQty);
       pos.perpPnl = (perpEntry - opp.perpMidPrice) * perpQty;
       pos.spotPnl = -pos.perpPnl;
+      pos.hoursHeld = (Date.now() - pos.openedAt) / 3_600_000;
 
       const totalFees = pos.entryFeesUsd + this.exitFeesUsd();
-      const netAfterFees = pos.accumulatedFunding - totalFees;
       log.info({
         asset, fundingPayment: fundingPayment.toFixed(6),
         totalFunding: pos.accumulatedFunding.toFixed(4),
         totalFees: totalFees.toFixed(4),
-        netAfterFees: netAfterFees.toFixed(4),
-        brokenEven: netAfterFees >= 0,
+        net: (pos.accumulatedFunding - totalFees).toFixed(4),
         rate: opp.currentFundingRate.toFixed(6),
-        hoursHeld: ((Date.now() - pos.openedAt) / 3_600_000).toFixed(1),
+        hoursHeld: pos.hoursHeld.toFixed(1),
       }, 'Funding accrued');
     }
   }

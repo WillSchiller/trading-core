@@ -587,8 +587,8 @@ async function main() {
         rotationCheckIntervalMs: Number(process.env.FUNDING_ARB_ROTATION_INTERVAL_MS || '300000'),
         maxPositions: Number(process.env.FUNDING_ARB_MAX_POSITIONS || '3'),
         positionSizeUsd: Number(process.env.FUNDING_ARB_POSITION_SIZE_USD || '150'),
-        perpLeverage: Number(process.env.FUNDING_ARB_LEVERAGE || '3'),
-        minAnnualizedPct: Number(process.env.FUNDING_ARB_MIN_APY || '20'),
+        perpLeverage: Number(process.env.FUNDING_ARB_LEVERAGE || '10'),
+        minAnnualizedPct: Number(process.env.FUNDING_ARB_MIN_APY || '5'),
         rotationThresholdPct: Number(process.env.FUNDING_ARB_ROTATION_THRESHOLD || '10'),
         exitBelowAnnualizedPct: Number(process.env.FUNDING_ARB_EXIT_BELOW_APY || '5'),
         takerFeeBps: 4.5,   // HL perp taker per side
