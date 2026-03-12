@@ -143,12 +143,12 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Top 5 Assets by APY Over Time",
+      "title": "Top 5 Assets by APY (capital-adjusted, 3x lev)",
       "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH top_assets AS (SELECT asset FROM funding_arb_scans WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(annualized_pct) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, s.annualized_pct::float AS value FROM funding_arb_scans s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
+        "rawSql": "WITH top_assets AS (SELECT asset FROM funding_arb_scans WHERE \"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz GROUP BY asset ORDER BY AVG(annualized_pct) DESC LIMIT 5) SELECT s.\"timestamp\" AS time, s.asset AS metric, (s.annualized_pct * 0.75)::float AS value FROM funding_arb_scans s JOIN top_assets t ON t.asset = s.asset WHERE s.\"timestamp\" BETWEEN $__timeFrom()::timestamptz AND $__timeTo()::timestamptz ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -299,12 +299,12 @@
     {
       "id": 11,
       "type": "bargauge",
-      "title": "Current Best Opportunities",
+      "title": "Current Best Opportunities (capital-adjusted APY, 3x lev)",
       "gridPos": {"x": 12, "y": 26, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT s.asset AS \"Asset\", s.annualized_pct::float AS \"APY (%)\" FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
+        "rawSql": "WITH latest AS (SELECT MAX(\"timestamp\") AS ts FROM funding_arb_scans) SELECT s.asset AS \"Asset\", (s.annualized_pct * 0.75)::float AS \"APY (%)\" FROM funding_arb_scans s JOIN latest l ON s.\"timestamp\" = l.ts WHERE s.annualized_pct > 0 ORDER BY s.annualized_pct DESC LIMIT 10",
         "format": "table"
       }],
       "fieldConfig": {
