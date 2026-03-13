@@ -80,7 +80,7 @@ export class ActivityMonitor {
       const activities = await this.fetchActivity(trader.address);
       this.successCount++;
 
-      const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 60_000);
+      const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 24 * 60 * 60_000);
       const newTrades = activities
         .filter(a => a.timestamp > lastSeen && a.price > 0 && !this.seenTradeIds.has(a.id))
         .sort((a, b) => a.timestamp - b.timestamp);
