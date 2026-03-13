@@ -13,6 +13,7 @@ export class ActivityMonitor {
   private onNewTrade: TradeCallback | null = null;
   private traders: TrackedTrader[] = [];
   private pollIndex = 0;
+  private readonly bootTime = Date.now();
 
   private static readonly MARKET_CACHE_TTL = 5 * 60 * 1000;
   private static readonly MAX_SEEN_IDS = 10000;
@@ -55,9 +56,9 @@ export class ActivityMonitor {
     try {
       const activities = await this.fetchActivity(trader.address);
 
-      const lastSeen = this.lastSeenTimestamp.get(trader.address) || 0;
+      const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 60_000);
       const newTrades = activities
-        .filter(a => a.timestamp > lastSeen && a.side === 'BUY' && !this.seenTradeIds.has(a.id))
+        .filter(a => a.timestamp > lastSeen && a.side === 'BUY' && a.price > 0 && !this.seenTradeIds.has(a.id))
         .sort((a, b) => a.timestamp - b.timestamp);
 
       for (const activity of newTrades) {
@@ -69,8 +70,12 @@ export class ActivityMonitor {
 
         const market = await this.getMarketInfo(activity.conditionId);
         if (market) {
+          if (market.closed) {
+            log.debug({ market: market.slug }, 'Skipping closed market');
+            continue;
+          }
           activity.marketQuestion = market.question;
-          activity.marketSlug = market.slug;
+          activity.marketSlug = market.slug || activity.marketSlug;
           activity.negRisk = market.negRisk;
           activity.outcome = this.resolveOutcome(market, activity.tokenId);
         }
