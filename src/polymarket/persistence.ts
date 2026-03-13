@@ -14,9 +14,14 @@ export class PolymarketPersistence {
          volume = EXCLUDED.volume,
          bankroll_estimate = EXCLUDED.bankroll_estimate,
          rank = EXCLUDED.rank,
+         enabled = EXCLUDED.enabled,
          updated_at = NOW()`,
       [trader.address, trader.alias, trader.pnl, trader.volume, trader.bankrollEstimate, trader.rank, trader.enabled],
     );
+  }
+
+  async disableAllTraders(): Promise<void> {
+    await this.pool.query(`UPDATE pm_tracked_traders SET enabled = false, updated_at = NOW()`);
   }
 
   async getActiveTraders(): Promise<TrackedTrader[]> {

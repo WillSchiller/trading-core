@@ -37,6 +37,8 @@ export class TraderDiscovery {
       const entries = await this.fetchLeaderboard();
       log.info({ found: entries.length }, 'Leaderboard fetched');
 
+      await this.persistence.disableAllTraders();
+
       for (const entry of entries.slice(0, this.config.maxTraders)) {
         const bankroll = this.estimateBankroll(entry);
         const trader: TrackedTrader = {
@@ -52,7 +54,7 @@ export class TraderDiscovery {
       }
 
       this.traders = await this.persistence.getActiveTraders();
-      log.info({ active: this.traders.length }, 'Trader roster updated');
+      log.info({ active: this.traders.length, names: this.traders.map(t => t.alias) }, 'Trader roster updated');
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Failed to refresh leaderboard');
     }
@@ -64,7 +66,7 @@ export class TraderDiscovery {
   }
 
   private async fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-    const url = `${this.config.dataApiUrl}/v1/leaderboard?category=OVERALL&timePeriod=WEEK&orderBy=PNL&limit=${this.config.maxTraders}&offset=0`;
+    const url = `${this.config.dataApiUrl}/v1/leaderboard?category=SPORTS&timePeriod=DAY&orderBy=PNL&limit=${this.config.maxTraders}&offset=0`;
     const resp = await fetch(url);
 
     if (!resp.ok) {
