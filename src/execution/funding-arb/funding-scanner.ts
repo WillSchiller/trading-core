@@ -148,7 +148,7 @@ export class FundingScanner {
     ]);
     const fetchLatencyMs = Date.now() - t0;
 
-    let binancePrices = new Map<string, number>();
+    const binancePrices = new Map<string, number>();
     if (binanceResp?.ok) {
       const tickers = await binanceResp.json() as Array<{ symbol: string; bidPrice: string; askPrice: string }>;
       for (const t of tickers) {
