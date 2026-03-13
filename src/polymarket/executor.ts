@@ -233,11 +233,16 @@ export class CopyExecutor {
   private async initClobClient(): Promise<ClobClient> {
     try {
       const { ClobClient: Client } = await import('@polymarket/clob-client' as string);
+      const creds = this.config.apiKey ? {
+        key: this.config.apiKey,
+        secret: this.config.apiSecret,
+        passphrase: this.config.passphrase,
+      } : undefined;
       const client = new Client(
         this.config.clobApiUrl,
         137,
-        undefined,
-        { key: this.config.privateKey },
+        this.config.privateKey ? { key: this.config.privateKey } : undefined,
+        creds,
       );
       return client as unknown as ClobClient;
     } catch (err) {

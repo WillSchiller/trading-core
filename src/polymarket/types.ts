@@ -9,6 +9,9 @@ export interface PolymarketConfig {
   maxTraders: number;
   riskLimits: PolymarketRiskLimits;
   privateKey?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  passphrase?: string;
   clobApiUrl: string;
   gammaApiUrl: string;
   dataApiUrl: string;
