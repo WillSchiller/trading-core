@@ -97,16 +97,6 @@ export class ActivityMonitor {
           for (const id of toDelete) this.seenTradeIds.delete(id);
         }
 
-        const market = await this.getMarketInfo(activity.conditionId);
-        let marketClosed = false;
-        if (market) {
-          marketClosed = market.closed || false;
-          activity.marketQuestion = market.question;
-          activity.marketSlug = market.slug || activity.marketSlug;
-          activity.negRisk = market.negRisk;
-          activity.outcome = this.resolveOutcome(market, activity.tokenId);
-        }
-
         log.info({
           trader: trader.alias,
           market: activity.marketSlug,
@@ -114,10 +104,7 @@ export class ActivityMonitor {
           size: activity.size,
           price: activity.price,
           outcome: activity.outcome,
-          closed: marketClosed,
         }, 'New trader activity detected');
-
-        if (marketClosed) continue;
 
         if (this.onShadowTrade) {
           this.onShadowTrade(trader, activity);
