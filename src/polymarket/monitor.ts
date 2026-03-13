@@ -1,5 +1,5 @@
 import { createChildLogger } from '../utils/logger.js';
-import type { PolymarketConfig, TrackedTrader, TraderActivity, MarketInfo } from './types.js';
+import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js';
 
 const log = createChildLogger({ component: 'pm-monitor' });
 
@@ -9,7 +9,6 @@ type ShadowCallback = (trader: TrackedTrader, activity: TraderActivity) => void;
 export class ActivityMonitor {
   private lastSeenTimestamp = new Map<string, number>();
   private seenTradeIds = new Set<string>();
-  private marketCache = new Map<string, { info: MarketInfo; cachedAt: number }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private onNewTrade: TradeCallback | null = null;
   private onShadowTrade: ShadowCallback | null = null;
@@ -19,7 +18,6 @@ export class ActivityMonitor {
   private successCount = 0;
   private readonly bootTime = Date.now();
 
-  private static readonly MARKET_CACHE_TTL = 5 * 60 * 1000;
   private static readonly MAX_SEEN_IDS = 10000;
 
   constructor(private readonly config: PolymarketConfig) {}
@@ -163,64 +161,4 @@ export class ActivityMonitor {
       }));
   }
 
-  private async getMarketInfo(conditionId: string): Promise<MarketInfo | null> {
-    const cached = this.marketCache.get(conditionId);
-    if (cached && Date.now() - cached.cachedAt < ActivityMonitor.MARKET_CACHE_TTL) {
-      return cached.info;
-    }
-
-    try {
-      const url = `${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`;
-      const resp = await fetch(url);
-      if (!resp.ok) return null;
-
-      const data = await resp.json() as Array<{
-        conditionId?: string;
-        questionID?: string;
-        question?: string;
-        slug?: string;
-        outcomes?: string;
-        outcomePrices?: string;
-        volume?: number;
-        liquidity?: number;
-        negRisk?: boolean;
-        active?: boolean;
-        closed?: boolean;
-        clobTokenIds?: string;
-      }>;
-
-      if (!data.length) return null;
-
-      const m = data[0];
-      const outcomes = JSON.parse(m.outcomes || '[]') as string[];
-      const outcomePrices = JSON.parse(m.outcomePrices || '[]') as number[];
-      const tokenIds = JSON.parse(m.clobTokenIds || '[]') as string[];
-
-      const info: MarketInfo = {
-        conditionId: m.conditionId || conditionId,
-        questionId: m.questionID || '',
-        question: m.question || '',
-        slug: m.slug || '',
-        outcomes,
-        outcomePrices,
-        volume: m.volume || 0,
-        liquidity: m.liquidity || 0,
-        negRisk: m.negRisk || false,
-        active: m.active !== false,
-        closed: m.closed || false,
-        tokens: outcomes.map((o, i) => ({ tokenId: tokenIds[i] || '', outcome: o })),
-      };
-
-      this.marketCache.set(conditionId, { info, cachedAt: Date.now() });
-      return info;
-    } catch (err) {
-      log.debug({ conditionId, error: (err as Error).message }, 'Failed to fetch market info');
-      return null;
-    }
-  }
-
-  private resolveOutcome(market: MarketInfo, tokenId: string): string {
-    const token = market.tokens.find(t => t.tokenId === tokenId);
-    return token?.outcome || 'Unknown';
-  }
 }
