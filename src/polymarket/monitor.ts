@@ -4,6 +4,7 @@ import type { PolymarketConfig, TrackedTrader, TraderActivity, MarketInfo } from
 const log = createChildLogger({ component: 'pm-monitor' });
 
 type TradeCallback = (trader: TrackedTrader, activity: TraderActivity) => void;
+type ShadowCallback = (trader: TrackedTrader, activity: TraderActivity) => void;
 
 export class ActivityMonitor {
   private lastSeenTimestamp = new Map<string, number>();
@@ -11,6 +12,7 @@ export class ActivityMonitor {
   private marketCache = new Map<string, { info: MarketInfo; cachedAt: number }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private onNewTrade: TradeCallback | null = null;
+  private onShadowTrade: ShadowCallback | null = null;
   private traders: TrackedTrader[] = [];
   private pollIndex = 0;
   private readonly bootTime = Date.now();
@@ -22,6 +24,10 @@ export class ActivityMonitor {
 
   setTradeCallback(cb: TradeCallback): void {
     this.onNewTrade = cb;
+  }
+
+  setShadowCallback(cb: ShadowCallback): void {
+    this.onShadowTrade = cb;
   }
 
   setTraders(traders: TrackedTrader[]): void {
@@ -58,7 +64,7 @@ export class ActivityMonitor {
 
       const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 60_000);
       const newTrades = activities
-        .filter(a => a.timestamp > lastSeen && a.side === 'BUY' && a.price > 0 && !this.seenTradeIds.has(a.id))
+        .filter(a => a.timestamp > lastSeen && a.price > 0 && !this.seenTradeIds.has(a.id))
         .sort((a, b) => a.timestamp - b.timestamp);
 
       for (const activity of newTrades) {
@@ -89,7 +95,11 @@ export class ActivityMonitor {
           outcome: activity.outcome,
         }, 'New trader activity detected');
 
-        if (this.onNewTrade) {
+        if (this.onShadowTrade) {
+          this.onShadowTrade(trader, activity);
+        }
+
+        if (activity.side === 'BUY' && this.onNewTrade) {
           this.onNewTrade(trader, activity);
         }
       }

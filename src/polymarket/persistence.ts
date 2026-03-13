@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { TrackedTrader, CopyTrade, CopyPosition, KillSwitchEvent } from './types.js';
+import type { TrackedTrader, CopyTrade, CopyPosition, KillSwitchEvent, ShadowTrade } from './types.js';
 
 export class PolymarketPersistence {
   constructor(private readonly pool: pg.Pool) {}
@@ -167,6 +167,43 @@ export class PolymarketPersistence {
       [tokenId],
     );
     return result.rows[0] ?? null;
+  }
+
+  async saveShadowTrade(trade: ShadowTrade): Promise<number> {
+    const result = await this.pool.query(
+      `INSERT INTO pm_shadow_trades (trader_address, trader_alias, condition_id, token_id, side, size, price, outcome, market_slug, market_question, neg_risk, our_size, our_entry_price, current_price, trader_timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id`,
+      [trade.traderAddress, trade.traderAlias, trade.conditionId, trade.tokenId, trade.side,
+       trade.size, trade.price, trade.outcome, trade.marketSlug, trade.marketQuestion,
+       trade.negRisk, trade.ourSize, trade.ourEntryPrice, trade.currentPrice, trade.traderTimestamp],
+    );
+    return result.rows[0].id;
+  }
+
+  async getUnresolvedShadowTrades(): Promise<(ShadowTrade & { id: number })[]> {
+    const result = await this.pool.query(
+      `SELECT id, condition_id as "conditionId", token_id as "tokenId", side,
+              our_size::float as "ourSize", our_entry_price::float as "ourEntryPrice",
+              current_price::float as "currentPrice", market_slug as "marketSlug"
+       FROM pm_shadow_trades WHERE resolved = false AND side = 'BUY'
+       ORDER BY observed_at ASC`,
+    );
+    return result.rows;
+  }
+
+  async resolveShadowTrade(id: number, resolutionPrice: number, pnl: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_shadow_trades SET resolved = true, resolution_price = $1, pnl_if_copied = $2, resolved_at = NOW() WHERE id = $3`,
+      [resolutionPrice, pnl, id],
+    );
+  }
+
+  async updateShadowPrice(id: number, currentPrice: number, pnl: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_shadow_trades SET current_price = $1, pnl_if_copied = $2 WHERE id = $3`,
+      [currentPrice, pnl, id],
+    );
   }
 
   async saveKillSwitchEvent(event: KillSwitchEvent): Promise<void> {

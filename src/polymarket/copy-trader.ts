@@ -6,9 +6,16 @@ import { TraderDiscovery } from './discovery.js';
 import { ActivityMonitor } from './monitor.js';
 import { CopyExecutor } from './executor.js';
 import { PolymarketRiskManager } from './risk-manager.js';
-import type { PolymarketConfig } from './types.js';
+import type { PolymarketConfig, ShadowTrade } from './types.js';
 
 const log = createChildLogger({ component: 'pm-copy-trader' });
+
+interface MarketData {
+  conditionId?: string;
+  closed?: boolean;
+  outcomePrices?: string;
+  clobTokenIds?: string;
+}
 
 export class PolymarketCopyTrader {
   private config: PolymarketConfig;
@@ -19,6 +26,7 @@ export class PolymarketCopyTrader {
   private riskManager: PolymarketRiskManager;
   private priceUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
@@ -35,6 +43,36 @@ export class PolymarketCopyTrader {
 
     const traders = this.discovery.getTrackedTraders();
     this.monitor.setTraders(traders);
+
+    this.monitor.setShadowCallback(async (trader, activity) => {
+      try {
+        const proportionalSize = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
+        const clampedSize = Math.min(proportionalSize, this.config.riskLimits.maxPositionUsd);
+        const ourSize = Math.max(1, Math.round(clampedSize * 100) / 100);
+
+        const shadow: ShadowTrade = {
+          traderAddress: trader.address,
+          traderAlias: trader.alias,
+          conditionId: activity.conditionId,
+          tokenId: activity.tokenId,
+          side: activity.side,
+          size: activity.size,
+          price: activity.price,
+          outcome: activity.outcome,
+          marketSlug: activity.marketSlug,
+          marketQuestion: activity.marketQuestion,
+          negRisk: activity.negRisk,
+          ourSize: activity.side === 'BUY' ? ourSize : null,
+          ourEntryPrice: activity.side === 'BUY' ? activity.price : null,
+          currentPrice: activity.price,
+          traderTimestamp: activity.timestamp,
+        };
+        await this.persistence.saveShadowTrade(shadow);
+        log.debug({ trader: trader.alias, market: activity.marketSlug, side: activity.side }, 'Shadow trade recorded');
+      } catch (err) {
+        log.error({ error: (err as Error).message }, 'Shadow trade save error');
+      }
+    });
 
     this.monitor.setTradeCallback(async (trader, activity) => {
       try {
@@ -61,6 +99,11 @@ export class PolymarketCopyTrader {
       this.config.positionUpdateIntervalMs,
     );
 
+    this.shadowUpdateTimer = setInterval(
+      () => this.updateShadowPrices().catch(e => log.error({ err: e }, 'Shadow update error')),
+      60_000,
+    );
+
     this.traderRefreshTimer = setInterval(() => {
       const updatedTraders = this.discovery.getTrackedTraders();
       this.monitor.setTraders(updatedTraders);
@@ -81,6 +124,63 @@ export class PolymarketCopyTrader {
     this.riskManager.stop();
     if (this.priceUpdateTimer) { clearInterval(this.priceUpdateTimer); this.priceUpdateTimer = null; }
     if (this.traderRefreshTimer) { clearInterval(this.traderRefreshTimer); this.traderRefreshTimer = null; }
+    if (this.shadowUpdateTimer) { clearInterval(this.shadowUpdateTimer); this.shadowUpdateTimer = null; }
     log.info('Polymarket copy trader stopped');
+  }
+
+  private async updateShadowPrices(): Promise<void> {
+    const unresolved = await this.persistence.getUnresolvedShadowTrades();
+    let updated = 0;
+    let resolved = 0;
+
+    for (const trade of unresolved) {
+      try {
+        const market = await this.fetchMarketByCondition(trade.conditionId);
+        if (!market) continue;
+
+        if (market.closed) {
+          const resPrice = this.getResolutionPrice(market, trade.tokenId);
+          const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
+          await this.persistence.resolveShadowTrade(trade.id, resPrice, pnl);
+          resolved++;
+        } else {
+          const currentPrice = this.getTokenPrice(market, trade.tokenId);
+          if (currentPrice !== null && trade.ourSize) {
+            const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
+            await this.persistence.updateShadowPrice(trade.id, currentPrice, pnl);
+            updated++;
+          }
+        }
+      } catch { /* skip */ }
+    }
+
+    if (updated > 0 || resolved > 0) {
+      log.info({ updated, resolved, total: unresolved.length }, 'Shadow prices updated');
+    }
+  }
+
+  private async fetchMarketByCondition(conditionId: string): Promise<MarketData | null> {
+    try {
+      const url = `${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json() as MarketData[];
+      return data[0] ?? null;
+    } catch { return null; }
+  }
+
+  private getTokenPrice(market: MarketData, tokenId: string): number | null {
+    const prices = JSON.parse(market.outcomePrices || '[]') as number[];
+    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
+    const idx = tokenIds.indexOf(tokenId);
+    return idx >= 0 ? prices[idx] ?? null : null;
+  }
+
+  private getResolutionPrice(market: MarketData, tokenId: string): number {
+    const prices = JSON.parse(market.outcomePrices || '[]') as number[];
+    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
+    const idx = tokenIds.indexOf(tokenId);
+    if (idx >= 0 && prices[idx] !== undefined) return prices[idx];
+    return 0;
   }
 }

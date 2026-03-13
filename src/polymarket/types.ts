@@ -112,6 +112,24 @@ export interface MarketInfo {
   tokens: Array<{ tokenId: string; outcome: string }>;
 }
 
+export interface ShadowTrade {
+  traderAddress: string;
+  traderAlias: string;
+  conditionId: string;
+  tokenId: string;
+  side: 'BUY' | 'SELL';
+  size: number;
+  price: number;
+  outcome: string;
+  marketSlug: string;
+  marketQuestion: string;
+  negRisk: boolean;
+  ourSize: number | null;
+  ourEntryPrice: number | null;
+  currentPrice: number | null;
+  traderTimestamp: number;
+}
+
 export interface LeaderboardEntry {
   address: string;
   displayName: string;

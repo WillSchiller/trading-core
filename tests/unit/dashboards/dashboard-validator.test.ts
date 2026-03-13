@@ -475,6 +475,8 @@ describe('Grafana Dashboard Validation', () => {
         'pm_copy_trades',
         'pm_positions',
         'pm_kill_switch_events',
+        'pm_shadow_trades',
+        'v_pm_shadow_performance',
       ];
 
       for (const [file, dashboard] of dashboards) {
