@@ -138,7 +138,7 @@ export class ActivityMonitor {
       .map(item => ({
         id: item.transactionHash || `${item.timestamp}_${item.conditionId}_${item.side}`,
         traderAddress: address,
-        timestamp: new Date(item.timestamp || 0).getTime(),
+        timestamp: Number(item.timestamp || 0) * 1000,
         conditionId: item.conditionId || '',
         tokenId: item.asset || '',
         side: (item.side === 'BUY' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
