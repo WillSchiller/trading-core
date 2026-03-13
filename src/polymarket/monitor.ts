@@ -15,6 +15,8 @@ export class ActivityMonitor {
   private onShadowTrade: ShadowCallback | null = null;
   private traders: TrackedTrader[] = [];
   private pollIndex = 0;
+  private errorCount = 0;
+  private successCount = 0;
   private readonly bootTime = Date.now();
 
   private static readonly MARKET_CACHE_TTL = 5 * 60 * 1000;
@@ -46,7 +48,11 @@ export class ActivityMonitor {
       () => this.pollNext().catch(e => log.error({ err: e }, 'Poll error')),
       perTraderInterval,
     );
-    log.info({ traders: this.traders.length, perTraderMs: perTraderInterval }, 'Activity monitor started');
+    log.info({ traders: this.traders.length, perTraderMs: perTraderInterval, bootTime: this.bootTime }, 'Activity monitor started');
+
+    setTimeout(() => {
+      log.info({ pollIndex: this.pollIndex, errors: this.errorCount, successes: this.successCount }, 'Monitor health check (30s)');
+    }, 30_000);
   }
 
   stop(): void {
@@ -56,28 +62,44 @@ export class ActivityMonitor {
   private async pollNext(): Promise<void> {
     if (this.traders.length === 0) return;
 
-    const trader = this.traders[this.pollIndex % this.traders.length];
+    const idx = this.pollIndex % this.traders.length;
+    const trader = this.traders[idx];
     this.pollIndex++;
+
+    if (this.pollIndex % (this.traders.length * 30) === 0) {
+      log.info({
+        polls: this.pollIndex,
+        successes: this.successCount,
+        errors: this.errorCount,
+        seenIds: this.seenTradeIds.size,
+        traders: this.traders.length,
+      }, 'Monitor poll stats');
+    }
 
     try {
       const activities = await this.fetchActivity(trader.address);
+      this.successCount++;
 
       const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 60_000);
       const newTrades = activities
         .filter(a => a.timestamp > lastSeen && a.price > 0 && !this.seenTradeIds.has(a.id))
         .sort((a, b) => a.timestamp - b.timestamp);
 
+      if (newTrades.length > 0) {
+        log.info({ trader: trader.alias, newTrades: newTrades.length, total: activities.length, lastSeen: new Date(lastSeen).toISOString() }, 'New trades found');
+      }
+
       for (const activity of newTrades) {
         this.seenTradeIds.add(activity.id);
         if (this.seenTradeIds.size > ActivityMonitor.MAX_SEEN_IDS) {
-          const iter = this.seenTradeIds.values();
-          for (let i = 0; i < 1000; i++) iter.next();
+          const toDelete = [...this.seenTradeIds].slice(0, 1000);
+          for (const id of toDelete) this.seenTradeIds.delete(id);
         }
 
         const market = await this.getMarketInfo(activity.conditionId);
         if (market) {
           if (market.closed) {
-            log.debug({ market: market.slug }, 'Skipping closed market');
+            log.info({ market: market.slug, trader: trader.alias }, 'Skipping closed market');
             continue;
           }
           activity.marketQuestion = market.question;
@@ -108,7 +130,8 @@ export class ActivityMonitor {
         this.lastSeenTimestamp.set(trader.address, Math.max(...newTrades.map(t => t.timestamp)));
       }
     } catch (err) {
-      log.debug({ trader: trader.alias, error: (err as Error).message }, 'Failed to poll trader');
+      this.errorCount++;
+      log.warn({ trader: trader.alias, error: (err as Error).message }, 'Failed to poll trader');
     }
   }
 
