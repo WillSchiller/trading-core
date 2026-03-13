@@ -80,9 +80,10 @@ export class ActivityMonitor {
       const activities = await this.fetchActivity(trader.address);
       this.successCount++;
 
-      const lastSeen = this.lastSeenTimestamp.get(trader.address) || (this.bootTime - 24 * 60 * 60_000);
+      const maxAge = Date.now() - 6 * 60 * 60_000;
+      const lastSeen = this.lastSeenTimestamp.get(trader.address) || maxAge;
       const newTrades = activities
-        .filter(a => a.timestamp > lastSeen && a.price > 0 && !this.seenTradeIds.has(a.id))
+        .filter(a => a.timestamp > lastSeen && a.timestamp > maxAge && a.price > 0 && !this.seenTradeIds.has(a.id))
         .sort((a, b) => a.timestamp - b.timestamp);
 
       if (newTrades.length > 0) {
@@ -116,11 +117,11 @@ export class ActivityMonitor {
           closed: marketClosed,
         }, 'New trader activity detected');
 
+        if (marketClosed) continue;
+
         if (this.onShadowTrade) {
           this.onShadowTrade(trader, activity);
         }
-
-        if (marketClosed) continue;
 
         if (activity.side === 'BUY' && this.onNewTrade) {
           this.onNewTrade(trader, activity);
