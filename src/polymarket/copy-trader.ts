@@ -135,7 +135,7 @@ export class PolymarketCopyTrader {
 
     for (const trade of unresolved) {
       try {
-        const market = await this.fetchMarketByCondition(trade.conditionId);
+        const market = await this.fetchMarket(trade.conditionId, trade.marketSlug);
         if (!market) continue;
 
         if (market.closed) {
@@ -159,15 +159,24 @@ export class PolymarketCopyTrader {
     }
   }
 
-  private async fetchMarketByCondition(conditionId: string): Promise<MarketData | null> {
+  private async fetchMarket(conditionId: string, slug?: string): Promise<MarketData | null> {
     try {
       const url = `${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`;
       const resp = await fetch(url);
+      if (resp.ok) {
+        const data = await resp.json() as MarketData[];
+        const market = data[0] ?? null;
+        if (market && market.conditionId === conditionId) return market;
+      }
+    } catch { /* fall through to slug */ }
+
+    if (!slug) return null;
+    try {
+      const url = `${this.config.gammaApiUrl}/markets?slug=${slug}`;
+      const resp = await fetch(url);
       if (!resp.ok) return null;
       const data = await resp.json() as MarketData[];
-      const market = data[0] ?? null;
-      if (market && market.conditionId !== conditionId) return null;
-      return market;
+      return data[0] ?? null;
     } catch { return null; }
   }
 

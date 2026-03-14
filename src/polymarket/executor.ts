@@ -189,7 +189,17 @@ export class CopyExecutor {
     for (const [tokenId, pos] of this.positions) {
       if (pos.status !== 'open') continue;
 
-      const price = await this.fetchMidPrice(pos.conditionId, tokenId);
+      const resolved = await this.checkResolution(pos.conditionId, tokenId, pos.marketSlug);
+      if (resolved !== null) {
+        const pnl = (resolved - pos.avgEntry) * pos.size;
+        await this.persistence.closePosition(pos.id, pnl);
+        pos.status = 'closed';
+        this.positions.delete(tokenId);
+        log.info({ market: pos.marketSlug, outcome: pos.outcome, entry: pos.avgEntry, resolution: resolved, pnl: pnl.toFixed(2) }, 'Position resolved');
+        continue;
+      }
+
+      const price = await this.fetchMidPrice(pos.conditionId, tokenId, pos.marketSlug);
       if (price === null) continue;
 
       const unrealizedPnl = (price - pos.avgEntry) * pos.size;
@@ -199,36 +209,59 @@ export class CopyExecutor {
     }
   }
 
+  private async checkResolution(conditionId: string, tokenId: string, slug?: string): Promise<number | null> {
+    const tryResolve = (data: Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>): number | null => {
+      if (!data.length || !data[0].closed) return null;
+      const prices = (JSON.parse(data[0].outcomePrices || '[]') as (string | number)[]).map(Number);
+      const tokenIds = JSON.parse(data[0].clobTokenIds || '[]') as string[];
+      const idx = tokenIds.indexOf(tokenId);
+      return idx >= 0 ? prices[idx] : null;
+    };
+
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
+      if (resp.ok) {
+        const data = await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>;
+        if (data.length && data[0].conditionId === conditionId) return tryResolve(data);
+      }
+    } catch { /* fall through */ }
+
+    if (!slug) return null;
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?slug=${slug}`);
+      if (!resp.ok) return null;
+      return tryResolve(await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>);
+    } catch { return null; }
+  }
+
   getOpenPositions(): (CopyPosition & { id: number })[] {
     return Array.from(this.positions.values()).filter(p => p.status === 'open');
   }
 
-  private async fetchMidPrice(conditionId: string, tokenId: string): Promise<number | null> {
-    try {
-      const url = `${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`;
-      const resp = await fetch(url);
-      if (!resp.ok) return null;
-
-      const data = await resp.json() as Array<{
-        conditionId?: string;
-        outcomePrices?: string;
-        clobTokenIds?: string;
-        closed?: boolean;
-      }>;
-      if (!data.length) return null;
-
-      const market = data[0];
-      if (market.conditionId !== conditionId || market.closed) return null;
-
-      const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
-      const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
-
+  private async fetchMidPrice(conditionId: string, tokenId: string, slug?: string): Promise<number | null> {
+    const tryParse = (data: Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>): number | null => {
+      if (!data.length || data[0].closed) return null;
+      const prices = (JSON.parse(data[0].outcomePrices || '[]') as (string | number)[]).map(Number);
+      const tokenIds = JSON.parse(data[0].clobTokenIds || '[]') as string[];
       const idx = tokenIds.indexOf(tokenId);
       const price = idx >= 0 ? prices[idx] : prices[0];
       return (price != null && price > 0 && !isNaN(price)) ? price : null;
-    } catch {
-      return null;
-    }
+    };
+
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
+      if (resp.ok) {
+        const data = await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>;
+        if (data.length && data[0].conditionId === conditionId) return tryParse(data);
+      }
+    } catch { /* fall through */ }
+
+    if (!slug) return null;
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?slug=${slug}`);
+      if (!resp.ok) return null;
+      return tryParse(await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>);
+    } catch { return null; }
   }
 
   private roundToTick(price: number, tickSize: number): number {
