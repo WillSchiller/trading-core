@@ -43,8 +43,18 @@ export class CopyExecutor {
   }
 
   async executeCopy(trader: TrackedTrader, activity: TraderActivity): Promise<void> {
+    const existing = this.positions.get(activity.tokenId);
+    const currentExposure = existing ? existing.size * existing.avgEntry : 0;
+    const maxPerMarket = this.config.riskLimits.maxPositionUsd;
+
+    if (currentExposure >= maxPerMarket) {
+      log.info({ trader: trader.alias, market: activity.marketSlug, exposure: currentExposure.toFixed(2), max: maxPerMarket }, 'Skipped — market position cap reached');
+      return;
+    }
+
     const proportionalSize = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
-    const clampedSize = Math.min(proportionalSize, this.config.riskLimits.maxPositionUsd);
+    const remainingRoom = maxPerMarket - currentExposure;
+    const clampedSize = Math.min(proportionalSize, remainingRoom);
     const sizeUsd = Math.max(1, Math.round(clampedSize * 100) / 100);
 
     const size = sizeUsd / Math.max(activity.price, 0.001);
@@ -56,6 +66,7 @@ export class CopyExecutor {
       traderSize: activity.size,
       ourSize: sizeUsd,
       price: activity.price,
+      existingExposure: currentExposure.toFixed(2),
     }, 'Executing copy trade');
 
     if (this.config.paperMode) {
