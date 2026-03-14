@@ -67,7 +67,7 @@ export class CopyExecutor {
 
   private async executePaper(trader: TrackedTrader, activity: TraderActivity, size: number, sizeUsd: number): Promise<void> {
     const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
-    const fillPrice = midPrice || activity.price;
+    const fillPrice = (midPrice != null && midPrice > 0) ? midPrice : activity.price;
 
     const trade: CopyTrade = {
       traderAddress: trader.address,
@@ -210,17 +210,22 @@ export class CopyExecutor {
       if (!resp.ok) return null;
 
       const data = await resp.json() as Array<{
+        conditionId?: string;
         outcomePrices?: string;
         clobTokenIds?: string;
+        closed?: boolean;
       }>;
       if (!data.length) return null;
 
-      const prices = JSON.parse(data[0].outcomePrices || '[]') as number[];
-      const tokenIds = JSON.parse(data[0].clobTokenIds || '[]') as string[];
+      const market = data[0];
+      if (market.conditionId !== conditionId || market.closed) return null;
+
+      const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
+      const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
 
       const idx = tokenIds.indexOf(tokenId);
-      if (idx >= 0 && prices[idx] !== undefined) return prices[idx];
-      return prices[0] ?? null;
+      const price = idx >= 0 ? prices[idx] : prices[0];
+      return (price != null && price > 0 && !isNaN(price)) ? price : null;
     } catch {
       return null;
     }

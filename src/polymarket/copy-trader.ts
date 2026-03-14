@@ -165,22 +165,25 @@ export class PolymarketCopyTrader {
       const resp = await fetch(url);
       if (!resp.ok) return null;
       const data = await resp.json() as MarketData[];
-      return data[0] ?? null;
+      const market = data[0] ?? null;
+      if (market && market.conditionId !== conditionId) return null;
+      return market;
     } catch { return null; }
   }
 
   private getTokenPrice(market: MarketData, tokenId: string): number | null {
-    const prices = JSON.parse(market.outcomePrices || '[]') as number[];
+    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
     const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
     const idx = tokenIds.indexOf(tokenId);
-    return idx >= 0 ? prices[idx] ?? null : null;
+    const price = idx >= 0 ? prices[idx] : null;
+    return (price != null && price > 0 && !isNaN(price)) ? price : null;
   }
 
   private getResolutionPrice(market: MarketData, tokenId: string): number {
-    const prices = JSON.parse(market.outcomePrices || '[]') as number[];
+    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
     const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
     const idx = tokenIds.indexOf(tokenId);
-    if (idx >= 0 && prices[idx] !== undefined) return prices[idx];
+    if (idx >= 0 && !isNaN(prices[idx])) return prices[idx];
     return 0;
   }
 }
