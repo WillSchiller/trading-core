@@ -21,8 +21,23 @@ export class PolymarketPersistence {
     );
   }
 
-  async disableAllTraders(): Promise<void> {
-    await this.pool.query(`UPDATE pm_tracked_traders SET enabled = false, updated_at = NOW()`);
+  async disableStaleTraders(): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_tracked_traders SET enabled = false, updated_at = NOW()
+       WHERE address NOT IN (
+         SELECT trader_address FROM pm_shadow_trades
+         WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
+         GROUP BY trader_address
+         HAVING COUNT(*) >= 3 AND SUM(pnl_if_copied) > 0
+       )`,
+    );
+  }
+
+  async enableProvenTrader(address: string, copyEligible: boolean): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_tracked_traders SET enabled = true, copy_eligible = $1, updated_at = NOW() WHERE address = $2`,
+      [copyEligible, address],
+    );
   }
 
   async getActiveTraders(): Promise<TrackedTrader[]> {

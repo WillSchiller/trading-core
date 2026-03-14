@@ -35,10 +35,6 @@ export class TraderDiscovery {
     return this.traders.filter(t => t.enabled);
   }
 
-  getCopyEligibleTraders(): TrackedTrader[] {
-    return this.traders.filter(t => t.enabled && t.copyEligible);
-  }
-
   async refresh(): Promise<void> {
     try {
       const entries = await this.fetchLeaderboard();
@@ -46,8 +42,10 @@ export class TraderDiscovery {
 
       const shadowStats = await this.persistence.getTraderShadowStats();
 
-      await this.persistence.disableAllTraders();
+      // Disable traders with no proven edge — keeps profitable ones active
+      await this.persistence.disableStaleTraders();
 
+      // Upsert leaderboard traders (new discovery + update existing)
       for (const entry of entries.slice(0, this.config.maxTraders)) {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
@@ -66,22 +64,23 @@ export class TraderDiscovery {
           copyEligible,
         };
         await this.persistence.upsertTrader(trader);
+      }
 
-        if (stats) {
-          log.info({
-            trader: trader.alias,
-            shadowTrades: stats.trades,
-            shadowWinRate: (stats.wins / stats.trades * 100).toFixed(0) + '%',
-            shadowPnl: stats.pnl.toFixed(2),
-            copyEligible,
-          }, 'Trader shadow stats');
+      // Re-enable any proven trader not on today's leaderboard
+      for (const [address, stats] of shadowStats) {
+        if (stats.trades >= 3 && stats.pnl > 0) {
+          const copyEligible = stats.trades >= MIN_SHADOW_TRADES && (stats.wins / stats.trades) >= MIN_WIN_RATE;
+          await this.persistence.enableProvenTrader(address, copyEligible);
         }
       }
 
       this.traders = await this.persistence.getActiveTraders();
       const eligible = this.traders.filter(t => t.copyEligible);
+      const fromShadow = this.traders.filter(t => t.enabled && !entries.some(e => e.address === t.address));
       log.info({
         active: this.traders.length,
+        fromLeaderboard: this.traders.length - fromShadow.length,
+        fromShadowHistory: fromShadow.length,
         copyEligible: eligible.length,
         eligibleNames: eligible.map(t => t.alias),
       }, 'Trader roster updated');
