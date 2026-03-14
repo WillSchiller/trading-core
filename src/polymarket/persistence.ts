@@ -6,8 +6,8 @@ export class PolymarketPersistence {
 
   async upsertTrader(trader: TrackedTrader): Promise<void> {
     await this.pool.query(
-      `INSERT INTO pm_tracked_traders (address, alias, pnl, volume, bankroll_estimate, rank, enabled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO pm_tracked_traders (address, alias, pnl, volume, bankroll_estimate, rank, enabled, copy_eligible)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (address) DO UPDATE SET
          alias = EXCLUDED.alias,
          pnl = EXCLUDED.pnl,
@@ -15,8 +15,9 @@ export class PolymarketPersistence {
          bankroll_estimate = EXCLUDED.bankroll_estimate,
          rank = EXCLUDED.rank,
          enabled = EXCLUDED.enabled,
+         copy_eligible = EXCLUDED.copy_eligible,
          updated_at = NOW()`,
-      [trader.address, trader.alias, trader.pnl, trader.volume, trader.bankrollEstimate, trader.rank, trader.enabled],
+      [trader.address, trader.alias, trader.pnl, trader.volume, trader.bankrollEstimate, trader.rank, trader.enabled, trader.copyEligible ?? false],
     );
   }
 
@@ -27,7 +28,7 @@ export class PolymarketPersistence {
   async getActiveTraders(): Promise<TrackedTrader[]> {
     const result = await this.pool.query(
       `SELECT address, alias, pnl::float, volume::float, bankroll_estimate::float as "bankrollEstimate",
-              rank, enabled, discovered_at as "discoveredAt", last_activity_at as "lastActivityAt"
+              rank, enabled, copy_eligible as "copyEligible", discovered_at as "discoveredAt", last_activity_at as "lastActivityAt"
        FROM pm_tracked_traders WHERE enabled = true ORDER BY rank ASC`,
     );
     return result.rows;
@@ -209,6 +210,23 @@ export class PolymarketPersistence {
       `UPDATE pm_shadow_trades SET current_price = $1, pnl_if_copied = $2 WHERE id = $3`,
       [currentPrice, pnl, id],
     );
+  }
+
+  async getTraderShadowStats(): Promise<Map<string, { trades: number; wins: number; pnl: number }>> {
+    const result = await this.pool.query(
+      `SELECT trader_address,
+              COUNT(*)::int as trades,
+              COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
+              COALESCE(SUM(pnl_if_copied), 0)::float as pnl
+       FROM pm_shadow_trades
+       WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
+       GROUP BY trader_address`,
+    );
+    const map = new Map<string, { trades: number; wins: number; pnl: number }>();
+    for (const row of result.rows) {
+      map.set(row.trader_address, { trades: row.trades, wins: row.wins, pnl: row.pnl });
+    }
+    return map;
   }
 
   async saveKillSwitchEvent(event: KillSwitchEvent): Promise<void> {

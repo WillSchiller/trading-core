@@ -76,6 +76,11 @@ export class PolymarketCopyTrader {
 
     this.monitor.setTradeCallback(async (trader, activity) => {
       try {
+        if (!trader.copyEligible) {
+          log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Trade skipped — trader not copy-eligible');
+          return;
+        }
+
         const sizeUsd = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
 
         const { allowed, reason } = await this.riskManager.canTrade(sizeUsd, activity.conditionId);

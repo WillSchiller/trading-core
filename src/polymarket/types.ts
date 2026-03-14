@@ -33,6 +33,7 @@ export interface TrackedTrader {
   bankrollEstimate: number;
   rank: number;
   enabled: boolean;
+  copyEligible?: boolean;
   discoveredAt?: Date;
   lastActivityAt?: Date;
 }
