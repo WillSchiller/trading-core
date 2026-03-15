@@ -105,11 +105,11 @@ export class ActivityMonitor {
         }, 'New trader activity detected');
 
         if (this.onShadowTrade) {
-          this.onShadowTrade(trader, activity);
+          await this.onShadowTrade(trader, activity);
         }
 
         if (activity.side === 'BUY' && this.onNewTrade) {
-          this.onNewTrade(trader, activity);
+          await this.onNewTrade(trader, activity);
         }
       }
 
