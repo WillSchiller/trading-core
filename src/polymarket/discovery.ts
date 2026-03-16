@@ -17,6 +17,8 @@ export class TraderDiscovery {
   private timer: ReturnType<typeof setInterval> | null = null;
   private backfill: TraderBackfill;
   private knownAddresses = new Set<string>();
+  private backfillQueue: Array<{ address: string; alias: string; bankroll: number }> = [];
+  private backfillRunning = false;
 
   constructor(
     private readonly config: PolymarketConfig,
@@ -77,9 +79,7 @@ export class TraderDiscovery {
         if (isNew) {
           const alreadyBackfilled = await this.backfill.isTraderBackfilled(entry.address);
           if (!alreadyBackfilled) {
-            this.backfill.backfillTrader(entry.address, trader.alias, bankroll)
-              .then(n => log.info({ trader: trader.alias, trades: n }, 'Backfill complete for new trader'))
-              .catch(err => log.error({ trader: trader.alias, error: (err as Error).message }, 'Backfill failed'));
+            this.enqueueBackfill(entry.address, trader.alias, bankroll);
           }
         }
       }
@@ -161,6 +161,25 @@ export class TraderDiscovery {
     if (stats.activeDays < MIN_ACTIVE_DAYS) return false;
     if (stats.maxDrawdown < 0 && Math.abs(stats.maxDrawdown) > stats.pnl * MAX_DD_RATIO) return false;
     return true;
+  }
+
+  private enqueueBackfill(address: string, alias: string, bankroll: number): void {
+    this.backfillQueue.push({ address, alias, bankroll });
+    if (!this.backfillRunning) this.processBackfillQueue();
+  }
+
+  private async processBackfillQueue(): Promise<void> {
+    this.backfillRunning = true;
+    while (this.backfillQueue.length > 0) {
+      const { address, alias, bankroll } = this.backfillQueue.shift()!;
+      try {
+        const n = await this.backfill.backfillTrader(address, alias, bankroll);
+        log.info({ trader: alias, trades: n, remaining: this.backfillQueue.length }, 'Backfill complete');
+      } catch (err) {
+        log.error({ trader: alias, error: (err as Error).message }, 'Backfill failed');
+      }
+    }
+    this.backfillRunning = false;
   }
 
   private estimateBankroll(entry: LeaderboardEntry): number {
