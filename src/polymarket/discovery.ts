@@ -4,9 +4,11 @@ import type { PolymarketConfig, TrackedTrader, LeaderboardEntry } from './types.
 
 const log = createChildLogger({ component: 'pm-discovery' });
 
-const MIN_SHADOW_TRADES = 5;
-const MIN_WIN_RATE = 0.45;
-const MIN_PNL_PER_TRADE = 0.10;
+const MIN_SHADOW_TRADES = 10;
+const MIN_WIN_RATE = 0.55;
+const MIN_PNL_PER_TRADE = 0.50;
+const MIN_ACTIVE_DAYS = 2;
+const MAX_DD_RATIO = 0.5;
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];
@@ -50,9 +52,7 @@ export class TraderDiscovery {
       for (const entry of entries.slice(0, this.config.maxTraders)) {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
-        const copyEligible = stats
-          ? stats.trades >= MIN_SHADOW_TRADES && stats.pnl > 0 && (stats.wins / stats.trades) >= MIN_WIN_RATE && (stats.pnl / stats.trades) >= MIN_PNL_PER_TRADE
-          : false;
+        const copyEligible = stats ? this.isEligible(stats) : false;
 
         const trader: TrackedTrader = {
           address: entry.address,
@@ -70,18 +70,30 @@ export class TraderDiscovery {
       // Re-enable any proven trader not on today's leaderboard
       for (const [address, stats] of shadowStats) {
         if (stats.trades >= 3 && stats.pnl > 0) {
-          const copyEligible = stats.trades >= MIN_SHADOW_TRADES && (stats.wins / stats.trades) >= MIN_WIN_RATE && (stats.pnl / stats.trades) >= MIN_PNL_PER_TRADE;
-          await this.persistence.enableProvenTrader(address, copyEligible);
+          await this.persistence.enableProvenTrader(address, this.isEligible(stats));
+        }
+      }
+
+      for (const [address, stats] of shadowStats) {
+        const eligible = this.isEligible(stats);
+        if (stats.trades >= 5) {
+          log.info({
+            address: address.slice(0, 10),
+            trades: stats.trades,
+            winRate: (stats.wins / stats.trades * 100).toFixed(1),
+            pnl: stats.pnl.toFixed(2),
+            avgPnl: (stats.pnl / stats.trades).toFixed(4),
+            days: stats.activeDays,
+            maxDD: stats.maxDrawdown.toFixed(2),
+            eligible,
+          }, 'Trader eligibility check');
         }
       }
 
       this.traders = await this.persistence.getActiveTraders();
       const eligible = this.traders.filter(t => t.copyEligible);
-      const fromShadow = this.traders.filter(t => t.enabled && !entries.some(e => e.address === t.address));
       log.info({
         active: this.traders.length,
-        fromLeaderboard: this.traders.length - fromShadow.length,
-        fromShadowHistory: fromShadow.length,
         copyEligible: eligible.length,
         eligibleNames: eligible.map(t => t.alias),
       }, 'Trader roster updated');
@@ -118,6 +130,16 @@ export class TraderDiscovery {
       volume: item.vol || 0,
       rank: item.rank || i + 1,
     }));
+  }
+
+  private isEligible(stats: { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }): boolean {
+    if (stats.trades < MIN_SHADOW_TRADES) return false;
+    if (stats.pnl <= 0) return false;
+    if ((stats.wins / stats.trades) < MIN_WIN_RATE) return false;
+    if ((stats.pnl / stats.trades) < MIN_PNL_PER_TRADE) return false;
+    if (stats.activeDays < MIN_ACTIVE_DAYS) return false;
+    if (stats.maxDrawdown < 0 && Math.abs(stats.maxDrawdown) > stats.pnl * MAX_DD_RATIO) return false;
+    return true;
   }
 
   private estimateBankroll(entry: LeaderboardEntry): number {

@@ -227,19 +227,38 @@ export class PolymarketPersistence {
     );
   }
 
-  async getTraderShadowStats(): Promise<Map<string, { trades: number; wins: number; pnl: number }>> {
+  async getTraderShadowStats(): Promise<Map<string, { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }>> {
     const result = await this.pool.query(
-      `SELECT trader_address,
-              COUNT(*)::int as trades,
-              COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
-              COALESCE(SUM(pnl_if_copied), 0)::float as pnl
-       FROM pm_shadow_trades
-       WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
-       GROUP BY trader_address`,
+      `WITH per_trader AS (
+        SELECT trader_address,
+          COUNT(*)::int as trades,
+          COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
+          COALESCE(SUM(pnl_if_copied), 0)::float as pnl,
+          COUNT(DISTINCT DATE(observed_at))::int as active_days
+        FROM pm_shadow_trades
+        WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
+        GROUP BY trader_address
+      ),
+      cumulative AS (
+        SELECT trader_address, resolved_at,
+          SUM(pnl_if_copied) OVER (PARTITION BY trader_address ORDER BY resolved_at) AS equity
+        FROM pm_shadow_trades
+        WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
+      ),
+      with_hw AS (
+        SELECT trader_address,
+          equity - MAX(equity) OVER (PARTITION BY trader_address ORDER BY resolved_at) AS dd
+        FROM cumulative
+      ),
+      max_dd AS (
+        SELECT trader_address, MIN(dd)::float as max_dd FROM with_hw GROUP BY trader_address
+      )
+      SELECT p.trader_address, p.trades, p.wins, p.pnl, p.active_days, COALESCE(d.max_dd, 0) as max_dd
+      FROM per_trader p LEFT JOIN max_dd d ON p.trader_address = d.trader_address`,
     );
-    const map = new Map<string, { trades: number; wins: number; pnl: number }>();
+    const map = new Map<string, { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }>();
     for (const row of result.rows) {
-      map.set(row.trader_address, { trades: row.trades, wins: row.wins, pnl: row.pnl });
+      map.set(row.trader_address, { trades: row.trades, wins: row.wins, pnl: row.pnl, activeDays: row.active_days, maxDrawdown: row.max_dd });
     }
     return map;
   }
