@@ -1,23 +1,30 @@
+import pg from 'pg';
 import { createChildLogger } from '../utils/logger.js';
 import { PolymarketPersistence } from './persistence.js';
+import { TraderBackfill } from './backfill.js';
 import type { PolymarketConfig, TrackedTrader, LeaderboardEntry } from './types.js';
 
 const log = createChildLogger({ component: 'pm-discovery' });
 
-const MIN_SHADOW_TRADES = 10;
+const MIN_SHADOW_TRADES = 30;
 const MIN_WIN_RATE = 0.55;
 const MIN_PNL_PER_TRADE = 0.50;
-const MIN_ACTIVE_DAYS = 2;
+const MIN_ACTIVE_DAYS = 14;
 const MAX_DD_RATIO = 0.5;
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
+  private backfill: TraderBackfill;
+  private knownAddresses = new Set<string>();
 
   constructor(
     private readonly config: PolymarketConfig,
     private readonly persistence: PolymarketPersistence,
-  ) {}
+    pool?: pg.Pool,
+  ) {
+    this.backfill = new TraderBackfill(config, persistence, pool || (persistence as any).pool);
+  }
 
   async start(): Promise<void> {
     await this.loadFromDb();
@@ -48,11 +55,11 @@ export class TraderDiscovery {
       // Disable traders with no proven edge — keeps profitable ones active
       await this.persistence.disableStaleTraders();
 
-      // Upsert leaderboard traders (new discovery + update existing)
       for (const entry of entries.slice(0, this.config.maxTraders)) {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
         const copyEligible = stats ? this.isEligible(stats) : false;
+        const isNew = !this.knownAddresses.has(entry.address);
 
         const trader: TrackedTrader = {
           address: entry.address,
@@ -65,6 +72,16 @@ export class TraderDiscovery {
           copyEligible,
         };
         await this.persistence.upsertTrader(trader);
+        this.knownAddresses.add(entry.address);
+
+        if (isNew) {
+          const alreadyBackfilled = await this.backfill.isTraderBackfilled(entry.address);
+          if (!alreadyBackfilled) {
+            this.backfill.backfillTrader(entry.address, trader.alias, bankroll)
+              .then(n => log.info({ trader: trader.alias, trades: n }, 'Backfill complete for new trader'))
+              .catch(err => log.error({ trader: trader.alias, error: (err as Error).message }, 'Backfill failed'));
+          }
+        }
       }
 
       // Re-enable any proven trader not on today's leaderboard
@@ -104,6 +121,7 @@ export class TraderDiscovery {
 
   private async loadFromDb(): Promise<void> {
     this.traders = await this.persistence.getActiveTraders();
+    for (const t of this.traders) this.knownAddresses.add(t.address);
     log.info({ loaded: this.traders.length }, 'Loaded traders from DB');
   }
 

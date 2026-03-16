@@ -31,7 +31,7 @@ export class PolymarketCopyTrader {
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
     this.persistence = new PolymarketPersistence(pool);
-    this.discovery = new TraderDiscovery(this.config, this.persistence);
+    this.discovery = new TraderDiscovery(this.config, this.persistence, pool);
     this.monitor = new ActivityMonitor(this.config);
     this.executor = new CopyExecutor(this.config, this.persistence);
     this.riskManager = new PolymarketRiskManager(this.config, this.persistence);
