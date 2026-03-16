@@ -6,6 +6,7 @@ const log = createChildLogger({ component: 'pm-discovery' });
 
 const MIN_SHADOW_TRADES = 5;
 const MIN_WIN_RATE = 0.45;
+const MIN_PNL_PER_TRADE = 0.10;
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];
@@ -50,7 +51,7 @@ export class TraderDiscovery {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
         const copyEligible = stats
-          ? stats.trades >= MIN_SHADOW_TRADES && stats.pnl > 0 && (stats.wins / stats.trades) >= MIN_WIN_RATE
+          ? stats.trades >= MIN_SHADOW_TRADES && stats.pnl > 0 && (stats.wins / stats.trades) >= MIN_WIN_RATE && (stats.pnl / stats.trades) >= MIN_PNL_PER_TRADE
           : false;
 
         const trader: TrackedTrader = {
@@ -69,7 +70,7 @@ export class TraderDiscovery {
       // Re-enable any proven trader not on today's leaderboard
       for (const [address, stats] of shadowStats) {
         if (stats.trades >= 3 && stats.pnl > 0) {
-          const copyEligible = stats.trades >= MIN_SHADOW_TRADES && (stats.wins / stats.trades) >= MIN_WIN_RATE;
+          const copyEligible = stats.trades >= MIN_SHADOW_TRADES && (stats.wins / stats.trades) >= MIN_WIN_RATE && (stats.pnl / stats.trades) >= MIN_PNL_PER_TRADE;
           await this.persistence.enableProvenTrader(address, copyEligible);
         }
       }

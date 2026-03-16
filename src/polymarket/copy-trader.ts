@@ -138,29 +138,40 @@ export class PolymarketCopyTrader {
     let updated = 0;
     let resolved = 0;
 
+    const byMarket = new Map<string, typeof unresolved>();
     for (const trade of unresolved) {
+      const key = trade.marketSlug || trade.conditionId;
+      const list = byMarket.get(key) || [];
+      list.push(trade);
+      byMarket.set(key, list);
+    }
+
+    for (const [, trades] of byMarket) {
       try {
-        const market = await this.fetchMarket(trade.conditionId, trade.marketSlug);
+        const first = trades[0];
+        const market = await this.fetchMarket(first.conditionId, first.marketSlug);
         if (!market) continue;
 
-        if (market.closed) {
-          const resPrice = this.getResolutionPrice(market, trade.tokenId);
-          const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
-          await this.persistence.resolveShadowTrade(trade.id, resPrice, pnl);
-          resolved++;
-        } else {
-          const currentPrice = this.getTokenPrice(market, trade.tokenId);
-          if (currentPrice !== null && trade.ourSize) {
-            const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
-            await this.persistence.updateShadowPrice(trade.id, currentPrice, pnl);
-            updated++;
+        for (const trade of trades) {
+          if (market.closed) {
+            const resPrice = this.getResolutionPrice(market, trade.tokenId);
+            const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
+            await this.persistence.resolveShadowTrade(trade.id, resPrice, pnl);
+            resolved++;
+          } else {
+            const currentPrice = this.getTokenPrice(market, trade.tokenId);
+            if (currentPrice !== null && trade.ourSize) {
+              const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
+              await this.persistence.updateShadowPrice(trade.id, currentPrice, pnl);
+              updated++;
+            }
           }
         }
       } catch { /* skip */ }
     }
 
     if (updated > 0 || resolved > 0) {
-      log.info({ updated, resolved, total: unresolved.length }, 'Shadow prices updated');
+      log.info({ updated, resolved, markets: byMarket.size }, 'Shadow prices updated');
     }
   }
 

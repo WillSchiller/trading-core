@@ -5,23 +5,150 @@
   "tags": ["dislocation-trader", "polymarket"],
   "timezone": "utc",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
-  "time": {"from": "now-24h", "to": "now"},
+  "time": {"from": "now-7d", "to": "now"},
   "templating": {"list": []},
   "panels": [
     {
       "id": 100,
       "type": "row",
-      "title": "Risk Status",
+      "title": "Shadow Performance (All-Time)",
       "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Shadow Total PnL",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COALESCE(SUM(pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Shadow Win Rate",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND(COUNT(*) FILTER (WHERE pnl_if_copied > 0)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS \"Win %\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 55, "color": "green"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Avg PnL/Trade",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND((SUM(pnl_if_copied) / NULLIF(COUNT(*), 0))::numeric, 4) AS \"Avg\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 4,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Total Shadow Trades",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT COUNT(*)::int AS \"Trades\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Max Drawdown",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "WITH cum AS (SELECT resolved_at, SUM(pnl_if_copied) OVER (ORDER BY resolved_at) AS equity FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0), peak AS (SELECT resolved_at, equity, MAX(equity) OVER (ORDER BY resolved_at) AS hw FROM cum) SELECT ROUND(MIN(equity - hw)::numeric, 2) AS \"Drawdown\" FROM peak",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Profit Factor",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT ROUND((SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied > 0) / NULLIF(ABS(SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied < 0)), 0))::numeric, 2) AS \"PF\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "yellow"}, {"value": 1.5, "color": "green"}]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "Risk Status",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 1,
       "type": "stat",
       "title": "Total Exposure",
-      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "gridPos": {"x": 0, "y": 6, "w": 5, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -30,14 +157,9 @@
       }],
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
+          "unit": "currencyUSD", "decimals": 2,
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [
-            {"value": null, "color": "green"},
-            {"value": 400, "color": "yellow"},
-            {"value": 500, "color": "red"}
-          ]}
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 400, "color": "yellow"}, {"value": 500, "color": "red"}]}
         }
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
@@ -45,8 +167,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Daily PnL",
-      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "title": "Daily PnL (Realized)",
+      "gridPos": {"x": 5, "y": 6, "w": 5, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -55,13 +177,9 @@
       }],
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
+          "unit": "currencyUSD", "decimals": 2,
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [
-            {"value": null, "color": "red"},
-            {"value": 0, "color": "green"}
-          ]}
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}
         }
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
@@ -70,7 +188,7 @@
       "id": 3,
       "type": "stat",
       "title": "Open Markets",
-      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "gridPos": {"x": 10, "y": 6, "w": 4, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -81,11 +199,7 @@
         "defaults": {
           "unit": "short",
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [
-            {"value": null, "color": "blue"},
-            {"value": 8, "color": "yellow"},
-            {"value": 10, "color": "red"}
-          ]}
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}, {"value": 8, "color": "yellow"}, {"value": 10, "color": "red"}]}
         }
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
@@ -94,7 +208,7 @@
       "id": 4,
       "type": "stat",
       "title": "Kill Switch",
-      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "gridPos": {"x": 14, "y": 6, "w": 5, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -113,63 +227,108 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Trades (24h)",
-      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "title": "Copy Eligible Traders",
+      "gridPos": {"x": 19, "y": 6, "w": 5, "h": 4},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT COUNT(*)::int AS \"Trades\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h'",
+        "rawSql": "SELECT COUNT(*)::int AS \"Eligible\" FROM pm_tracked_traders WHERE enabled = true AND copy_eligible = true",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]}
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "yellow"}, {"value": 3, "color": "green"}]}
         }
       },
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
     {
-      "id": 101,
+      "id": 106,
       "type": "row",
-      "title": "Active Traders",
-      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "title": "Shadow Equity Curve",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 1},
       "collapsed": false
     },
     {
-      "id": 6,
-      "type": "table",
-      "title": "Tracked Traders",
-      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+      "id": 30,
+      "type": "timeseries",
+      "title": "Cumulative Shadow PnL (all traders)",
+      "gridPos": {"x": 0, "y": 11, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT address, alias, rank, pnl::float, volume::float, bankroll_estimate::float AS \"bankroll\", enabled, last_activity_at AS \"last_activity\" FROM pm_tracked_traders ORDER BY rank ASC LIMIT 50",
+        "rawSql": "SELECT resolved_at AS time, SUM(pnl_if_copied) OVER (ORDER BY resolved_at) AS \"Cumulative PnL\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0 ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "custom": {"fillOpacity": 10, "lineWidth": 2}
+        }
+      },
+      "options": {"tooltip": {"mode": "single"}}
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Daily Shadow PnL",
+      "gridPos": {"x": 12, "y": 11, "w": 12, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('day', resolved_at) AS time, ROUND(SUM(pnl_if_copied)::numeric, 2)::float AS \"Daily PnL\", COUNT(*)::int AS \"Trades\" FROM pm_shadow_trades WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0 AND resolved_at >= NOW() - INTERVAL '30d' GROUP BY 1 ORDER BY time",
+        "format": "time_series"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "custom": {"fillOpacity": 30, "lineWidth": 2, "drawStyle": "bars"}
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 107,
+      "type": "row",
+      "title": "Trader Leaderboard (Shadow Performance)",
+      "gridPos": {"x": 0, "y": 19, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 32,
+      "type": "table",
+      "title": "Trader Performance (Resolved Shadow Trades)",
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 8},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT s.trader_alias AS \"trader\", COUNT(*) AS \"trades\", COUNT(*) FILTER (WHERE s.pnl_if_copied > 0) AS \"wins\", ROUND((COUNT(*) FILTER (WHERE s.pnl_if_copied > 0)::numeric / NULLIF(COUNT(*), 0) * 100), 1) AS \"win_rate_%\", ROUND(SUM(s.pnl_if_copied)::numeric, 2) AS \"total_pnl\", ROUND((SUM(s.pnl_if_copied) / NULLIF(COUNT(*), 0))::numeric, 4) AS \"avg_pnl\", ROUND((SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied > 0) / NULLIF(ABS(SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied < 0)), 0))::numeric, 2) AS \"profit_factor\", COALESCE(t.copy_eligible, false) AS \"copy_eligible\" FROM pm_shadow_trades s LEFT JOIN pm_tracked_traders t ON s.trader_address = t.address WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 GROUP BY s.trader_alias, t.copy_eligible ORDER BY SUM(s.pnl_if_copied) DESC",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]},
-          {"matcher": {"id": "byName", "options": "volume"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 0}]},
-          {"matcher": {"id": "byName", "options": "bankroll"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 0}]}
+          {"matcher": {"id": "byName", "options": "total_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]},
+          {"matcher": {"id": "byName", "options": "avg_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 4}]}
         ]
       },
-      "options": {"showHeader": true, "sortBy": [{"displayName": "rank", "desc": false}]}
+      "options": {"showHeader": true, "sortBy": [{"displayName": "total_pnl", "desc": true}]}
     },
     {
-      "id": 102,
+      "id": 108,
       "type": "row",
       "title": "Open Positions",
-      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 7,
       "type": "table",
       "title": "Open Positions",
-      "gridPos": {"x": 0, "y": 13, "w": 24, "h": 8},
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -187,17 +346,17 @@
       "options": {"showHeader": true, "sortBy": [{"displayName": "opened_at", "desc": true}]}
     },
     {
-      "id": 103,
+      "id": 109,
       "type": "row",
-      "title": "PnL & Trades",
-      "gridPos": {"x": 0, "y": 21, "w": 24, "h": 1},
+      "title": "Realized PnL & Copy Trades",
+      "gridPos": {"x": 0, "y": 37, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Cumulative Realized PnL",
-      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+      "title": "Cumulative Realized PnL (Copy Trades)",
+      "gridPos": {"x": 0, "y": 38, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
@@ -206,9 +365,8 @@
       }],
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "color": {"mode": "fixed", "fixedColor": "green"},
+          "unit": "currencyUSD", "decimals": 2,
+          "color": {"mode": "fixed", "fixedColor": "orange"},
           "custom": {"fillOpacity": 10, "lineWidth": 2}
         }
       },
@@ -217,12 +375,12 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Copy Trades (24h)",
-      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8},
+      "title": "Shadow Trades Volume (hourly)",
+      "gridPos": {"x": 12, "y": 38, "w": 12, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT date_trunc('hour', created_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(size * price)::numeric, 2)::float AS \"Volume USD\" FROM pm_copy_trades WHERE created_at >= NOW() - INTERVAL '24h' GROUP BY 1 ORDER BY time",
+        "rawSql": "SELECT date_trunc('hour', observed_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(our_size)::numeric, 2)::float AS \"Size USD\" FROM pm_shadow_trades WHERE observed_at >= NOW() - INTERVAL '7d' AND side = 'BUY' GROUP BY 1 ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {
@@ -233,32 +391,33 @@
       "options": {"tooltip": {"mode": "multi"}}
     },
     {
-      "id": 104,
+      "id": 110,
       "type": "row",
-      "title": "Trade Log",
-      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "title": "Recent Shadow Trades",
+      "gridPos": {"x": 0, "y": 46, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 10,
       "type": "table",
-      "title": "Recent Trades",
-      "gridPos": {"x": 0, "y": 31, "w": 24, "h": 8},
+      "title": "Recent Shadow Trades",
+      "gridPos": {"x": 0, "y": 47, "w": 24, "h": 8},
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT t.created_at, tr.alias AS trader, t.market_slug AS market, t.outcome, t.side, t.size::float, t.price::float, t.fill_price::float AS \"fill\", t.status, t.paper FROM pm_copy_trades t LEFT JOIN pm_tracked_traders tr ON t.trader_address = tr.address ORDER BY t.created_at DESC LIMIT 50",
+        "rawSql": "SELECT observed_at, trader_alias AS \"trader\", market_slug AS \"market\", outcome, side, size::float AS \"trader_size\", price::float, our_size::float, our_entry_price::float AS \"entry\", current_price::float AS \"current\", pnl_if_copied::float AS \"pnl\", resolved FROM pm_shadow_trades WHERE side = 'BUY' ORDER BY observed_at DESC LIMIT 50",
         "format": "table"
       }],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {"matcher": {"id": "byName", "options": "size"}, "properties": [{"id": "decimals", "value": 2}]},
           {"matcher": {"id": "byName", "options": "price"}, "properties": [{"id": "decimals", "value": 4}]},
-          {"matcher": {"id": "byName", "options": "fill"}, "properties": [{"id": "decimals", "value": 4}]}
+          {"matcher": {"id": "byName", "options": "entry"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "current"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]}
         ]
       },
-      "options": {"showHeader": true, "sortBy": [{"displayName": "created_at", "desc": true}]}
+      "options": {"showHeader": true, "sortBy": [{"displayName": "observed_at", "desc": true}]}
     }
   ]
 }
