@@ -84,10 +84,13 @@ export class TraderDiscovery {
         }
       }
 
-      // Re-enable any proven trader not on today's leaderboard
+      // Re-enable proven traders and update eligibility for all with shadow data
       for (const [address, stats] of shadowStats) {
+        const eligible = this.isEligible(stats);
         if (stats.trades >= 3 && stats.pnl > 0) {
-          await this.persistence.enableProvenTrader(address, this.isEligible(stats));
+          await this.persistence.enableProvenTrader(address, eligible);
+        } else {
+          await this.persistence.updateCopyEligible(address, false);
         }
       }
 

@@ -40,6 +40,13 @@ export class PolymarketPersistence {
     );
   }
 
+  async updateCopyEligible(address: string, copyEligible: boolean): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_tracked_traders SET copy_eligible = $1, updated_at = NOW() WHERE address = $2`,
+      [copyEligible, address],
+    );
+  }
+
   async getActiveTraders(): Promise<TrackedTrader[]> {
     const result = await this.pool.query(
       `SELECT address, alias, pnl::float, volume::float, bankroll_estimate::float as "bankrollEstimate",
