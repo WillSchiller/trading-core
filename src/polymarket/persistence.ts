@@ -234,20 +234,20 @@ export class PolymarketPersistence {
           COUNT(*)::int as trades,
           COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
           COALESCE(SUM(pnl_if_copied), 0)::float as pnl,
-          COUNT(DISTINCT DATE(observed_at))::int as active_days
+          COUNT(DISTINCT DATE(to_timestamp(trader_timestamp/1000)))::int as active_days
         FROM pm_shadow_trades
         WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
         GROUP BY trader_address
       ),
       cumulative AS (
-        SELECT trader_address, resolved_at,
-          SUM(pnl_if_copied) OVER (PARTITION BY trader_address ORDER BY resolved_at) AS equity
+        SELECT trader_address, trader_timestamp,
+          SUM(pnl_if_copied) OVER (PARTITION BY trader_address ORDER BY trader_timestamp) AS equity
         FROM pm_shadow_trades
         WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
       ),
       with_hw AS (
         SELECT trader_address,
-          equity - MAX(equity) OVER (PARTITION BY trader_address ORDER BY resolved_at) AS dd
+          equity - MAX(equity) OVER (PARTITION BY trader_address ORDER BY trader_timestamp) AS dd
         FROM cumulative
       ),
       max_dd AS (
