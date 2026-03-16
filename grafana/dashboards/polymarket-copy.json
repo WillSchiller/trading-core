@@ -72,8 +72,8 @@
       "type": "stat",
       "title": "Mode",
       "gridPos": {"x": 20, "y": 1, "w": 4, "h": 3},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT 'PAPER' AS \"Mode\"", "format": "table"}],
-      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"PAPER": {"text": "PAPER", "color": "yellow"}, "LIVE": {"text": "LIVE", "color": "green"}}}]}},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT 1 AS \"Mode\"", "format": "table"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "PAPER", "color": "yellow"}, "2": {"text": "LIVE", "color": "green"}}}], "color": {"mode": "fixed", "fixedColor": "yellow"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
     },
 
@@ -201,8 +201,8 @@
       "type": "stat",
       "title": "Kill Switch",
       "gridPos": {"x": 14, "y": 10, "w": 5, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_kill_switch_events WHERE triggered_at >= NOW() - INTERVAL '24h') THEN 'TRIGGERED' ELSE 'OK' END AS \"Status\"", "format": "table"}],
-      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"OK": {"text": "OK", "color": "green"}, "TRIGGERED": {"text": "TRIGGERED", "color": "red"}}}]}},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_kill_switch_events WHERE triggered_at >= NOW() - INTERVAL '24h') THEN 1 ELSE 0 END AS \"Status\"", "format": "table"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}, "1": {"text": "TRIGGERED", "color": "red"}}}], "color": {"mode": "fixed", "fixedColor": "green"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
     },
     {
