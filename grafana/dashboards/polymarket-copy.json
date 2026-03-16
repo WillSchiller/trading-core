@@ -147,7 +147,7 @@
       "title": "Max Drawdown",
       "description": "Largest peak-to-trough decline (eligible traders)",
       "gridPos": {"x": 19, "y": 5, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.resolved_at, SUM(s.pnl_if_copied) OVER (ORDER BY s.resolved_at) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY resolved_at) AS hw FROM cum) SELECT ROUND(MIN(equity - hw)::numeric, 2) AS \"DD\" FROM peak", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND(MIN(equity - hw)::numeric, 2) AS \"DD\" FROM peak", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -157,7 +157,7 @@
       "title": "DD % of Bankroll",
       "description": "Max drawdown as % of $500 bankroll",
       "gridPos": {"x": 22, "y": 5, "w": 2, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.resolved_at, SUM(s.pnl_if_copied) OVER (ORDER BY s.resolved_at) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY resolved_at) AS hw FROM cum) SELECT ROUND((MIN(equity - hw) / 500 * 100)::numeric, 1) AS \"DD %\" FROM peak", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND((MIN(equity - hw) / 500 * 100)::numeric, 1) AS \"DD %\" FROM peak", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -174,7 +174,7 @@
       "type": "stat",
       "title": "Current Exposure",
       "gridPos": {"x": 0, "y": 10, "w": 5, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(size * avg_entry), 0)::numeric, 2) AS \"Exposure\" FROM pm_positions WHERE status = 'open'", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.our_size * s.our_entry_price), 0)::numeric, 2) AS \"Exposure\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 400, "color": "yellow"}, {"value": 500, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -183,7 +183,7 @@
       "type": "stat",
       "title": "Today Realized PnL",
       "gridPos": {"x": 5, "y": 10, "w": 5, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(realized_pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_positions WHERE status = 'closed' AND closed_at >= (NOW() AT TIME ZONE 'UTC')::date", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND to_timestamp(s.trader_timestamp/1000)::date = (NOW() AT TIME ZONE 'UTC')::date", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -192,7 +192,7 @@
       "type": "stat",
       "title": "Open Markets",
       "gridPos": {"x": 10, "y": 10, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(DISTINCT condition_id)::int AS \"Markets\" FROM pm_positions WHERE status = 'open'", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(DISTINCT s.condition_id)::int AS \"Markets\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}, {"value": 8, "color": "yellow"}, {"value": 10, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
