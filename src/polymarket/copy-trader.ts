@@ -28,6 +28,7 @@ export class PolymarketCopyTrader {
   private priceUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
+  private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
@@ -113,6 +114,11 @@ export class PolymarketCopyTrader {
       60_000,
     );
 
+    this.liveUpdateTimer = setInterval(
+      () => this.updateLivePrices().catch(e => log.error({ err: e }, 'Live update error')),
+      60_000,
+    );
+
     this.traderRefreshTimer = setInterval(() => {
       const updatedTraders = this.discovery.getTrackedTraders();
       this.monitor.setTraders(updatedTraders);
@@ -134,6 +140,7 @@ export class PolymarketCopyTrader {
     if (this.priceUpdateTimer) { clearInterval(this.priceUpdateTimer); this.priceUpdateTimer = null; }
     if (this.traderRefreshTimer) { clearInterval(this.traderRefreshTimer); this.traderRefreshTimer = null; }
     if (this.shadowUpdateTimer) { clearInterval(this.shadowUpdateTimer); this.shadowUpdateTimer = null; }
+    if (this.liveUpdateTimer) { clearInterval(this.liveUpdateTimer); this.liveUpdateTimer = null; }
     log.info('Polymarket copy trader stopped');
   }
 
@@ -178,18 +185,22 @@ export class PolymarketCopyTrader {
       log.info({ updated, resolved, markets: byMarket.size }, 'Shadow prices updated');
     }
 
-    // Also update live trades
+  }
+
+  private async updateLivePrices(): Promise<void> {
     const liveTrades = await this.persistence.getUnresolvedLiveTrades();
-    let liveUpdated = 0;
-    let liveResolved = 0;
-    const liveByMarket = new Map<string, typeof liveTrades>();
+    if (liveTrades.length === 0) return;
+
+    let updated = 0;
+    let resolved = 0;
+    const byMarket = new Map<string, typeof liveTrades>();
     for (const trade of liveTrades) {
       const key = trade.marketSlug || trade.conditionId;
-      const list = liveByMarket.get(key) || [];
+      const list = byMarket.get(key) || [];
       list.push(trade);
-      liveByMarket.set(key, list);
+      byMarket.set(key, list);
     }
-    for (const [, trades] of liveByMarket) {
+    for (const [, trades] of byMarket) {
       try {
         const first = trades[0];
         const market = await this.fetchMarket(first.conditionId, first.marketSlug);
@@ -199,21 +210,19 @@ export class PolymarketCopyTrader {
             const resPrice = getResolutionPrice(market, trade.tokenId);
             const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
             await this.persistence.resolveLiveTrade(trade.id, resPrice, pnl);
-            liveResolved++;
+            resolved++;
           } else {
             const currentPrice = getTokenPrice(market, trade.tokenId);
             if (currentPrice !== null && trade.ourSize) {
               const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
               await this.persistence.updateLiveTradePrice(trade.id, currentPrice, pnl);
-              liveUpdated++;
+              updated++;
             }
           }
         }
       } catch { /* skip */ }
     }
-    if (liveUpdated > 0 || liveResolved > 0) {
-      log.info({ updated: liveUpdated, resolved: liveResolved }, 'Live trade prices updated');
-    }
+    log.info({ updated, resolved, open: liveTrades.length, markets: byMarket.size }, 'Live prices updated');
   }
 
   private async fetchMarket(conditionId: string, slug?: string): Promise<MarketData | null> {
