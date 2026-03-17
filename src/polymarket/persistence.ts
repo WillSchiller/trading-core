@@ -251,6 +251,44 @@ export class PolymarketPersistence {
     );
   }
 
+  async saveLiveTrade(trade: ShadowTrade): Promise<number> {
+    const result = await this.pool.query(
+      `INSERT INTO pm_live_trades (trader_address, trader_alias, condition_id, token_id, side, size, price, outcome, market_slug, our_size, our_entry_price, current_price, trader_timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
+       RETURNING id`,
+      [trade.traderAddress, trade.traderAlias, trade.conditionId, trade.tokenId, trade.side,
+       trade.size, trade.price, trade.outcome, trade.marketSlug,
+       trade.ourSize, trade.ourEntryPrice, trade.currentPrice, trade.traderTimestamp],
+    );
+    return result.rows[0]?.id ?? 0;
+  }
+
+  async getUnresolvedLiveTrades(): Promise<(ShadowTrade & { id: number })[]> {
+    const result = await this.pool.query(
+      `SELECT id, condition_id as "conditionId", token_id as "tokenId", side,
+              our_size::float as "ourSize", our_entry_price::float as "ourEntryPrice",
+              current_price::float as "currentPrice", market_slug as "marketSlug"
+       FROM pm_live_trades WHERE resolved = false AND side = 'BUY'
+       ORDER BY observed_at ASC`,
+    );
+    return result.rows;
+  }
+
+  async resolveLiveTrade(id: number, resolutionPrice: number, pnl: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_live_trades SET resolved = true, resolution_price = $1, pnl = $2, resolved_at = NOW() WHERE id = $3`,
+      [resolutionPrice, pnl, id],
+    );
+  }
+
+  async updateLiveTradePrice(id: number, currentPrice: number, pnl: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_live_trades SET current_price = $1, pnl = $2 WHERE id = $3`,
+      [currentPrice, pnl, id],
+    );
+  }
+
   async getTraderShadowStats(): Promise<Map<string, TraderStats>> {
     const result = await this.pool.query(
       `WITH per_trader AS (

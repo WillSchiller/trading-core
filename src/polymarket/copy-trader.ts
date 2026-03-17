@@ -69,6 +69,9 @@ export class PolymarketCopyTrader {
           traderTimestamp: activity.timestamp,
         };
         await this.persistence.saveShadowTrade(shadow);
+        if (trader.copyEligible && activity.side === 'BUY') {
+          await this.persistence.saveLiveTrade(shadow);
+        }
         log.debug({ trader: trader.alias, market: activity.marketSlug, side: activity.side }, 'Shadow trade recorded');
       } catch (err) {
         log.error({ error: (err as Error).message }, 'Shadow trade save error');
@@ -173,6 +176,43 @@ export class PolymarketCopyTrader {
 
     if (updated > 0 || resolved > 0) {
       log.info({ updated, resolved, markets: byMarket.size }, 'Shadow prices updated');
+    }
+
+    // Also update live trades
+    const liveTrades = await this.persistence.getUnresolvedLiveTrades();
+    let liveUpdated = 0;
+    let liveResolved = 0;
+    const liveByMarket = new Map<string, typeof liveTrades>();
+    for (const trade of liveTrades) {
+      const key = trade.marketSlug || trade.conditionId;
+      const list = liveByMarket.get(key) || [];
+      list.push(trade);
+      liveByMarket.set(key, list);
+    }
+    for (const [, trades] of liveByMarket) {
+      try {
+        const first = trades[0];
+        const market = await this.fetchMarket(first.conditionId, first.marketSlug);
+        if (!market) continue;
+        for (const trade of trades) {
+          if (market.closed) {
+            const resPrice = getResolutionPrice(market, trade.tokenId);
+            const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
+            await this.persistence.resolveLiveTrade(trade.id, resPrice, pnl);
+            liveResolved++;
+          } else {
+            const currentPrice = getTokenPrice(market, trade.tokenId);
+            if (currentPrice !== null && trade.ourSize) {
+              const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
+              await this.persistence.updateLiveTradePrice(trade.id, currentPrice, pnl);
+              liveUpdated++;
+            }
+          }
+        }
+      } catch { /* skip */ }
+    }
+    if (liveUpdated > 0 || liveResolved > 0) {
+      log.info({ updated: liveUpdated, resolved: liveResolved }, 'Live trade prices updated');
     }
   }
 
