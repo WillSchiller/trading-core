@@ -288,7 +288,7 @@
       "type": "table",
       "title": "Open Positions",
       "gridPos": {"x": 0, "y": 33, "w": 24, "h": 7},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT market_slug AS \"market\", outcome, side, size::float, avg_entry::float AS \"entry\", current_price::float AS \"current\", unrealized_pnl::float AS \"unrealized_pnl\", paper, opened_at FROM pm_positions WHERE status = 'open' ORDER BY opened_at DESC LIMIT 50", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT trader_alias AS \"trader\", market_slug AS \"market\", outcome, ROUND(our_size::numeric, 1)::float AS \"size\", ROUND(our_entry_price::numeric, 4)::float AS \"entry\", ROUND(current_price::numeric, 4)::float AS \"current\", ROUND(pnl::numeric, 2)::float AS \"pnl\", observed_at FROM pm_live_trades WHERE resolved = false ORDER BY observed_at DESC LIMIT 50", "format": "table"}],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
