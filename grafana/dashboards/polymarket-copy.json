@@ -63,7 +63,7 @@
       "title": "Avg Trade Size",
       "description": "Typical bet size for eligible traders",
       "gridPos": {"x": 16, "y": 1, "w": 4, "h": 3},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(AVG(s.our_size)::numeric, 2) AS \"Avg\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.side = 'BUY' AND s.our_size > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(AVG(s.our_size)::numeric, 2) AS \"Avg\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.side = 'BUY' AND s.our_size > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "fixed", "fixedColor": "text"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -80,17 +80,17 @@
     {
       "id": 100,
       "type": "row",
-      "title": "Shadow Performance — Eligible Traders Only",
+      "title": "Live Performance — Post-Qualification Only",
       "gridPos": {"x": 0, "y": 4, "w": 24, "h": 1},
       "collapsed": false
     },
     {
       "id": 20,
       "type": "stat",
-      "title": "Total PnL",
-      "description": "PnL from copy-eligible traders only",
+      "title": "Live PnL",
+      "description": "PnL from trades observed after trader became eligible (no backfill)",
       "gridPos": {"x": 0, "y": 5, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -100,7 +100,7 @@
       "title": "Return on Bankroll",
       "description": "Total PnL / $500 bankroll",
       "gridPos": {"x": 4, "y": 5, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((COALESCE(SUM(s.pnl_if_copied), 0) / 500 * 100)::numeric, 1) AS \"ROI %\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((COALESCE(SUM(s.pnl_if_copied), 0) / 500 * 100)::numeric, 1) AS \"ROI %\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "yellow"}, {"value": 50, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -109,7 +109,7 @@
       "type": "stat",
       "title": "Win Rate",
       "gridPos": {"x": 8, "y": 5, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COUNT(*) FILTER (WHERE s.pnl_if_copied > 0)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS \"Win %\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COUNT(*) FILTER (WHERE s.pnl_if_copied > 0)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS \"Win %\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 50, "color": "yellow"}, {"value": 55, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -118,7 +118,7 @@
       "type": "stat",
       "title": "Avg PnL/Trade",
       "gridPos": {"x": 11, "y": 5, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((SUM(s.pnl_if_copied) / NULLIF(COUNT(*), 0))::numeric, 4) AS \"Avg\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((SUM(s.pnl_if_copied) / NULLIF(COUNT(*), 0))::numeric, 4) AS \"Avg\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 4, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -127,7 +127,7 @@
       "type": "stat",
       "title": "Trades",
       "gridPos": {"x": 14, "y": 5, "w": 2, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "fixed", "fixedColor": "blue"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -137,7 +137,7 @@
       "title": "Profit Factor",
       "description": "Gross wins / gross losses. >1.5 is good.",
       "gridPos": {"x": 16, "y": 5, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied > 0) / NULLIF(ABS(SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied < 0)), 0))::numeric, 2) AS \"PF\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied > 0) / NULLIF(ABS(SUM(s.pnl_if_copied) FILTER (WHERE s.pnl_if_copied < 0)), 0))::numeric, 2) AS \"PF\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "yellow"}, {"value": 1.5, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -147,7 +147,7 @@
       "title": "Max Drawdown",
       "description": "Largest peak-to-trough decline (eligible traders)",
       "gridPos": {"x": 19, "y": 5, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND(MIN(equity - hw)::numeric, 2) AS \"DD\" FROM peak", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND(MIN(equity - hw)::numeric, 2) AS \"DD\" FROM peak", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -157,7 +157,7 @@
       "title": "DD % of Bankroll",
       "description": "Max drawdown as % of $500 bankroll",
       "gridPos": {"x": 22, "y": 5, "w": 2, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND((MIN(equity - hw) / 500 * 100)::numeric, 1) AS \"DD %\" FROM peak", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH cum AS (SELECT s.trader_timestamp, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS equity FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at), peak AS (SELECT equity, MAX(equity) OVER (ORDER BY trader_timestamp) AS hw FROM cum) SELECT ROUND((MIN(equity - hw) / 500 * 100)::numeric, 1) AS \"DD %\" FROM peak", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -174,7 +174,7 @@
       "type": "stat",
       "title": "Current Exposure",
       "gridPos": {"x": 0, "y": 10, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.our_size * s.our_entry_price), 0)::numeric, 2) AS \"Exposure\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.our_size * s.our_entry_price), 0)::numeric, 2) AS \"Exposure\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 400, "color": "yellow"}, {"value": 500, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -183,7 +183,7 @@
       "type": "stat",
       "title": "Today Realized",
       "gridPos": {"x": 4, "y": 10, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND to_timestamp(s.trader_timestamp/1000)::date = (NOW() AT TIME ZONE 'UTC')::date", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at AND to_timestamp(s.trader_timestamp/1000)::date = (NOW() AT TIME ZONE 'UTC')::date", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -192,7 +192,7 @@
       "type": "stat",
       "title": "Unrealized PnL",
       "gridPos": {"x": 8, "y": 10, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(s.pnl_if_copied), 0)::numeric, 2) AS \"PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -201,7 +201,7 @@
       "type": "stat",
       "title": "Open Markets",
       "gridPos": {"x": 12, "y": 10, "w": 3, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(DISTINCT s.condition_id)::int AS \"Markets\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(DISTINCT s.condition_id)::int AS \"Markets\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = false AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}, {"value": 8, "color": "yellow"}, {"value": 10, "color": "red"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -234,10 +234,10 @@
     {
       "id": 30,
       "type": "timeseries",
-      "title": "Shadow Equity Curve (eligible traders)",
-      "description": "Cumulative PnL from copy-eligible traders only",
+      "title": "Live Equity Curve",
+      "description": "Cumulative PnL from trades observed after qualification only",
       "gridPos": {"x": 0, "y": 15, "w": 12, "h": 8},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT to_timestamp(s.trader_timestamp/1000) AS time, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS \"Equity\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 ORDER BY time", "format": "time_series"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT to_timestamp(s.trader_timestamp/1000) AS time, SUM(s.pnl_if_copied) OVER (ORDER BY s.trader_timestamp) AS \"Equity\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at ORDER BY time", "format": "time_series"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "fixed", "fixedColor": "green"}, "custom": {"fillOpacity": 10, "lineWidth": 2}}},
       "options": {"tooltip": {"mode": "single"}}
     },
@@ -247,8 +247,8 @@
       "title": "Daily Shadow PnL + Drawdown",
       "gridPos": {"x": 12, "y": 15, "w": 12, "h": 8},
       "targets": [
-        {"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT date_trunc('day', to_timestamp(s.trader_timestamp/1000)) AS time, ROUND(SUM(s.pnl_if_copied)::numeric, 2)::float AS \"Daily PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 GROUP BY 1 ORDER BY time", "format": "time_series"},
-        {"refId": "B", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH daily AS (SELECT date_trunc('day', to_timestamp(s.trader_timestamp/1000)) AS day, SUM(s.pnl_if_copied) AS pnl FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 GROUP BY 1), cum AS (SELECT day, SUM(pnl) OVER (ORDER BY day) AS equity FROM daily), dd AS (SELECT day AS time, equity - MAX(equity) OVER (ORDER BY day) AS \"Drawdown\" FROM cum) SELECT * FROM dd ORDER BY time", "format": "time_series"}
+        {"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT date_trunc('day', to_timestamp(s.trader_timestamp/1000)) AS time, ROUND(SUM(s.pnl_if_copied)::numeric, 2)::float AS \"Daily PnL\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at GROUP BY 1 ORDER BY time", "format": "time_series"},
+        {"refId": "B", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH daily AS (SELECT date_trunc('day', to_timestamp(s.trader_timestamp/1000)) AS day, SUM(s.pnl_if_copied) AS pnl FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.resolved = true AND s.side = 'BUY' AND s.our_entry_price > 0 AND s.observed_at > t.backfilled_at GROUP BY 1), cum AS (SELECT day, SUM(pnl) OVER (ORDER BY day) AS equity FROM daily), dd AS (SELECT day AS time, equity - MAX(equity) OVER (ORDER BY day) AS \"Drawdown\" FROM cum) SELECT * FROM dd ORDER BY time", "format": "time_series"}
       ],
       "fieldConfig": {
         "defaults": {"unit": "currencyUSD", "decimals": 2, "custom": {"fillOpacity": 30, "lineWidth": 2, "drawStyle": "bars"}},
@@ -326,7 +326,7 @@
       "type": "timeseries",
       "title": "Shadow Trade Volume (hourly)",
       "gridPos": {"x": 12, "y": 41, "w": 12, "h": 8},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT date_trunc('hour', s.observed_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(s.our_size)::numeric, 2)::float AS \"Size USD\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.observed_at >= NOW() - INTERVAL '7d' AND s.side = 'BUY' GROUP BY 1 ORDER BY time", "format": "time_series"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT date_trunc('hour', s.observed_at) AS time, COUNT(*)::int AS \"Trades\", ROUND(SUM(s.our_size)::numeric, 2)::float AS \"Size USD\" FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.observed_at >= NOW() - INTERVAL '7d' AND s.side = 'BUY' AND s.observed_at > t.backfilled_at GROUP BY 1 ORDER BY time", "format": "time_series"}],
       "fieldConfig": {"defaults": {"custom": {"fillOpacity": 20, "lineWidth": 2, "drawStyle": "bars"}}},
       "options": {"tooltip": {"mode": "multi"}}
     },
@@ -343,7 +343,7 @@
       "type": "table",
       "title": "Recent Shadow Trades (Eligible Traders)",
       "gridPos": {"x": 0, "y": 50, "w": 24, "h": 8},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT s.observed_at, s.trader_alias AS \"trader\", s.market_slug AS \"market\", s.outcome, s.price::float, s.our_size::float AS \"our_size\", s.our_entry_price::float AS \"entry\", s.current_price::float AS \"current\", s.pnl_if_copied::float AS \"pnl\", s.resolved FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.side = 'BUY' ORDER BY s.observed_at DESC LIMIT 50", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT s.observed_at, s.trader_alias AS \"trader\", s.market_slug AS \"market\", s.outcome, s.price::float, s.our_size::float AS \"our_size\", s.our_entry_price::float AS \"entry\", s.current_price::float AS \"current\", s.pnl_if_copied::float AS \"pnl\", s.resolved FROM pm_shadow_trades s JOIN pm_tracked_traders t ON s.trader_address = t.address AND t.copy_eligible = true WHERE s.side = 'BUY' AND s.observed_at > t.backfilled_at ORDER BY s.observed_at DESC LIMIT 50", "format": "table"}],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
