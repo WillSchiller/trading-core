@@ -70,6 +70,9 @@ cat .env | sed 's/=.*/=***REDACTED***/'
 echo "=== Stopping existing services ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml down -v 2>/dev/null || true
 
+echo "=== Pruning old Docker images ==="
+docker image prune -af --filter "until=24h" 2>/dev/null || true
+
 echo "=== Preparing postgres data directory ==="
 # EBS volume is mounted at /data - ensure postgres directory exists with correct permissions
 sudo mkdir -p /data/postgres
