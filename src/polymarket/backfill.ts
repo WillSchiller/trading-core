@@ -1,9 +1,12 @@
 import pg from 'pg';
 import { createChildLogger } from '../utils/logger.js';
 import { PolymarketPersistence } from './persistence.js';
+import { getTokenPrice, getResolutionPrice } from './market-utils.js';
 import type { PolymarketConfig, ShadowTrade } from './types.js';
 
 const log = createChildLogger({ component: 'pm-backfill' });
+
+const MAX_BACKFILL_TRADES = 5000;
 
 interface RawTrade {
   transactionHash?: string;
@@ -18,6 +21,7 @@ interface RawTrade {
   slug?: string;
   outcome?: string;
   outcomeIndex?: number;
+  negRisk?: boolean;
 }
 
 interface MarketData {
@@ -87,10 +91,10 @@ export class TraderBackfill {
         if (market) {
           if (market.closed) {
             resolved = true;
-            resolutionPrice = this.getResolutionPrice(market, tokenId);
+            resolutionPrice = getResolutionPrice(market, tokenId);
             pnl = (resolutionPrice - price) * ourSize;
           } else {
-            currentPrice = this.getTokenPrice(market, tokenId) ?? price;
+            currentPrice = getTokenPrice(market, tokenId) ?? price;
             pnl = (currentPrice - price) * ourSize;
           }
         }
@@ -106,7 +110,7 @@ export class TraderBackfill {
           outcome: raw.outcome || '',
           marketSlug: slug,
           marketQuestion: raw.title || market?.question || '',
-          negRisk: false,
+          negRisk: raw.negRisk === true,
           ourSize,
           ourEntryPrice: price,
           currentPrice,
@@ -156,15 +160,20 @@ export class TraderBackfill {
     let offset = 0;
     const limit = 100;
 
-    while (true) {
+    while (all.length < MAX_BACKFILL_TRADES) {
       const url = `${this.config.dataApiUrl}/trades?user=${address}&limit=${limit}&offset=${offset}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trades API ${resp.status}`);
 
-      const page = await resp.json() as RawTrade[];
-      if (page.length === 0) break;
+      const page = await resp.json() as unknown[];
+      if (!Array.isArray(page) || page.length === 0) break;
 
-      all.push(...page);
+      for (const item of page) {
+        if (item == null || typeof item !== 'object') continue;
+        all.push(item as RawTrade);
+        if (all.length >= MAX_BACKFILL_TRADES) break;
+      }
+
       offset += limit;
       await this.delay(100);
 
@@ -188,22 +197,6 @@ export class TraderBackfill {
     if (!resp.ok) return null;
     const data = await resp.json() as MarketData[];
     return data[0] ?? null;
-  }
-
-  private getTokenPrice(market: MarketData, tokenId: string): number | null {
-    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
-    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
-    const idx = tokenIds.indexOf(tokenId);
-    const price = idx >= 0 ? prices[idx] : null;
-    return (price != null && price > 0 && !isNaN(price)) ? price : null;
-  }
-
-  private getResolutionPrice(market: MarketData, tokenId: string): number {
-    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
-    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
-    const idx = tokenIds.indexOf(tokenId);
-    if (idx >= 0 && !isNaN(prices[idx])) return prices[idx];
-    return 0;
   }
 
   private delay(ms: number): Promise<void> {

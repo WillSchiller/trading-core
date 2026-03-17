@@ -135,12 +135,21 @@ export class CopyExecutor {
 
       const price = this.roundToTick(activity.price, tickSize);
 
-      const result = await this.clobClient.createOrder({
+      const orderParams = {
         tokenID: activity.tokenId,
         price,
         side: 'BUY',
         size: Math.round(size * 100) / 100,
-      });
+      };
+
+      let result: { orderID: string; status: string };
+      try {
+        result = await this.clobClient.createOrder(orderParams);
+      } catch (firstErr) {
+        log.warn({ error: (firstErr as Error).message }, 'Order failed, retrying in 1s');
+        await new Promise(r => setTimeout(r, 1000));
+        result = await this.clobClient.createOrder(orderParams);
+      }
 
       await this.persistence.updateCopyTrade(tradeId, {
         status: 'filled',
@@ -197,7 +206,10 @@ export class CopyExecutor {
   }
 
   async updatePositionPrices(): Promise<void> {
-    for (const [tokenId, pos] of this.positions) {
+    const tokens = [...this.positions.keys()];
+    for (const tokenId of tokens) {
+      const pos = this.positions.get(tokenId);
+      if (!pos) continue;
       if (pos.status !== 'open') continue;
 
       const resolved = await this.checkResolution(pos.conditionId, tokenId, pos.marketSlug);

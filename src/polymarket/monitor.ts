@@ -3,8 +3,8 @@ import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js
 
 const log = createChildLogger({ component: 'pm-monitor' });
 
-type TradeCallback = (trader: TrackedTrader, activity: TraderActivity) => void;
-type ShadowCallback = (trader: TrackedTrader, activity: TraderActivity) => void;
+type TradeCallback = (trader: TrackedTrader, activity: TraderActivity) => Promise<void>;
+type ShadowCallback = (trader: TrackedTrader, activity: TraderActivity) => Promise<void>;
 
 export class ActivityMonitor {
   private lastSeenTimestamp = new Map<string, number>();
@@ -18,8 +18,7 @@ export class ActivityMonitor {
   private successCount = 0;
   private readonly bootTime = Date.now();
 
-  private static readonly MAX_SEEN_IDS = 10000;
-
+  private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(private readonly config: PolymarketConfig) {}
 
   setTradeCallback(cb: TradeCallback): void {
@@ -48,13 +47,14 @@ export class ActivityMonitor {
     );
     log.info({ traders: this.traders.length, perTraderMs: perTraderInterval, bootTime: this.bootTime }, 'Activity monitor started');
 
-    setTimeout(() => {
+    this.healthCheckTimer = setTimeout(() => {
       log.info({ pollIndex: this.pollIndex, errors: this.errorCount, successes: this.successCount }, 'Monitor health check (30s)');
     }, 30_000);
   }
 
   stop(): void {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.healthCheckTimer) { clearTimeout(this.healthCheckTimer); this.healthCheckTimer = null; }
   }
 
   private async pollNext(): Promise<void> {
@@ -90,10 +90,6 @@ export class ActivityMonitor {
 
       for (const activity of newTrades) {
         this.seenTradeIds.add(activity.id);
-        if (this.seenTradeIds.size > ActivityMonitor.MAX_SEEN_IDS) {
-          const toDelete = [...this.seenTradeIds].slice(0, 1000);
-          for (const id of toDelete) this.seenTradeIds.delete(id);
-        }
 
         log.info({
           trader: trader.alias,
@@ -130,34 +126,25 @@ export class ActivityMonitor {
       throw new Error(`Trades API ${resp.status}`);
     }
 
-    const data = await resp.json() as Array<{
-      transactionHash?: string;
-      proxyWallet?: string;
-      timestamp?: string;
-      conditionId?: string;
-      asset?: string;
-      side?: string;
-      size?: string | number;
-      price?: string | number;
-      outcome?: string;
-      slug?: string;
-      title?: string;
-    }>;
+    const data = await resp.json() as unknown[];
+
+    if (!Array.isArray(data)) return [];
 
     return data
+      .filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
       .map(item => ({
-        id: item.transactionHash || `${item.timestamp}_${item.conditionId}_${item.side}`,
+        id: (item.transactionHash as string) || `${item.timestamp}_${item.conditionId}_${item.side}`,
         traderAddress: address,
         timestamp: Number(item.timestamp || 0) * 1000,
-        conditionId: item.conditionId || '',
-        tokenId: item.asset || '',
+        conditionId: (item.conditionId as string) || '',
+        tokenId: (item.asset as string) || '',
         side: (item.side === 'BUY' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
         size: Number(item.size || 0),
         price: Number(item.price || 0),
-        outcome: item.outcome || '',
-        marketSlug: item.slug || '',
-        marketQuestion: item.title || '',
-        negRisk: false,
+        outcome: (item.outcome as string) || '',
+        marketSlug: (item.slug as string) || '',
+        marketQuestion: (item.title as string) || '',
+        negRisk: item.negRisk === true,
       }));
   }
 

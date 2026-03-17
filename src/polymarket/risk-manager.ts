@@ -40,7 +40,7 @@ export class PolymarketRiskManager {
       this.persistence.getTotalExposure(),
       this.persistence.getOpenMarketsCount(),
       this.persistence.getDailyPnl(),
-      this.persistence.getPositionByToken(conditionId),
+      this.persistence.getPositionByCondition(conditionId),
     ]);
 
     if (totalExposure + proposedSizeUsd > limits.maxTotalExposureUsd) {

@@ -25,7 +25,7 @@ export class TraderDiscovery {
     private readonly persistence: PolymarketPersistence,
     pool?: pg.Pool,
   ) {
-    this.backfill = new TraderBackfill(config, persistence, pool || (persistence as any).pool);
+    this.backfill = new TraderBackfill(config, persistence, pool || persistence.getPool());
   }
 
   async start(): Promise<void> {
@@ -165,21 +165,24 @@ export class TraderDiscovery {
 
   private enqueueBackfill(address: string, alias: string, bankroll: number): void {
     this.backfillQueue.push({ address, alias, bankroll });
-    if (!this.backfillRunning) this.processBackfillQueue();
+    if (!this.backfillRunning) this.processBackfillQueue().catch(e => log.error({ err: e }, 'Backfill queue error'));
   }
 
   private async processBackfillQueue(): Promise<void> {
     this.backfillRunning = true;
-    while (this.backfillQueue.length > 0) {
-      const { address, alias, bankroll } = this.backfillQueue.shift()!;
-      try {
-        const n = await this.backfill.backfillTrader(address, alias, bankroll);
-        log.info({ trader: alias, trades: n, remaining: this.backfillQueue.length }, 'Backfill complete');
-      } catch (err) {
-        log.error({ trader: alias, error: (err as Error).message }, 'Backfill failed');
+    try {
+      while (this.backfillQueue.length > 0) {
+        const { address, alias, bankroll } = this.backfillQueue.shift()!;
+        try {
+          const n = await this.backfill.backfillTrader(address, alias, bankroll);
+          log.info({ trader: alias, trades: n, remaining: this.backfillQueue.length }, 'Backfill complete');
+        } catch (err) {
+          log.error({ trader: alias, error: (err as Error).message }, 'Backfill failed');
+        }
       }
+    } finally {
+      this.backfillRunning = false;
     }
-    this.backfillRunning = false;
   }
 
   private estimateBankroll(entry: LeaderboardEntry): number {

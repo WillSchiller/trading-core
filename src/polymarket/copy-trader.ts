@@ -6,6 +6,7 @@ import { TraderDiscovery } from './discovery.js';
 import { ActivityMonitor } from './monitor.js';
 import { CopyExecutor } from './executor.js';
 import { PolymarketRiskManager } from './risk-manager.js';
+import { getTokenPrice, getResolutionPrice } from './market-utils.js';
 import type { PolymarketConfig, ShadowTrade } from './types.js';
 
 const log = createChildLogger({ component: 'pm-copy-trader' });
@@ -154,12 +155,12 @@ export class PolymarketCopyTrader {
 
         for (const trade of trades) {
           if (market.closed) {
-            const resPrice = this.getResolutionPrice(market, trade.tokenId);
+            const resPrice = getResolutionPrice(market, trade.tokenId);
             const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
             await this.persistence.resolveShadowTrade(trade.id, resPrice, pnl);
             resolved++;
           } else {
-            const currentPrice = this.getTokenPrice(market, trade.tokenId);
+            const currentPrice = getTokenPrice(market, trade.tokenId);
             if (currentPrice !== null && trade.ourSize) {
               const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
               await this.persistence.updateShadowPrice(trade.id, currentPrice, pnl);
@@ -196,19 +197,4 @@ export class PolymarketCopyTrader {
     } catch { return null; }
   }
 
-  private getTokenPrice(market: MarketData, tokenId: string): number | null {
-    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
-    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
-    const idx = tokenIds.indexOf(tokenId);
-    const price = idx >= 0 ? prices[idx] : null;
-    return (price != null && price > 0 && !isNaN(price)) ? price : null;
-  }
-
-  private getResolutionPrice(market: MarketData, tokenId: string): number {
-    const prices = (JSON.parse(market.outcomePrices || '[]') as (string | number)[]).map(Number);
-    const tokenIds = JSON.parse(market.clobTokenIds || '[]') as string[];
-    const idx = tokenIds.indexOf(tokenId);
-    if (idx >= 0 && !isNaN(prices[idx])) return prices[idx];
-    return 0;
-  }
 }

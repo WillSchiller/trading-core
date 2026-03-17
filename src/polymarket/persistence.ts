@@ -4,6 +4,10 @@ import type { TrackedTrader, CopyTrade, CopyPosition, KillSwitchEvent, ShadowTra
 export class PolymarketPersistence {
   constructor(private readonly pool: pg.Pool) {}
 
+  getPool(): pg.Pool {
+    return this.pool;
+  }
+
   async upsertTrader(trader: TrackedTrader): Promise<void> {
     await this.pool.query(
       `INSERT INTO pm_tracked_traders (address, alias, pnl, volume, bankroll_estimate, rank, enabled, copy_eligible)
@@ -156,25 +160,25 @@ export class PolymarketPersistence {
 
   async getDailyPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(realized_pnl), 0)::float as pnl
+      `SELECT COALESCE(SUM(realized_pnl), 0) as pnl
        FROM pm_positions
        WHERE status = 'closed' AND closed_at >= (NOW() AT TIME ZONE 'UTC')::date`,
     );
-    return result.rows[0].pnl;
+    return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(realized_pnl), 0)::float as pnl FROM pm_positions WHERE status = 'closed'`,
+      `SELECT COALESCE(SUM(realized_pnl), 0) as pnl FROM pm_positions WHERE status = 'closed'`,
     );
-    return result.rows[0].pnl;
+    return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalExposure(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(size * avg_entry), 0)::float as exposure FROM pm_positions WHERE status = 'open'`,
+      `SELECT COALESCE(SUM(size * avg_entry), 0) as exposure FROM pm_positions WHERE status = 'open'`,
     );
-    return result.rows[0].exposure;
+    return parseFloat(result.rows[0].exposure);
   }
 
   async getOpenMarketsCount(): Promise<number> {
@@ -193,6 +197,19 @@ export class PolymarketPersistence {
               status, paper, opened_at as "openedAt", closed_at as "closedAt"
        FROM pm_positions WHERE token_id = $1 AND status = 'open' LIMIT 1`,
       [tokenId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async getPositionByCondition(conditionId: string): Promise<(CopyPosition & { id: number }) | null> {
+    const result = await this.pool.query(
+      `SELECT id, condition_id as "conditionId", token_id as "tokenId", side, outcome,
+              market_slug as "marketSlug", market_question as "marketQuestion",
+              avg_entry::float as "avgEntry", size::float, current_price::float as "currentPrice",
+              unrealized_pnl::float as "unrealizedPnl", realized_pnl::float as "realizedPnl",
+              status, paper, opened_at as "openedAt", closed_at as "closedAt"
+       FROM pm_positions WHERE condition_id = $1 AND status = 'open' LIMIT 1`,
+      [conditionId],
     );
     return result.rows[0] ?? null;
   }
