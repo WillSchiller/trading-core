@@ -8,6 +8,7 @@ const log = createChildLogger({ component: 'pm-risk' });
 export class PolymarketRiskManager {
   private triggered = false;
   private checkTimer: ReturnType<typeof setInterval> | null = null;
+  private pendingExposure = 0;
 
   constructor(
     private readonly config: PolymarketConfig,
@@ -43,14 +44,18 @@ export class PolymarketRiskManager {
       this.persistence.getPositionByCondition(conditionId),
     ]);
 
-    if (totalExposure + proposedSizeUsd > limits.maxTotalExposureUsd) {
-      return { allowed: false, reason: `Total exposure ${totalExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxTotalExposureUsd}` };
+    const effectiveExposure = totalExposure + this.pendingExposure;
+    if (effectiveExposure + proposedSizeUsd > limits.maxTotalExposureUsd) {
+      return { allowed: false, reason: `Total exposure ${effectiveExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxTotalExposureUsd}` };
     }
 
     const positionExposure = existingPosition ? existingPosition.size * existingPosition.avgEntry : 0;
     if (positionExposure + proposedSizeUsd > limits.maxPositionUsd) {
       return { allowed: false, reason: `Position exposure ${positionExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxPositionUsd}` };
     }
+
+    this.pendingExposure += proposedSizeUsd;
+    setTimeout(() => { this.pendingExposure = Math.max(0, this.pendingExposure - proposedSizeUsd); }, 5000);
 
     if (!existingPosition && openMarkets >= limits.maxMarketsOpen) {
       return { allowed: false, reason: `Open markets ${openMarkets} at limit ${limits.maxMarketsOpen}` };

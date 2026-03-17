@@ -160,30 +160,30 @@ export class PolymarketPersistence {
 
   async getDailyPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(realized_pnl), 0) as pnl
-       FROM pm_positions
-       WHERE status = 'closed' AND closed_at >= (NOW() AT TIME ZONE 'UTC')::date`,
+      `SELECT COALESCE(SUM(pnl), 0) as pnl
+       FROM pm_live_trades
+       WHERE resolved = true AND resolved_at >= (NOW() AT TIME ZONE 'UTC')::date`,
     );
     return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(realized_pnl), 0) as pnl FROM pm_positions WHERE status = 'closed'`,
+      `SELECT COALESCE(SUM(pnl), 0) as pnl FROM pm_live_trades WHERE resolved = true`,
     );
     return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalExposure(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(size * avg_entry), 0) as exposure FROM pm_positions WHERE status = 'open'`,
+      `SELECT COALESCE(SUM(our_size * our_entry_price), 0) as exposure FROM pm_live_trades WHERE resolved = false`,
     );
     return parseFloat(result.rows[0].exposure);
   }
 
   async getOpenMarketsCount(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COUNT(DISTINCT condition_id)::int as count FROM pm_positions WHERE status = 'open'`,
+      `SELECT COUNT(DISTINCT condition_id)::int as count FROM pm_live_trades WHERE resolved = false`,
     );
     return result.rows[0].count;
   }
@@ -201,17 +201,15 @@ export class PolymarketPersistence {
     return result.rows[0] ?? null;
   }
 
-  async getPositionByCondition(conditionId: string): Promise<(CopyPosition & { id: number }) | null> {
+  async getPositionByCondition(conditionId: string): Promise<{ size: number; avgEntry: number } | null> {
     const result = await this.pool.query(
-      `SELECT id, condition_id as "conditionId", token_id as "tokenId", side, outcome,
-              market_slug as "marketSlug", market_question as "marketQuestion",
-              avg_entry::float as "avgEntry", size::float, current_price::float as "currentPrice",
-              unrealized_pnl::float as "unrealizedPnl", realized_pnl::float as "realizedPnl",
-              status, paper, opened_at as "openedAt", closed_at as "closedAt"
-       FROM pm_positions WHERE condition_id = $1 AND status = 'open' LIMIT 1`,
+      `SELECT COALESCE(SUM(our_size), 0)::float as size, COALESCE(AVG(our_entry_price), 0)::float as "avgEntry"
+       FROM pm_live_trades WHERE condition_id = $1 AND resolved = false`,
       [conditionId],
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    if (!row || row.size === 0) return null;
+    return { size: row.size, avgEntry: row.avgEntry };
   }
 
   async saveShadowTrade(trade: ShadowTrade): Promise<number> {
