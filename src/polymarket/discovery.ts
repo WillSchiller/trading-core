@@ -2,15 +2,15 @@ import pg from 'pg';
 import { createChildLogger } from '../utils/logger.js';
 import { PolymarketPersistence } from './persistence.js';
 import { TraderBackfill } from './backfill.js';
-import type { PolymarketConfig, TrackedTrader, LeaderboardEntry } from './types.js';
+import type { PolymarketConfig, TrackedTrader, LeaderboardEntry, TraderStats } from './types.js';
 
 const log = createChildLogger({ component: 'pm-discovery' });
 
-const MIN_SHADOW_TRADES = 30;
-const MIN_WIN_RATE = 0.55;
-const MIN_PNL_PER_TRADE = 0.50;
-const MIN_ACTIVE_DAYS = 14;
-const MAX_DD_RATIO = 0.5;
+const MIN_TRADES = Number(process.env.PM_MIN_TRADES || 50);
+const MIN_ACTIVE_DAYS = Number(process.env.PM_MIN_ACTIVE_DAYS || 14);
+const MIN_SHARPE = Number(process.env.PM_MIN_SHARPE || 0.05);
+const MIN_PROFIT_FACTOR = Number(process.env.PM_MIN_PROFIT_FACTOR || 1.3);
+const MAX_DD_RATIO = Number(process.env.PM_MAX_DD_RATIO || 0.5);
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];
@@ -96,13 +96,13 @@ export class TraderDiscovery {
 
       for (const [address, stats] of shadowStats) {
         const eligible = this.isEligible(stats);
-        if (stats.trades >= 5) {
+        if (stats.trades >= 10) {
           log.info({
             address: address.slice(0, 10),
             trades: stats.trades,
-            winRate: (stats.wins / stats.trades * 100).toFixed(1),
             pnl: stats.pnl.toFixed(2),
-            avgPnl: (stats.pnl / stats.trades).toFixed(4),
+            sharpe: stats.sharpe.toFixed(4),
+            pf: stats.profitFactor.toFixed(2),
             days: stats.activeDays,
             maxDD: stats.maxDrawdown.toFixed(2),
             eligible,
@@ -153,12 +153,12 @@ export class TraderDiscovery {
     }));
   }
 
-  private isEligible(stats: { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }): boolean {
-    if (stats.trades < MIN_SHADOW_TRADES) return false;
+  private isEligible(stats: TraderStats): boolean {
+    if (stats.trades < MIN_TRADES) return false;
     if (stats.pnl <= 0) return false;
-    if ((stats.wins / stats.trades) < MIN_WIN_RATE) return false;
-    if ((stats.pnl / stats.trades) < MIN_PNL_PER_TRADE) return false;
     if (stats.activeDays < MIN_ACTIVE_DAYS) return false;
+    if (stats.sharpe < MIN_SHARPE) return false;
+    if (stats.profitFactor < MIN_PROFIT_FACTOR) return false;
     if (stats.maxDrawdown < 0 && Math.abs(stats.maxDrawdown) > stats.pnl * MAX_DD_RATIO) return false;
     return true;
   }

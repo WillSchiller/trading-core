@@ -61,8 +61,13 @@ services:
       POLYMARKET_MAX_EXPOSURE_USD: ${POLYMARKET_MAX_EXPOSURE_USD:-500}
       POLYMARKET_DAILY_LOSS_LIMIT_USD: ${POLYMARKET_DAILY_LOSS_LIMIT_USD:-50}
       POLYMARKET_MAX_MARKETS_OPEN: ${POLYMARKET_MAX_MARKETS_OPEN:-10}
-      POLYMARKET_MAX_TRADERS: ${POLYMARKET_MAX_TRADERS:-10}
+      POLYMARKET_MAX_TRADERS: ${POLYMARKET_MAX_TRADERS:-30}
       POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+      PM_MIN_TRADES: ${PM_MIN_TRADES:-50}
+      PM_MIN_ACTIVE_DAYS: ${PM_MIN_ACTIVE_DAYS:-14}
+      PM_MIN_SHARPE: ${PM_MIN_SHARPE:-0.05}
+      PM_MIN_PROFIT_FACTOR: ${PM_MIN_PROFIT_FACTOR:-1.3}
+      PM_MAX_DD_RATIO: ${PM_MAX_DD_RATIO:-0.5}
     # Config is baked into the Docker image (not volume-mounted) to ensure
     # config and code are always in sync. The Dockerfile COPY includes config/.
     # SQL migrations are still mounted for flexibility.

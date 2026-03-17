@@ -138,3 +138,13 @@ export interface LeaderboardEntry {
   volume: number;
   rank: number;
 }
+
+export interface TraderStats {
+  trades: number;
+  wins: number;
+  pnl: number;
+  activeDays: number;
+  maxDrawdown: number;
+  sharpe: number;
+  profitFactor: number;
+}

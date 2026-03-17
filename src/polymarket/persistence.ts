@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { TrackedTrader, CopyTrade, CopyPosition, KillSwitchEvent, ShadowTrade } from './types.js';
+import type { TrackedTrader, CopyTrade, CopyPosition, KillSwitchEvent, ShadowTrade, TraderStats } from './types.js';
 
 export class PolymarketPersistence {
   constructor(private readonly pool: pg.Pool) {}
@@ -251,13 +251,17 @@ export class PolymarketPersistence {
     );
   }
 
-  async getTraderShadowStats(): Promise<Map<string, { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }>> {
+  async getTraderShadowStats(): Promise<Map<string, TraderStats>> {
     const result = await this.pool.query(
       `WITH per_trader AS (
         SELECT trader_address,
           COUNT(*)::int as trades,
           COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
           COALESCE(SUM(pnl_if_copied), 0)::float as pnl,
+          COALESCE(AVG(pnl_if_copied), 0)::float as avg_pnl,
+          COALESCE(STDDEV(pnl_if_copied), 1)::float as std_pnl,
+          COALESCE(SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied > 0), 0)::float as gross_wins,
+          COALESCE(SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied < 0), 0)::float as gross_losses,
           COUNT(DISTINCT DATE(to_timestamp(trader_timestamp/1000)))::int as active_days
         FROM pm_shadow_trades
         WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
@@ -277,12 +281,19 @@ export class PolymarketPersistence {
       max_dd AS (
         SELECT trader_address, MIN(dd)::float as max_dd FROM with_hw GROUP BY trader_address
       )
-      SELECT p.trader_address, p.trades, p.wins, p.pnl, p.active_days, COALESCE(d.max_dd, 0) as max_dd
+      SELECT p.trader_address, p.trades, p.wins, p.pnl, p.avg_pnl, p.std_pnl,
+        p.gross_wins, p.gross_losses, p.active_days, COALESCE(d.max_dd, 0) as max_dd
       FROM per_trader p LEFT JOIN max_dd d ON p.trader_address = d.trader_address`,
     );
-    const map = new Map<string, { trades: number; wins: number; pnl: number; activeDays: number; maxDrawdown: number }>();
+    const map = new Map<string, TraderStats>();
     for (const row of result.rows) {
-      map.set(row.trader_address, { trades: row.trades, wins: row.wins, pnl: row.pnl, activeDays: row.active_days, maxDrawdown: row.max_dd });
+      const sharpe = row.std_pnl > 0 ? row.avg_pnl / row.std_pnl : 0;
+      const profitFactor = row.gross_losses < 0 ? row.gross_wins / Math.abs(row.gross_losses) : (row.gross_wins > 0 ? 99 : 0);
+      map.set(row.trader_address, {
+        trades: row.trades, wins: row.wins, pnl: row.pnl,
+        activeDays: row.active_days, maxDrawdown: row.max_dd,
+        sharpe, profitFactor,
+      });
     }
     return map;
   }
