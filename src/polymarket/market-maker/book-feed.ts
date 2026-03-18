@@ -99,14 +99,22 @@ export class PMMBookFeed {
       log.info({ count: this.subscribedTokens.size }, 'Subscribed to CLOB books');
     });
 
+    let msgCount = 0;
+    let bookCount = 0;
     this.ws.on('message', (data: WebSocket.Data) => {
       try {
         const msgs = JSON.parse(data.toString());
         const list = Array.isArray(msgs) ? msgs : [msgs];
         for (const msg of list) {
+          msgCount++;
+          if (msgCount <= 3 || msgCount % 1000 === 0) {
+            log.info({ msgCount, keys: Object.keys(msg).slice(0, 8), eventType: msg.event_type }, 'WS message sample');
+          }
           if (!msg.event_type) continue;
           if (msg.event_type === 'book' && msg.asset_id) {
+            bookCount++;
             this.handleBook(msg as ClobBookMessage);
+            if (bookCount <= 3) log.info({ tokenId: msg.asset_id?.slice(0, 12), bids: msg.bids?.length, asks: msg.asks?.length }, 'Book snapshot received');
           } else if (msg.event_type === 'price_change' && msg.asset_id) {
             this.handlePriceChange(msg as ClobBookMessage);
           } else if (msg.event_type === 'last_trade_price' && msg.asset_id) {
