@@ -5,12 +5,16 @@ import type { PMMBookSnapshot, PMMBookLevel } from './types.js';
 const log = createChildLogger({ component: 'pmm-book-feed' });
 
 interface ClobBookMessage {
-  market: string;
+  event_type: string;
+  market?: string;
   asset_id: string;
-  bids: Array<{ price: string; size: string }>;
-  asks: Array<{ price: string; size: string }>;
-  timestamp: string;
+  bids?: Array<{ price: string; size: string }>;
+  asks?: Array<{ price: string; size: string }>;
+  timestamp?: string;
   hash?: string;
+  price?: string;
+  side?: string;
+  size?: string;
 }
 
 export class PMMBookFeed {
@@ -51,6 +55,8 @@ export class PMMBookFeed {
     this.subscribedTokens.set(tokenId, conditionId);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.sendSubscribe(tokenId);
+    } else if (!this.ws && !this.stopping) {
+      this.connect();
     }
   }
 
@@ -59,9 +65,8 @@ export class PMMBookFeed {
     this.books.delete(tokenId);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
-        type: 'unsubscribe',
-        channel: 'book',
         assets_ids: [tokenId],
+        type: 'market',
       }));
     }
   }
@@ -76,9 +81,8 @@ export class PMMBookFeed {
 
   private sendSubscribe(tokenId: string): void {
     this.ws!.send(JSON.stringify({
-      type: 'subscribe',
-      channel: 'book',
       assets_ids: [tokenId],
+      type: 'market',
     }));
   }
 
@@ -100,8 +104,13 @@ export class PMMBookFeed {
         const msgs = JSON.parse(data.toString());
         const list = Array.isArray(msgs) ? msgs : [msgs];
         for (const msg of list) {
-          if (msg.asset_id && (msg.bids || msg.asks)) {
+          if (!msg.event_type) continue;
+          if (msg.event_type === 'book' && msg.asset_id) {
             this.handleBook(msg as ClobBookMessage);
+          } else if (msg.event_type === 'price_change' && msg.asset_id) {
+            this.handlePriceChange(msg as ClobBookMessage);
+          } else if (msg.event_type === 'last_trade_price' && msg.asset_id) {
+            this.handleLastTrade(msg as ClobBookMessage);
           }
         }
       } catch { /* ignore malformed */ }
@@ -158,5 +167,41 @@ export class PMMBookFeed {
 
     this.books.set(tokenId, snap);
     if (this.onUpdate) this.onUpdate(snap);
+  }
+
+  private handlePriceChange(msg: ClobBookMessage): void {
+    const tokenId = msg.asset_id;
+    const book = this.books.get(tokenId);
+    if (!book) return;
+
+    if (msg.price && msg.side && msg.size !== undefined) {
+      const price = parseFloat(msg.price);
+      const size = parseFloat(msg.size!);
+      const levels = msg.side === 'BUY' ? book.bids : book.asks;
+
+      const idx = levels.findIndex(l => l.price === price);
+      if (size === 0) {
+        if (idx >= 0) levels.splice(idx, 1);
+      } else if (idx >= 0) {
+        levels[idx].size = size;
+      } else {
+        levels.push({ price, size });
+        if (msg.side === 'BUY') levels.sort((a, b) => b.price - a.price);
+        else levels.sort((a, b) => a.price - b.price);
+      }
+
+      if (book.bids.length > 0 && book.asks.length > 0) {
+        book.bestBid = book.bids[0].price;
+        book.bestAsk = book.asks[0].price;
+        book.midPrice = (book.bestBid + book.bestAsk) / 2;
+        book.spreadCents = (book.bestAsk - book.bestBid) * 100;
+        book.timestamp = Date.now();
+        if (this.onUpdate) this.onUpdate(book);
+      }
+    }
+  }
+
+  private handleLastTrade(_msg: ClobBookMessage): void {
+    // Trade data for flow analysis — onUpdate already fires from book/price_change
   }
 }

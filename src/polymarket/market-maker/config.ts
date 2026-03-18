@@ -30,7 +30,7 @@ export function loadPMMConfig(): PMMConfig {
     minSpreadCents: Number(process.env.PMM_MIN_SPREAD_CENTS || '2'),
     gamma: Number(process.env.PMM_GAMMA || '0.3'),
     requoteIntervalMs: Number(process.env.PMM_REQUOTE_INTERVAL_MS || '10000'),
-    minVolume24h: Number(process.env.PMM_MIN_VOLUME_24H || '50000'),
+    minVolume24h: Number(process.env.PMM_MIN_VOLUME_24H || '10000'),
     exitBeforeResolutionH: Number(process.env.PMM_EXIT_BEFORE_RESOLUTION_H || '6'),
     makerFeeBps: Number(process.env.PMM_MAKER_FEE_BPS || '0'),
     takerFeeBps: Number(process.env.PMM_TAKER_FEE_BPS || '0'),
