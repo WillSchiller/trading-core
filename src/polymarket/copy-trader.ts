@@ -71,9 +71,18 @@ export class PolymarketCopyTrader {
         };
         await this.persistence.saveShadowTrade(shadow);
         if (trader.copyEligible && activity.side === 'BUY') {
-          const { allowed } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
-          if (allowed) {
-            await this.persistence.saveLiveTrade(shadow);
+          const traderStats = await this.persistence.getTraderLiveStats(trader.address);
+          const maxConsecLoss = Number(process.env.PM_TRADER_MAX_CONSEC_LOSS || 5);
+          const maxTraderLoss = Number(process.env.PM_TRADER_MAX_LOSS || 200);
+          if (traderStats.consecutiveLosses >= maxConsecLoss) {
+            log.info({ trader: trader.alias, streak: traderStats.consecutiveLosses }, 'Trader circuit breaker: consecutive losses');
+          } else if (traderStats.pnl < -maxTraderLoss) {
+            log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
+          } else {
+            const { allowed } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
+            if (allowed) {
+              await this.persistence.saveLiveTrade(shadow);
+            }
           }
         }
         log.debug({ trader: trader.alias, market: activity.marketSlug, side: activity.side }, 'Shadow trade recorded');

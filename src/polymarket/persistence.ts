@@ -287,6 +287,30 @@ export class PolymarketPersistence {
     );
   }
 
+  async getTraderLiveStats(traderAddress: string): Promise<{ trades: number; pnl: number; consecutiveLosses: number }> {
+    const result = await this.pool.query(
+      `SELECT COUNT(*)::int as trades, COALESCE(SUM(pnl), 0)::float as pnl
+       FROM pm_live_trades WHERE trader_address = $1 AND resolved = true`,
+      [traderAddress],
+    );
+    const streakResult = await this.pool.query(
+      `WITH numbered AS (
+        SELECT pnl, ROW_NUMBER() OVER (ORDER BY resolved_at DESC) as rn
+        FROM pm_live_trades WHERE trader_address = $1 AND resolved = true
+       )
+       SELECT COUNT(*) as streak FROM numbered
+       WHERE pnl <= 0 AND rn <= (
+         SELECT COALESCE(MIN(rn) - 1, COUNT(*)) FROM numbered WHERE pnl > 0
+       )`,
+      [traderAddress],
+    );
+    return {
+      trades: result.rows[0]?.trades || 0,
+      pnl: result.rows[0]?.pnl || 0,
+      consecutiveLosses: streakResult.rows[0]?.streak || 0,
+    };
+  }
+
   async getTraderShadowStats(): Promise<Map<string, TraderStats>> {
     const result = await this.pool.query(
       `WITH per_trader AS (

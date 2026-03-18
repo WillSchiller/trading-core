@@ -92,6 +92,8 @@ services:
       PM_MIN_SHARPE: ${PM_MIN_SHARPE:-0.05}
       PM_MIN_PROFIT_FACTOR: ${PM_MIN_PROFIT_FACTOR:-1.3}
       PM_MAX_DD_RATIO: ${PM_MAX_DD_RATIO:-0.5}
+      PM_TRADER_MAX_CONSEC_LOSS: ${PM_TRADER_MAX_CONSEC_LOSS:-5}
+      PM_TRADER_MAX_LOSS: ${PM_TRADER_MAX_LOSS:-200}
     depends_on:
       postgres:
         condition: service_healthy
