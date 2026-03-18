@@ -95,6 +95,9 @@ services:
       PM_TRADER_MAX_CONSEC_LOSS: ${PM_TRADER_MAX_CONSEC_LOSS:-5}
       PM_TRADER_MAX_LOSS: ${PM_TRADER_MAX_LOSS:-200}
       PM_RECENCY_HALFLIFE: ${PM_RECENCY_HALFLIFE:-0.2}
+      PM_MIN_COINFLIP_WR: ${PM_MIN_COINFLIP_WR:-0.55}
+      PM_MIN_ENTRY_PRICE: ${PM_MIN_ENTRY_PRICE:-0.15}
+      PM_MAX_ENTRY_PRICE: ${PM_MAX_ENTRY_PRICE:-0.85}
     depends_on:
       postgres:
         condition: service_healthy

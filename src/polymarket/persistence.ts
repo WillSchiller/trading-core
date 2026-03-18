@@ -231,26 +231,28 @@ export class PolymarketPersistence {
 
     const pnlResult = await this.pool.query(
       `SELECT trader_address, pnl_if_copied::float as pnl,
+              our_entry_price::float as entry_price,
               to_timestamp(trader_timestamp/1000)::date as trade_date
        FROM pm_shadow_trades
        WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
        ORDER BY trader_address, trader_timestamp`,
     );
 
-    const byTrader = new Map<string, { pnls: number[]; dates: Set<string> }>();
+    const byTrader = new Map<string, { pnls: number[]; entryPrices: number[]; dates: Set<string> }>();
     for (const row of pnlResult.rows) {
       let entry = byTrader.get(row.trader_address);
       if (!entry) {
-        entry = { pnls: [], dates: new Set() };
+        entry = { pnls: [], entryPrices: [], dates: new Set() };
         byTrader.set(row.trader_address, entry);
       }
       entry.pnls.push(row.pnl);
+      entry.entryPrices.push(row.entry_price);
       entry.dates.add(String(row.trade_date));
     }
 
     const map = new Map<string, TraderStats>();
     for (const [addr, data] of byTrader) {
-      const { pnls, dates } = data;
+      const { pnls, entryPrices, dates } = data;
       const n = pnls.length;
       if (n < 2) continue;
 
@@ -284,6 +286,16 @@ export class PolymarketPersistence {
       const wins = pnls.filter(p => p > 0).length;
       const totalPnl = pnls.reduce((a, b) => a + b, 0);
 
+      let cfWins = 0;
+      let cfTotal = 0;
+      for (let i = 0; i < n; i++) {
+        if (entryPrices[i] >= 0.30 && entryPrices[i] <= 0.70) {
+          cfTotal++;
+          if (pnls[i] > 0) cfWins++;
+        }
+      }
+      const coinflipWR = cfTotal >= 10 ? cfWins / cfTotal : 0;
+
       map.set(addr, {
         trades: n,
         wins,
@@ -292,6 +304,7 @@ export class PolymarketPersistence {
         maxDrawdown: ddMap.get(addr) ?? 0,
         sharpe,
         profitFactor,
+        coinflipWR,
       });
     }
     return map;

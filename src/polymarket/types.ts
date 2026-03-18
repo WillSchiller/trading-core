@@ -147,4 +147,5 @@ export interface TraderStats {
   maxDrawdown: number;
   sharpe: number;
   profitFactor: number;
+  coinflipWR: number;
 }

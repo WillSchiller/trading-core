@@ -66,20 +66,26 @@ export class PolymarketCopyTrader {
         };
         await this.persistence.saveShadowTrade(shadow);
         if (trader.copyEligible && activity.side === 'BUY') {
-          const traderStats = await this.persistence.getTraderLiveStats(trader.address);
-          const maxConsecLoss = Number(process.env.PM_TRADER_MAX_CONSEC_LOSS || 5);
-          const maxTraderLoss = Number(process.env.PM_TRADER_MAX_LOSS || 200);
-          if (traderStats.consecutiveLosses >= maxConsecLoss) {
-            log.info({ trader: trader.alias, streak: traderStats.consecutiveLosses }, 'Trader circuit breaker: consecutive losses');
-          } else if (traderStats.pnl < -maxTraderLoss) {
-            log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
+          const minEntry = Number(process.env.PM_MIN_ENTRY_PRICE || 0.15);
+          const maxEntry = Number(process.env.PM_MAX_ENTRY_PRICE || 0.85);
+          if (activity.price < minEntry || activity.price > maxEntry) {
+            log.debug({ trader: trader.alias, price: activity.price, market: activity.marketSlug }, 'Skipped — entry price outside range');
           } else {
-            const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
-            if (allowed) {
-              try {
-                await this.persistence.saveLiveTrade(shadow);
-              } finally {
-                release?.();
+            const traderStats = await this.persistence.getTraderLiveStats(trader.address);
+            const maxConsecLoss = Number(process.env.PM_TRADER_MAX_CONSEC_LOSS || 5);
+            const maxTraderLoss = Number(process.env.PM_TRADER_MAX_LOSS || 200);
+            if (traderStats.consecutiveLosses >= maxConsecLoss) {
+              log.info({ trader: trader.alias, streak: traderStats.consecutiveLosses }, 'Trader circuit breaker: consecutive losses');
+            } else if (traderStats.pnl < -maxTraderLoss) {
+              log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
+            } else {
+              const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
+              if (allowed) {
+                try {
+                  await this.persistence.saveLiveTrade(shadow);
+                } finally {
+                  release?.();
+                }
               }
             }
           }

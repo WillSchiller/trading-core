@@ -11,6 +11,7 @@ const MIN_ACTIVE_DAYS = Number(process.env.PM_MIN_ACTIVE_DAYS || 14);
 const MIN_SHARPE = Number(process.env.PM_MIN_SHARPE || 0.05);
 const MIN_PROFIT_FACTOR = Number(process.env.PM_MIN_PROFIT_FACTOR || 1.3);
 const MAX_DD_RATIO = Number(process.env.PM_MAX_DD_RATIO || 0.5);
+const MIN_COINFLIP_WR = Number(process.env.PM_MIN_COINFLIP_WR || 0.55);
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];
@@ -159,6 +160,7 @@ export class TraderDiscovery {
     if (stats.activeDays < MIN_ACTIVE_DAYS) return false;
     if (stats.sharpe < MIN_SHARPE) return false;
     if (stats.profitFactor < MIN_PROFIT_FACTOR) return false;
+    if (stats.coinflipWR > 0 && stats.coinflipWR < MIN_COINFLIP_WR) return false;
     if (stats.maxDrawdown < 0 && Math.abs(stats.maxDrawdown) > stats.pnl * MAX_DD_RATIO) return false;
     return true;
   }
