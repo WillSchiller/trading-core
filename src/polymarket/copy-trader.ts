@@ -71,7 +71,10 @@ export class PolymarketCopyTrader {
         };
         await this.persistence.saveShadowTrade(shadow);
         if (trader.copyEligible && activity.side === 'BUY') {
-          await this.persistence.saveLiveTrade(shadow);
+          const { allowed } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
+          if (allowed) {
+            await this.persistence.saveLiveTrade(shadow);
+          }
         }
         log.debug({ trader: trader.alias, market: activity.marketSlug, side: activity.side }, 'Shadow trade recorded');
       } catch (err) {
