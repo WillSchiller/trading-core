@@ -30,7 +30,7 @@ export class PolymarketRiskManager {
     if (this.checkTimer) { clearInterval(this.checkTimer); this.checkTimer = null; }
   }
 
-  async canTrade(proposedSizeUsd: number, conditionId: string): Promise<{ allowed: boolean; reason?: string }> {
+  async canTrade(proposedSizeUsd: number, conditionId: string): Promise<{ allowed: boolean; reason?: string; release?: () => void }> {
     if (this.triggered) {
       return { allowed: false, reason: 'Kill switch triggered' };
     }
@@ -54,9 +54,6 @@ export class PolymarketRiskManager {
       return { allowed: false, reason: `Position exposure ${positionExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxPositionUsd}` };
     }
 
-    this.pendingExposure += proposedSizeUsd;
-    setTimeout(() => { this.pendingExposure = Math.max(0, this.pendingExposure - proposedSizeUsd); }, 5000);
-
     if (!existingPosition && openMarkets >= limits.maxMarketsOpen) {
       return { allowed: false, reason: `Open markets ${openMarkets} at limit ${limits.maxMarketsOpen}` };
     }
@@ -65,7 +62,10 @@ export class PolymarketRiskManager {
       return { allowed: false, reason: `Daily PnL ${dailyPnl.toFixed(2)} exceeds loss limit -${limits.dailyLossLimitUsd}` };
     }
 
-    return { allowed: true };
+    this.pendingExposure += proposedSizeUsd;
+    const release = () => { this.pendingExposure = Math.max(0, this.pendingExposure - proposedSizeUsd); };
+
+    return { allowed: true, release };
   }
 
   async checkKillSwitch(): Promise<void> {

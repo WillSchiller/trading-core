@@ -1,6 +1,6 @@
 import { createChildLogger } from '../utils/logger.js';
 import { PolymarketPersistence } from './persistence.js';
-import type { PolymarketConfig, TrackedTrader, TraderActivity, CopyTrade, CopyPosition } from './types.js';
+import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js';
 
 const log = createChildLogger({ component: 'pm-executor' });
 
@@ -20,7 +20,6 @@ interface ClobClient {
 
 export class CopyExecutor {
   private clobClient: ClobClient | null = null;
-  private positions = new Map<string, CopyPosition & { id: number }>();
 
   constructor(
     private readonly config: PolymarketConfig,
@@ -34,16 +33,10 @@ export class CopyExecutor {
     } else {
       log.info('Running in paper mode — no CLOB client');
     }
-
-    const openPositions = await this.persistence.getOpenPositions();
-    for (const pos of openPositions) {
-      this.positions.set(pos.tokenId, pos);
-    }
-    log.info({ positions: this.positions.size }, 'Loaded open positions');
   }
 
   async executeCopy(trader: TrackedTrader, activity: TraderActivity): Promise<void> {
-    const existing = this.positions.get(activity.tokenId);
+    const existing = await this.persistence.getPositionByCondition(activity.conditionId);
     const currentExposure = existing ? existing.size * existing.avgEntry : 0;
     const maxPerMarket = this.config.riskLimits.maxPositionUsd;
 
@@ -76,26 +69,9 @@ export class CopyExecutor {
     }
   }
 
-  private async executePaper(trader: TrackedTrader, activity: TraderActivity, size: number, sizeUsd: number): Promise<void> {
+  private async executePaper(trader: TrackedTrader, activity: TraderActivity, _size: number, sizeUsd: number): Promise<void> {
     const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
     const fillPrice = (midPrice != null && midPrice > 0) ? midPrice : activity.price;
-
-    const trade: CopyTrade = {
-      traderAddress: trader.address,
-      conditionId: activity.conditionId,
-      tokenId: activity.tokenId,
-      side: activity.side,
-      size,
-      price: fillPrice,
-      outcome: activity.outcome,
-      marketSlug: activity.marketSlug,
-      status: 'paper',
-      paper: true,
-      fillPrice,
-    };
-
-    await this.persistence.saveCopyTrade(trade);
-    await this.updatePositionFromTrade(activity, fillPrice, size, true);
 
     log.info({
       trader: trader.alias,
@@ -111,21 +87,6 @@ export class CopyExecutor {
       log.error('CLOB client not initialized');
       return;
     }
-
-    const trade: CopyTrade = {
-      traderAddress: trader.address,
-      conditionId: activity.conditionId,
-      tokenId: activity.tokenId,
-      side: activity.side,
-      size,
-      price: activity.price,
-      outcome: activity.outcome,
-      marketSlug: activity.marketSlug,
-      status: 'pending',
-      paper: false,
-    };
-
-    const tradeId = await this.persistence.saveCopyTrade(trade);
 
     try {
       let tickSize = 0.01;
@@ -151,14 +112,6 @@ export class CopyExecutor {
         result = await this.clobClient.createOrder(orderParams);
       }
 
-      await this.persistence.updateCopyTrade(tradeId, {
-        status: 'filled',
-        orderId: result.orderID,
-        fillPrice: price,
-      });
-
-      await this.updatePositionFromTrade(activity, price, size, false);
-
       log.info({
         orderId: result.orderID,
         trader: trader.alias,
@@ -167,98 +120,8 @@ export class CopyExecutor {
         price,
       }, 'Live copy trade filled');
     } catch (err) {
-      await this.persistence.updateCopyTrade(tradeId, {
-        status: 'failed',
-        errorMessage: (err as Error).message,
-      });
       log.error({ trader: trader.alias, market: activity.marketSlug, error: (err as Error).message }, 'Live copy trade failed');
     }
-  }
-
-  private async updatePositionFromTrade(activity: TraderActivity, fillPrice: number, size: number, paper: boolean): Promise<void> {
-    const existing = this.positions.get(activity.tokenId);
-
-    if (existing && activity.side === 'BUY') {
-      const totalSize = existing.size + size;
-      const avgEntry = (existing.avgEntry * existing.size + fillPrice * size) / totalSize;
-      await this.persistence.updatePosition(existing.id, { size: totalSize, avgEntry });
-      existing.size = totalSize;
-      existing.avgEntry = avgEntry;
-    } else if (activity.side === 'BUY') {
-      const pos: CopyPosition = {
-        conditionId: activity.conditionId,
-        tokenId: activity.tokenId,
-        side: 'BUY',
-        outcome: activity.outcome,
-        marketSlug: activity.marketSlug,
-        marketQuestion: activity.marketQuestion,
-        avgEntry: fillPrice,
-        size,
-        currentPrice: fillPrice,
-        unrealizedPnl: 0,
-        realizedPnl: 0,
-        status: 'open',
-        paper,
-      };
-      const id = await this.persistence.savePosition(pos);
-      this.positions.set(activity.tokenId, { ...pos, id });
-    }
-  }
-
-  async updatePositionPrices(): Promise<void> {
-    const tokens = [...this.positions.keys()];
-    for (const tokenId of tokens) {
-      const pos = this.positions.get(tokenId);
-      if (!pos) continue;
-      if (pos.status !== 'open') continue;
-
-      const resolved = await this.checkResolution(pos.conditionId, tokenId, pos.marketSlug);
-      if (resolved !== null) {
-        const pnl = (resolved - pos.avgEntry) * pos.size;
-        await this.persistence.closePosition(pos.id, pnl);
-        pos.status = 'closed';
-        this.positions.delete(tokenId);
-        log.info({ market: pos.marketSlug, outcome: pos.outcome, entry: pos.avgEntry, resolution: resolved, pnl: pnl.toFixed(2) }, 'Position resolved');
-        continue;
-      }
-
-      const price = await this.fetchMidPrice(pos.conditionId, tokenId, pos.marketSlug);
-      if (price === null) continue;
-
-      const unrealizedPnl = (price - pos.avgEntry) * pos.size;
-      await this.persistence.updatePosition(pos.id, { currentPrice: price, unrealizedPnl });
-      pos.currentPrice = price;
-      pos.unrealizedPnl = unrealizedPnl;
-    }
-  }
-
-  private async checkResolution(conditionId: string, tokenId: string, slug?: string): Promise<number | null> {
-    const tryResolve = (data: Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>): number | null => {
-      if (!data.length || !data[0].closed) return null;
-      const prices = (JSON.parse(data[0].outcomePrices || '[]') as (string | number)[]).map(Number);
-      const tokenIds = JSON.parse(data[0].clobTokenIds || '[]') as string[];
-      const idx = tokenIds.indexOf(tokenId);
-      return idx >= 0 ? prices[idx] : null;
-    };
-
-    try {
-      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
-      if (resp.ok) {
-        const data = await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>;
-        if (data.length && data[0].conditionId === conditionId) return tryResolve(data);
-      }
-    } catch { /* fall through */ }
-
-    if (!slug) return null;
-    try {
-      const resp = await fetch(`${this.config.gammaApiUrl}/markets?slug=${slug}`);
-      if (!resp.ok) return null;
-      return tryResolve(await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>);
-    } catch { return null; }
-  }
-
-  getOpenPositions(): (CopyPosition & { id: number })[] {
-    return Array.from(this.positions.values()).filter(p => p.status === 'open');
   }
 
   private async fetchMidPrice(conditionId: string, tokenId: string, slug?: string): Promise<number | null> {

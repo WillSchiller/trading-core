@@ -4,7 +4,6 @@ import { loadPolymarketConfig } from './config.js';
 import { PolymarketPersistence } from './persistence.js';
 import { TraderDiscovery } from './discovery.js';
 import { ActivityMonitor } from './monitor.js';
-import { CopyExecutor } from './executor.js';
 import { PolymarketRiskManager } from './risk-manager.js';
 import { getTokenPrice, getResolutionPrice } from './market-utils.js';
 import type { PolymarketConfig, ShadowTrade } from './types.js';
@@ -23,9 +22,7 @@ export class PolymarketCopyTrader {
   private persistence: PolymarketPersistence;
   private discovery: TraderDiscovery;
   private monitor: ActivityMonitor;
-  private executor: CopyExecutor;
   private riskManager: PolymarketRiskManager;
-  private priceUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
@@ -35,12 +32,10 @@ export class PolymarketCopyTrader {
     this.persistence = new PolymarketPersistence(pool);
     this.discovery = new TraderDiscovery(this.config, this.persistence, pool);
     this.monitor = new ActivityMonitor(this.config);
-    this.executor = new CopyExecutor(this.config, this.persistence);
     this.riskManager = new PolymarketRiskManager(this.config, this.persistence);
   }
 
   async start(): Promise<void> {
-    await this.executor.start();
     await this.discovery.start();
 
     const traders = this.discovery.getTrackedTraders();
@@ -79,9 +74,13 @@ export class PolymarketCopyTrader {
           } else if (traderStats.pnl < -maxTraderLoss) {
             log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
           } else {
-            const { allowed } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
+            const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
             if (allowed) {
-              await this.persistence.saveLiveTrade(shadow);
+              try {
+                await this.persistence.saveLiveTrade(shadow);
+              } finally {
+                release?.();
+              }
             }
           }
         }
@@ -91,35 +90,8 @@ export class PolymarketCopyTrader {
       }
     });
 
-    this.monitor.setTradeCallback(async (trader, activity) => {
-      try {
-        if (!trader.copyEligible) {
-          log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Trade skipped — trader not copy-eligible');
-          return;
-        }
-
-        const sizeUsd = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
-
-        const { allowed, reason } = await this.riskManager.canTrade(sizeUsd, activity.conditionId);
-        if (!allowed) {
-          log.info({ trader: trader.alias, market: activity.marketSlug, reason }, 'Trade blocked by risk manager');
-          return;
-        }
-
-        await this.executor.executeCopy(trader, activity);
-        await this.persistence.updateTraderActivity(trader.address);
-      } catch (err) {
-        log.error({ trader: trader.alias, error: (err as Error).message }, 'Copy trade error');
-      }
-    });
-
     this.monitor.start();
     this.riskManager.startPeriodicCheck();
-
-    this.priceUpdateTimer = setInterval(
-      () => this.executor.updatePositionPrices().catch(e => log.error({ err: e }, 'Price update error')),
-      this.config.positionUpdateIntervalMs,
-    );
 
     this.shadowUpdateTimer = setInterval(
       () => this.updateShadowPrices().catch(e => log.error({ err: e }, 'Shadow update error')),
@@ -149,7 +121,6 @@ export class PolymarketCopyTrader {
     this.monitor.stop();
     this.discovery.stop();
     this.riskManager.stop();
-    if (this.priceUpdateTimer) { clearInterval(this.priceUpdateTimer); this.priceUpdateTimer = null; }
     if (this.traderRefreshTimer) { clearInterval(this.traderRefreshTimer); this.traderRefreshTimer = null; }
     if (this.shadowUpdateTimer) { clearInterval(this.shadowUpdateTimer); this.shadowUpdateTimer = null; }
     if (this.liveUpdateTimer) { clearInterval(this.liveUpdateTimer); this.liveUpdateTimer = null; }

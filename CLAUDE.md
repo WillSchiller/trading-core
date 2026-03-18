@@ -269,11 +269,11 @@ ENABLE_MAINNET=false
 
 ## Current Status
 
-**Mode**: Data collection only — perps execution disabled, PCA signals + shadow tracking still running.
+**Mode**: Perps execution disabled. PCA signals + Polymarket copy trading active.
 
-**Context**: Live run (hl_live) ran Feb 2, lost $2.50 over 9 trades before kill switch fired. Shadow data (160+ trades) shows the strategy has positive expectancy (+1,126 bps total), and trailing stops roughly match zero-cross exits. Stop-losses fire on genuinely bad trades. The Feb 2 loss was variance on a small sample, not a broken strategy. Collecting more shadow data before deciding next steps.
+**Perps context**: Live run (hl_live) ran Feb 2, lost $2.50 over 9 trades before kill switch fired. Shadow data shows positive expectancy but insufficient sample size. On hold.
 
-**Key data table**: `pca_signals` — 840+ signals, 237+ shadow-tracked. Query via SSH to production.
+**Active system**: Polymarket copy trading — shadow-tracking sports traders, recording hypothetical PnL in `pm_live_trades`.
 
 - [x] **Phase 0**: Project setup, docker-compose, config, logging, schema
 - [x] **Phase 1**: Data collection (CEX WS, DEX readers, persistence)
@@ -281,6 +281,35 @@ ENABLE_MAINNET=false
 - [x] **Phase 3**: Execution (quoter, router, paper trader, live trader)
 - [x] **Phase 4**: Observability (Grafana dashboards)
 - [ ] **Phase 5**: Hardening (tests, graceful shutdown, runbook)
+
+## Polymarket Copy Trading
+
+**Architecture**: Shadow-track trades from eligible Polymarket sports traders, record hypothetical PnL in `pm_live_trades`.
+
+**Key tables**:
+- `pm_shadow_trades` — all observed trades for all tracked traders (training data for eligibility)
+- `pm_live_trades` — forward test trades from eligible traders only (clean, no backfill)
+- `pm_tracked_traders` — trader registry with eligibility flags
+
+**Dead tables** (historical, not used):
+- `pm_positions` — old position tracking, replaced by pm_live_trades
+- `pm_copy_trades` — old copy trade records
+
+**Eligibility filters** (from train/test analysis on 769 traders, p=0.0000):
+- Sharpe > 0.05
+- Profit factor > 1.3
+- 50+ resolved trades
+- 14+ active days
+- Max drawdown < 50% of PnL
+
+**Per-trader circuit breaker**:
+- 5 consecutive losses → stop copying
+- -$200 total live PnL → stop copying
+
+**Risk limits**:
+- $500 max total exposure
+- $100 max per market
+- $50 daily loss limit (kill switch)
 
 ## Task Reference
 
