@@ -15,6 +15,7 @@ import { PCAStatArbMonitor, PCAPersistence, MarketContextService, VolumeTracker 
 import { PaperMarketMaker } from './execution/market-maker/index.js';
 import { FundingArbManager, SpreadMonitor } from './execution/funding-arb/index.js';
 import { PolymarketCopyTrader } from './polymarket/index.js';
+import { PMMManager } from './polymarket/market-maker/index.js';
 import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execution/perps/index.js';
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
@@ -508,6 +509,7 @@ async function main() {
   let fundingArb: FundingArbManager | null = null;
   let spreadMonitor: SpreadMonitor | null = null;
   let polymarketTrader: PolymarketCopyTrader | null = null;
+  let pmmManager: PMMManager | null = null;
 
   if (config.app.research?.pcaStatArb?.enabled) {
     const pcaConfig = config.app.research.pcaStatArb;
@@ -626,6 +628,13 @@ async function main() {
       polymarketTrader = new PolymarketCopyTrader(pool);
       await polymarketTrader.start();
       logger.info('Polymarket copy trader started');
+    }
+
+    // Start Polymarket market maker if enabled
+    if (process.env.PMM_ENABLED === 'true') {
+      pmmManager = new PMMManager(pool);
+      await pmmManager.start();
+      logger.info('Polymarket market maker started');
     }
 
     pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
@@ -952,6 +961,7 @@ async function main() {
     logger.info('RankSpace detector stopped');
 
     // Stop PCA first (stops emitting new signals/exits), then executor
+    if (pmmManager) pmmManager.stop();
     if (polymarketTrader) polymarketTrader.stop();
     if (spreadMonitor) spreadMonitor.stop();
     if (fundingArb) fundingArb.stop();

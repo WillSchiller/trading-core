@@ -1,0 +1,557 @@
+{
+  "id": null,
+  "uid": "pmm-paper",
+  "title": "Polymarket MM Paper",
+  "tags": ["dislocation-trader", "polymarket", "market-making", "paper"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "market",
+        "label": "Market",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "query": "SELECT DISTINCT condition_id AS __value, LEFT(condition_id, 12) || '...' AS __text FROM pmm_fills ORDER BY condition_id",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "",
+        "refresh": 1,
+        "sort": 1,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Running Stats",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Fills",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT total_fills AS \"Total Fills\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Net PnL",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT net_pnl AS \"Net PnL\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "red"},
+            {"value": 0, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg Edge (cents)",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT avg_edge_cents AS \"Avg Edge\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "orange"},
+            {"value": 0.5, "color": "green"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Toxic Fill %",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT toxic_pct * 100 AS \"Toxic %\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 30, "color": "yellow"},
+            {"value": 50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Markets Active",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT markets_active AS \"Markets\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "purple"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Run Hours",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT run_hours AS \"Hours\" FROM pmm_stats ORDER BY snapshot_time DESC LIMIT 1",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "purple"}
+          ]}
+        }
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"}
+    },
+
+    {
+      "id": 101,
+      "type": "row",
+      "title": "PnL & Performance",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Net P&L Over Time",
+      "gridPos": {"x": 0, "y": 6, "w": 16, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT snapshot_time AS time, spread_pnl AS \"Spread PnL\", adverse_cost * -1 AS \"Adverse Cost\", net_pnl AS \"Net PnL\" FROM pmm_stats WHERE snapshot_time BETWEEN $__timeFrom() AND $__timeTo() ORDER BY snapshot_time",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "axisLabel": "USD"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Adverse Cost"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}},
+              {"id": "custom.fillOpacity", "value": 5}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Net PnL"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}},
+              {"id": "custom.lineWidth", "value": 3}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Spread PnL"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Fill Side Balance",
+      "gridPos": {"x": 16, "y": 6, "w": 8, "h": 4},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'BUY') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'SELL') AS \"Sells\", COUNT(*) AS \"Total\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Buys"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Sells"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      },
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "orientation": "horizontal"}
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Active Markets",
+      "gridPos": {"x": 16, "y": 10, "w": 8, "h": 4},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT LEFT(slug, 30) AS \"Market\", mid_price AS \"Mid\", volume_24h AS \"Vol 24h\", liquidity AS \"Liq\", score AS \"Score\", end_date AS \"Ends\" FROM pmm_active_markets ORDER BY score DESC",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "blue"}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Mid"},
+            "properties": [{"id": "decimals", "value": 2}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Vol 24h"},
+            "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 0}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Score"},
+            "properties": [{"id": "decimals", "value": 1}]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{"displayName": "Score", "desc": true}]
+      }
+    },
+
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Toxicity & Fill Rate",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Toxic Fill % Over Time",
+      "gridPos": {"x": 0, "y": 15, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT snapshot_time AS time, toxic_pct * 100 AS \"Toxic %\" FROM pmm_stats WHERE snapshot_time BETWEEN $__timeFrom() AND $__timeTo() ORDER BY snapshot_time",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 30, "color": "yellow"},
+            {"value": 50, "color": "red"}
+          ]}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Fills per Hour",
+      "gridPos": {"x": 12, "y": 15, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT snapshot_time AS time, fills_per_hour AS \"Fills/hr\" FROM pmm_stats WHERE snapshot_time BETWEEN $__timeFrom() AND $__timeTo() ORDER BY snapshot_time",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "gradientMode": "scheme"
+          },
+          "color": {"mode": "continuous-blues"}
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Fill Analysis",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Edge vs Adverse Selection per Fill",
+      "gridPos": {"x": 0, "y": 23, "w": 12, "h": 7},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT fill_time AS time, edge_cents AS \"Edge (cents)\", adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring}))) ORDER BY fill_time",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 8,
+            "showPoints": "always",
+            "lineWidth": 0,
+            "axisLabel": "cents"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Edge (cents)"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Adverse (cents)"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "VPIN & OFI per Fill",
+      "gridPos": {"x": 12, "y": 23, "w": 12, "h": 7},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "postgres", "uid": "postgresql"},
+          "rawSql": "SELECT fill_time AS time, ofi AS \"OFI\", vpin AS \"VPIN\", book_imbalance AS \"Book Imb\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring}))) ORDER BY fill_time",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "showPoints": "always",
+            "lineWidth": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "OFI"},
+            "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "VPIN"},
+            "properties": [{"id": "color", "value": {"fixedColor": "purple", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Book Imb"},
+            "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]
+          }
+        ]
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      }
+    },
+
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Distributions",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "type": "histogram",
+      "title": "Adverse Selection Distribution (cents)",
+      "gridPos": {"x": 0, "y": 31, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND adverse_cents IS NOT NULL AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "green"},
+            {"value": 1, "color": "yellow"},
+            {"value": 3, "color": "red"}
+          ]}
+        }
+      },
+      "options": {
+        "bucketSize": 0.5,
+        "combine": false,
+        "fillOpacity": 80,
+        "gradientMode": "scheme",
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    },
+    {
+      "id": 41,
+      "type": "histogram",
+      "title": "Edge Distribution (cents)",
+      "gridPos": {"x": 12, "y": 31, "w": 12, "h": 7},
+      "targets": [{
+        "refId": "A",
+        "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT edge_cents AS \"Edge (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed"},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"value": null, "color": "blue"}
+          ]}
+        }
+      },
+      "options": {
+        "bucketSize": 0.25,
+        "combine": false,
+        "fillOpacity": 80,
+        "gradientMode": "none",
+        "legend": {"displayMode": "hidden"},
+        "tooltip": {"mode": "single"}
+      }
+    }
+  ]
+}
