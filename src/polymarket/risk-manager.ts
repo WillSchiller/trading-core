@@ -49,9 +49,14 @@ export class PolymarketRiskManager {
       return { allowed: false, reason: `Total exposure ${effectiveExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxTotalExposureUsd}` };
     }
 
-    const positionExposure = existingPosition ? existingPosition.size * existingPosition.avgEntry : 0;
-    if (positionExposure + proposedSizeUsd > limits.maxPositionUsd) {
-      return { allowed: false, reason: `Position exposure ${positionExposure.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxPositionUsd}` };
+    const positionNotional = existingPosition ? existingPosition.notional : 0;
+    if (positionNotional + proposedSizeUsd > limits.maxPositionUsd) {
+      return { allowed: false, reason: `Position notional ${positionNotional.toFixed(0)} + ${proposedSizeUsd.toFixed(0)} exceeds limit ${limits.maxPositionUsd}` };
+    }
+
+    const MAX_TRADES_PER_MARKET = 3;
+    if (existingPosition && existingPosition.tradeCount >= MAX_TRADES_PER_MARKET) {
+      return { allowed: false, reason: `Market has ${existingPosition.tradeCount} trades, max ${MAX_TRADES_PER_MARKET} (anti-martingale)` };
     }
 
     if (!existingPosition && openMarkets >= limits.maxMarketsOpen) {

@@ -97,15 +97,18 @@ export class PolymarketPersistence {
     return result.rows[0].count;
   }
 
-  async getPositionByCondition(conditionId: string): Promise<{ size: number; avgEntry: number } | null> {
+  async getPositionByCondition(conditionId: string): Promise<{ size: number; avgEntry: number; notional: number; tradeCount: number } | null> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(our_size), 0)::float as size, COALESCE(AVG(our_entry_price), 0)::float as "avgEntry"
+      `SELECT COALESCE(SUM(our_size), 0)::float as size,
+              COALESCE(AVG(our_entry_price), 0)::float as "avgEntry",
+              COALESCE(SUM(our_size * our_entry_price), 0)::float as notional,
+              COUNT(*)::int as "tradeCount"
        FROM pm_live_trades WHERE condition_id = $1 AND resolved = false`,
       [conditionId],
     );
     const row = result.rows[0];
     if (!row || row.size === 0) return null;
-    return { size: row.size, avgEntry: row.avgEntry };
+    return { size: row.size, avgEntry: row.avgEntry, notional: row.notional, tradeCount: row.tradeCount };
   }
 
   async saveShadowTrade(trade: ShadowTrade): Promise<number> {
