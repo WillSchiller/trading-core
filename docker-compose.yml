@@ -94,6 +94,7 @@ services:
       PM_MAX_DD_RATIO: ${PM_MAX_DD_RATIO:-0.5}
       PM_TRADER_MAX_CONSEC_LOSS: ${PM_TRADER_MAX_CONSEC_LOSS:-5}
       PM_TRADER_MAX_LOSS: ${PM_TRADER_MAX_LOSS:-200}
+      PM_RECENCY_HALFLIFE: ${PM_RECENCY_HALFLIFE:-0.2}
     depends_on:
       postgres:
         condition: service_healthy

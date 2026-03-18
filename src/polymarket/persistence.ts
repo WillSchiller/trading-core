@@ -208,22 +208,10 @@ export class PolymarketPersistence {
   }
 
   async getTraderShadowStats(): Promise<Map<string, TraderStats>> {
-    const result = await this.pool.query(
-      `WITH per_trader AS (
-        SELECT trader_address,
-          COUNT(*)::int as trades,
-          COUNT(*) FILTER (WHERE pnl_if_copied > 0)::int as wins,
-          COALESCE(SUM(pnl_if_copied), 0)::float as pnl,
-          COALESCE(AVG(pnl_if_copied), 0)::float as avg_pnl,
-          COALESCE(STDDEV(pnl_if_copied), 1)::float as std_pnl,
-          COALESCE(SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied > 0), 0)::float as gross_wins,
-          COALESCE(SUM(pnl_if_copied) FILTER (WHERE pnl_if_copied < 0), 0)::float as gross_losses,
-          COUNT(DISTINCT DATE(to_timestamp(trader_timestamp/1000)))::int as active_days
-        FROM pm_shadow_trades
-        WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
-        GROUP BY trader_address
-      ),
-      cumulative AS (
+    const halflife = Number(process.env.PM_RECENCY_HALFLIFE || 0.2);
+
+    const metaResult = await this.pool.query(
+      `WITH cumulative AS (
         SELECT trader_address, trader_timestamp,
           SUM(pnl_if_copied) OVER (PARTITION BY trader_address ORDER BY trader_timestamp) AS equity
         FROM pm_shadow_trades
@@ -233,22 +221,77 @@ export class PolymarketPersistence {
         SELECT trader_address,
           equity - MAX(equity) OVER (PARTITION BY trader_address ORDER BY trader_timestamp) AS dd
         FROM cumulative
-      ),
-      max_dd AS (
-        SELECT trader_address, MIN(dd)::float as max_dd FROM with_hw GROUP BY trader_address
       )
-      SELECT p.trader_address, p.trades, p.wins, p.pnl, p.avg_pnl, p.std_pnl,
-        p.gross_wins, p.gross_losses, p.active_days, COALESCE(d.max_dd, 0) as max_dd
-      FROM per_trader p LEFT JOIN max_dd d ON p.trader_address = d.trader_address`,
+      SELECT trader_address, MIN(dd)::float as max_dd FROM with_hw GROUP BY trader_address`,
     );
+    const ddMap = new Map<string, number>();
+    for (const row of metaResult.rows) {
+      ddMap.set(row.trader_address, row.max_dd);
+    }
+
+    const pnlResult = await this.pool.query(
+      `SELECT trader_address, pnl_if_copied::float as pnl,
+              to_timestamp(trader_timestamp/1000)::date as trade_date
+       FROM pm_shadow_trades
+       WHERE resolved = true AND side = 'BUY' AND our_entry_price > 0
+       ORDER BY trader_address, trader_timestamp`,
+    );
+
+    const byTrader = new Map<string, { pnls: number[]; dates: Set<string> }>();
+    for (const row of pnlResult.rows) {
+      let entry = byTrader.get(row.trader_address);
+      if (!entry) {
+        entry = { pnls: [], dates: new Set() };
+        byTrader.set(row.trader_address, entry);
+      }
+      entry.pnls.push(row.pnl);
+      entry.dates.add(String(row.trade_date));
+    }
+
     const map = new Map<string, TraderStats>();
-    for (const row of result.rows) {
-      const sharpe = row.std_pnl > 0 ? row.avg_pnl / row.std_pnl : 0;
-      const profitFactor = row.gross_losses < 0 ? row.gross_wins / Math.abs(row.gross_losses) : (row.gross_wins > 0 ? 99 : 0);
-      map.set(row.trader_address, {
-        trades: row.trades, wins: row.wins, pnl: row.pnl,
-        activeDays: row.active_days, maxDrawdown: row.max_dd,
-        sharpe, profitFactor,
+    for (const [addr, data] of byTrader) {
+      const { pnls, dates } = data;
+      const n = pnls.length;
+      if (n < 2) continue;
+
+      const hl = Math.max(Math.floor(n * halflife), 5);
+      const weights: number[] = [];
+      for (let i = 0; i < n; i++) {
+        weights.push(Math.exp(-Math.LN2 / hl * (n - 1 - i)));
+      }
+      const wSum = weights.reduce((a, b) => a + b, 0);
+      const normWeights = weights.map(w => w / wSum * n);
+
+      let wAvg = 0;
+      for (let i = 0; i < n; i++) wAvg += pnls[i] * normWeights[i];
+      wAvg /= n;
+
+      let wVar = 0;
+      for (let i = 0; i < n; i++) wVar += normWeights[i] * (pnls[i] - wAvg) ** 2;
+      wVar /= n;
+      const wStd = Math.sqrt(wVar);
+
+      const sharpe = wStd > 0 ? wAvg / wStd : 0;
+
+      let wWins = 0;
+      let wLosses = 0;
+      for (let i = 0; i < n; i++) {
+        if (pnls[i] > 0) wWins += pnls[i] * normWeights[i];
+        else wLosses += Math.abs(pnls[i]) * normWeights[i];
+      }
+      const profitFactor = wLosses > 0 ? wWins / wLosses : (wWins > 0 ? 99 : 0);
+
+      const wins = pnls.filter(p => p > 0).length;
+      const totalPnl = pnls.reduce((a, b) => a + b, 0);
+
+      map.set(addr, {
+        trades: n,
+        wins,
+        pnl: totalPnl,
+        activeDays: dates.size,
+        maxDrawdown: ddMap.get(addr) ?? 0,
+        sharpe,
+        profitFactor,
       });
     }
     return map;
