@@ -249,7 +249,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'BUY') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'SELL') AS \"Sells\", COUNT(*) AS \"Total\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE side = 'BUY') AS \"Buys\", COUNT(*) FILTER (WHERE side = 'SELL') AS \"Sells\", COUNT(*) AS \"Total\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id = ANY(string_to_array('${market:raw}', ','))))",
           "format": "table"
         }
       ],
@@ -407,7 +407,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT fill_time AS time, edge_cents AS \"Edge (cents)\", adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring}))) ORDER BY fill_time",
+          "rawSql": "SELECT fill_time AS time, edge_cents AS \"Edge (cents)\", adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id = ANY(string_to_array('${market:raw}', ',')))) ORDER BY fill_time",
           "format": "table"
         }
       ],
@@ -452,7 +452,7 @@
         {
           "refId": "A",
           "datasource": {"type": "postgres", "uid": "postgresql"},
-          "rawSql": "SELECT fill_time AS time, ofi AS \"OFI\", vpin AS \"VPIN\", book_imbalance AS \"Book Imb\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring}))) ORDER BY fill_time",
+          "rawSql": "SELECT fill_time AS time, ofi AS \"OFI\", vpin AS \"VPIN\", book_imbalance AS \"Book Imb\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id = ANY(string_to_array('${market:raw}', ',')))) ORDER BY fill_time",
           "format": "table"
         }
       ],
@@ -503,7 +503,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND adverse_cents IS NOT NULL AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+        "rawSql": "SELECT adverse_cents AS \"Adverse (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND adverse_cents IS NOT NULL AND (('${market:raw}' = '' OR condition_id = ANY(string_to_array('${market:raw}', ','))))",
         "format": "table"
       }],
       "fieldConfig": {
@@ -533,7 +533,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT edge_cents AS \"Edge (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id IN (${market:sqlstring})))",
+        "rawSql": "SELECT edge_cents AS \"Edge (cents)\" FROM pmm_fills WHERE fill_time BETWEEN $__timeFrom() AND $__timeTo() AND (('${market:raw}' = '' OR condition_id = ANY(string_to_array('${market:raw}', ','))))",
         "format": "table"
       }],
       "fieldConfig": {
