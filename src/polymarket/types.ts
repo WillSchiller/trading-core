@@ -12,6 +12,8 @@ export interface PolymarketConfig {
   apiKey?: string;
   apiSecret?: string;
   passphrase?: string;
+  funderAddress?: string;
+  signatureType?: number;
   clobApiUrl: string;
   gammaApiUrl: string;
   dataApiUrl: string;

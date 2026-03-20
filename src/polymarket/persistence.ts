@@ -186,6 +186,28 @@ export class PolymarketPersistence {
     );
   }
 
+  async updateLiveTradeExecution(
+    id: number,
+    orderId: string | null,
+    fillPrice: number | null,
+    fillSize: number | null,
+    status: string,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_live_trades SET order_id = $1, fill_price = $2, fill_size = $3, execution_status = $4, executed_at = NOW() WHERE id = $5`,
+      [orderId, fillPrice, fillSize, status, id],
+    );
+  }
+
+  async resolveLiveTradeWithRealPnl(id: number, resolutionPrice: number, pnl: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE pm_live_trades SET resolved = true, resolution_price = $1, pnl = $2,
+        real_pnl = CASE WHEN fill_price IS NOT NULL THEN ($1 - fill_price) * COALESCE(fill_size, our_size) ELSE NULL END,
+        resolved_at = NOW() WHERE id = $3`,
+      [resolutionPrice, pnl, id],
+    );
+  }
+
   async getTraderLiveStats(traderAddress: string): Promise<{ trades: number; pnl: number; consecutiveLosses: number }> {
     const result = await this.pool.query(
       `SELECT COUNT(*)::int as trades, COALESCE(SUM(pnl), 0)::float as pnl

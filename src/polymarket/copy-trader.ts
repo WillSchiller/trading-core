@@ -5,6 +5,7 @@ import { PolymarketPersistence } from './persistence.js';
 import { TraderDiscovery } from './discovery.js';
 import { ActivityMonitor } from './monitor.js';
 import { PolymarketRiskManager } from './risk-manager.js';
+import { CopyExecutor } from './executor.js';
 import { getTokenPrice, getResolutionPrice } from './market-utils.js';
 import type { PolymarketConfig, ShadowTrade } from './types.js';
 
@@ -23,6 +24,7 @@ export class PolymarketCopyTrader {
   private discovery: TraderDiscovery;
   private monitor: ActivityMonitor;
   private riskManager: PolymarketRiskManager;
+  private executor: CopyExecutor;
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
@@ -33,10 +35,12 @@ export class PolymarketCopyTrader {
     this.discovery = new TraderDiscovery(this.config, this.persistence, pool);
     this.monitor = new ActivityMonitor(this.config);
     this.riskManager = new PolymarketRiskManager(this.config, this.persistence);
+    this.executor = new CopyExecutor(this.config, this.persistence);
   }
 
   async start(): Promise<void> {
     await this.discovery.start();
+    await this.executor.start();
 
     const traders = this.discovery.getTrackedTraders();
     this.monitor.setTraders(traders);
@@ -82,7 +86,10 @@ export class PolymarketCopyTrader {
               const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
               if (allowed) {
                 try {
-                  await this.persistence.saveLiveTrade(shadow);
+                  const liveTradeId = await this.persistence.saveLiveTrade(shadow);
+                  if (liveTradeId > 0 && this.executor.isLive()) {
+                    await this.executor.executeLiveOrder(liveTradeId, trader, activity, ourSize);
+                  }
                 } finally {
                   release?.();
                 }
@@ -198,7 +205,7 @@ export class PolymarketCopyTrader {
           if (market.closed) {
             const resPrice = getResolutionPrice(market, trade.tokenId);
             const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;
-            await this.persistence.resolveLiveTrade(trade.id, resPrice, pnl);
+            await this.persistence.resolveLiveTradeWithRealPnl(trade.id, resPrice, pnl);
             resolved++;
           } else {
             const currentPrice = getTokenPrice(market, trade.tokenId);

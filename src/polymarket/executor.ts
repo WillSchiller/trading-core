@@ -1,25 +1,18 @@
+import { createWalletClient, http } from 'viem';
+import { polygon } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
 import { createChildLogger } from '../utils/logger.js';
 import { PolymarketPersistence } from './persistence.js';
 import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js';
 
 const log = createChildLogger({ component: 'pm-executor' });
 
-interface ClobClient {
-  createOrder(params: {
-    tokenID: string;
-    price: number;
-    side: string;
-    size: number;
-    feeRateBps?: number;
-    nonce?: number;
-    expiration?: number;
-  }): Promise<{ orderID: string; status: string }>;
-
-  getTickSize(tokenId: string): Promise<number>;
-}
+const MAX_SLIPPAGE_CENTS = 3;
 
 export class CopyExecutor {
-  private clobClient: ClobClient | null = null;
+  private clobClient: any = null;
+  private Side: any = null;
+  private OrderType: any = null;
 
   constructor(
     private readonly config: PolymarketConfig,
@@ -27,151 +20,158 @@ export class CopyExecutor {
   ) {}
 
   async start(): Promise<void> {
-    if (!this.config.paperMode && this.config.privateKey) {
+    if (this.config.privateKey) {
       this.clobClient = await this.initClobClient();
-      log.info('CLOB client initialized for live trading');
+      log.info('CLOB client initialized for live execution');
     } else {
-      log.info('Running in paper mode — no CLOB client');
+      log.info('No private key — live execution disabled');
     }
   }
 
-  async executeCopy(trader: TrackedTrader, activity: TraderActivity): Promise<void> {
-    const existing = await this.persistence.getPositionByCondition(activity.conditionId);
-    const currentExposure = existing ? existing.size * existing.avgEntry : 0;
-    const maxPerMarket = this.config.riskLimits.maxPositionUsd;
-
-    if (currentExposure >= maxPerMarket) {
-      log.info({ trader: trader.alias, market: activity.marketSlug, exposure: currentExposure.toFixed(2), max: maxPerMarket }, 'Skipped — market position cap reached');
-      return;
-    }
-
-    const proportionalSize = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
-    const remainingRoom = maxPerMarket - currentExposure;
-    const clampedSize = Math.min(proportionalSize, remainingRoom);
-    const sizeUsd = Math.max(1, Math.round(clampedSize * 100) / 100);
-
-    const size = sizeUsd / Math.max(activity.price, 0.001);
-
-    log.info({
-      trader: trader.alias,
-      market: activity.marketSlug,
-      outcome: activity.outcome,
-      traderSize: activity.size,
-      ourSize: sizeUsd,
-      price: activity.price,
-      existingExposure: currentExposure.toFixed(2),
-    }, 'Executing copy trade');
-
-    if (this.config.paperMode) {
-      await this.executePaper(trader, activity, size, sizeUsd);
-    } else {
-      await this.executeLive(trader, activity, size, sizeUsd);
-    }
+  isLive(): boolean {
+    return this.clobClient !== null;
   }
 
-  private async executePaper(trader: TrackedTrader, activity: TraderActivity, _size: number, sizeUsd: number): Promise<void> {
-    const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
-    const fillPrice = (midPrice != null && midPrice > 0) ? midPrice : activity.price;
-
-    log.info({
-      trader: trader.alias,
-      market: activity.marketSlug,
-      outcome: activity.outcome,
-      size: sizeUsd.toFixed(2),
-      fillPrice,
-    }, 'Paper copy trade executed');
-  }
-
-  private async executeLive(trader: TrackedTrader, activity: TraderActivity, size: number, sizeUsd: number): Promise<void> {
+  async executeLiveOrder(
+    liveTradeId: number,
+    trader: TrackedTrader,
+    activity: TraderActivity,
+    sizeUsd: number,
+  ): Promise<{ orderId?: string; fillPrice?: number; fillSize?: number; status: string }> {
     if (!this.clobClient) {
-      log.error('CLOB client not initialized');
-      return;
+      return { status: 'no_client' };
     }
 
     try {
-      let tickSize = 0.01;
-      try {
-        tickSize = await this.clobClient.getTickSize(activity.tokenId);
-      } catch { /* use default */ }
+      const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
+      const orderPrice = midPrice ?? activity.price;
 
-      const price = this.roundToTick(activity.price, tickSize);
+      const slippage = Math.abs(orderPrice - activity.price);
+      if (slippage > MAX_SLIPPAGE_CENTS / 100) {
+        log.warn({
+          trader: trader.alias,
+          market: activity.marketSlug,
+          traderPrice: activity.price,
+          currentMid: orderPrice,
+          slippage: (slippage * 100).toFixed(1) + 'c',
+        }, 'Skipped — price moved too far from trader fill');
+        await this.persistence.updateLiveTradeExecution(
+          liveTradeId, null, null, null, 'skipped_slippage',
+        );
+        return { status: 'skipped_slippage' };
+      }
 
-      const orderParams = {
-        tokenID: activity.tokenId,
-        price,
-        side: 'BUY',
-        size: Math.round(size * 100) / 100,
-      };
+      const size = sizeUsd / Math.max(orderPrice, 0.001);
+      const roundedSize = Math.round(size * 100) / 100;
+      const tickSize = '0.01';
 
-      let result: { orderID: string; status: string };
-      try {
-        result = await this.clobClient.createOrder(orderParams);
-      } catch (firstErr) {
-        log.warn({ error: (firstErr as Error).message }, 'Order failed, retrying in 1s');
-        await new Promise(r => setTimeout(r, 1000));
-        result = await this.clobClient.createOrder(orderParams);
+      const result = await this.clobClient.createAndPostOrder(
+        {
+          tokenID: activity.tokenId,
+          price: orderPrice,
+          side: this.Side.BUY,
+          size: roundedSize,
+        },
+        { tickSize, negRisk: activity.negRisk },
+        this.OrderType.GTC,
+      );
+
+      if (result.success === false || result.errorMsg) {
+        log.warn({
+          trader: trader.alias,
+          market: activity.marketSlug,
+          error: result.errorMsg,
+        }, 'CLOB order rejected');
+        await this.persistence.updateLiveTradeExecution(
+          liveTradeId, null, null, null, 'rejected',
+        );
+        return { status: 'rejected' };
       }
 
       log.info({
         orderId: result.orderID,
         trader: trader.alias,
         market: activity.marketSlug,
-        size: sizeUsd.toFixed(2),
-        price,
-      }, 'Live copy trade filled');
+        outcome: activity.outcome,
+        sizeUsd: sizeUsd.toFixed(2),
+        orderPrice,
+        traderPrice: activity.price,
+      }, 'Live CLOB order placed');
+
+      await this.persistence.updateLiveTradeExecution(
+        liveTradeId, result.orderID, orderPrice, roundedSize, 'placed',
+      );
+
+      return {
+        orderId: result.orderID,
+        fillPrice: orderPrice,
+        fillSize: roundedSize,
+        status: 'placed',
+      };
     } catch (err) {
-      log.error({ trader: trader.alias, market: activity.marketSlug, error: (err as Error).message }, 'Live copy trade failed');
+      log.error({
+        trader: trader.alias,
+        market: activity.marketSlug,
+        error: (err as Error).message,
+      }, 'Live CLOB order failed');
+      await this.persistence.updateLiveTradeExecution(
+        liveTradeId, null, null, null, 'error',
+      );
+      return { status: 'error' };
     }
   }
 
-  private async fetchMidPrice(conditionId: string, tokenId: string, slug?: string): Promise<number | null> {
-    const tryParse = (data: Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>): number | null => {
+  private async fetchMidPrice(conditionId: string, tokenId: string): Promise<number | null> {
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
+      if (!resp.ok) return null;
+      const data = await resp.json() as Array<{ outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>;
       if (!data.length || data[0].closed) return null;
       const prices = (JSON.parse(data[0].outcomePrices || '[]') as (string | number)[]).map(Number);
       const tokenIds = JSON.parse(data[0].clobTokenIds || '[]') as string[];
       const idx = tokenIds.indexOf(tokenId);
       const price = idx >= 0 ? prices[idx] : prices[0];
-      return (price != null && price > 0 && !isNaN(price)) ? price : null;
-    };
-
-    try {
-      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
-      if (resp.ok) {
-        const data = await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>;
-        if (data.length && data[0].conditionId === conditionId) return tryParse(data);
-      }
-    } catch { /* fall through */ }
-
-    if (!slug) return null;
-    try {
-      const resp = await fetch(`${this.config.gammaApiUrl}/markets?slug=${slug}`);
-      if (!resp.ok) return null;
-      return tryParse(await resp.json() as Array<{ conditionId?: string; outcomePrices?: string; clobTokenIds?: string; closed?: boolean }>);
+      return (price > 0 && !isNaN(price)) ? price : null;
     } catch { return null; }
   }
 
-  private roundToTick(price: number, tickSize: number): number {
-    return Math.round(price / tickSize) * tickSize;
-  }
+  private async initClobClient(): Promise<any> {
+    const { ClobClient, Side, OrderType } = await import('@polymarket/clob-client' as string);
+    this.Side = Side;
+    this.OrderType = OrderType;
 
-  private async initClobClient(): Promise<ClobClient> {
-    try {
-      const { ClobClient: Client } = await import('@polymarket/clob-client' as string);
-      const creds = this.config.apiKey ? {
-        key: this.config.apiKey,
-        secret: this.config.apiSecret,
-        passphrase: this.config.passphrase,
-      } : undefined;
-      const client = new Client(
-        this.config.clobApiUrl,
-        137,
-        this.config.privateKey ? { key: this.config.privateKey } : undefined,
-        creds,
-      );
-      return client as unknown as ClobClient;
-    } catch (err) {
-      log.error({ error: (err as Error).message }, 'Failed to initialize CLOB client');
-      throw err;
-    }
+    const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
+    const walletClient = createWalletClient({
+      account,
+      chain: polygon,
+      transport: http(),
+    });
+
+    const creds = this.config.apiKey ? {
+      key: this.config.apiKey,
+      secret: this.config.apiSecret!,
+      passphrase: this.config.passphrase!,
+    } : undefined;
+
+    const funderAddress = process.env.POLYMARKET_FUNDER_ADDRESS;
+    const signatureType = Number(process.env.POLYMARKET_SIGNATURE_TYPE || '0');
+
+    const client = new ClobClient(
+      this.config.clobApiUrl,
+      137,
+      walletClient,
+      creds,
+      signatureType,
+      funderAddress,
+    );
+
+    log.info({
+      signer: account.address,
+      funder: funderAddress || 'none',
+      signatureType,
+      hasCreds: !!creds,
+    }, 'CLOB client created');
+
+    return client;
   }
 }

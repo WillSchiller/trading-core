@@ -60,12 +60,16 @@ fetch_secret "coinbase-passphrase" "COINBASE_PASSPHRASE"
 # Executor key not needed in observatory mode
 # fetch_secret "executor-private-key" "EXECUTOR_PRIVATE_KEY"
 fetch_secret_optional "hyperliquid-private-key" "HYPERLIQUID_PRIVATE_KEY"
+fetch_secret_optional "polymarket-private-key" "POLYMARKET_PRIVATE_KEY"
+fetch_secret_optional "polymarket-api-key" "POLYMARKET_API_KEY"
+fetch_secret_optional "polymarket-api-secret" "POLYMARKET_API_SECRET"
+fetch_secret_optional "polymarket-passphrase" "POLYMARKET_PASSPHRASE"
 fetch_secret "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
 fetch_secret "telegram-chat-id" "TELEGRAM_CHAT_ID"
 
 echo "Secrets fetched successfully"
 
-env | grep -E '^(POSTGRES_PASSWORD|RPC_|BINANCE_|COINBASE_|EXECUTOR_|TELEGRAM_|HYPERLIQUID_)' | sed 's/=.*/=***REDACTED***/'
+env | grep -E '^(POSTGRES_PASSWORD|RPC_|BINANCE_|COINBASE_|EXECUTOR_|TELEGRAM_|HYPERLIQUID_|POLYMARKET_)' | sed 's/=.*/=***REDACTED***/'
 
 if [ "$1" = "export" ]; then
   echo "Exporting secrets to .env file..."
@@ -79,6 +83,10 @@ COINBASE_API_KEY=$COINBASE_API_KEY
 COINBASE_API_SECRET=$COINBASE_API_SECRET
 COINBASE_PASSPHRASE=$COINBASE_PASSPHRASE
 HYPERLIQUID_PRIVATE_KEY=$HYPERLIQUID_PRIVATE_KEY
+POLYMARKET_PRIVATE_KEY=$POLYMARKET_PRIVATE_KEY
+POLYMARKET_API_KEY=$POLYMARKET_API_KEY
+POLYMARKET_API_SECRET=$POLYMARKET_API_SECRET
+POLYMARKET_PASSPHRASE=$POLYMARKET_PASSPHRASE
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
 ALERTS_ENABLED=true
