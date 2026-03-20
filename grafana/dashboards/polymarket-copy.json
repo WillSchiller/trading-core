@@ -72,7 +72,7 @@
       "type": "stat",
       "title": "Mode",
       "gridPos": {"x": 20, "y": 1, "w": 4, "h": 3},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT 1 AS \"Mode\"", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_live_trades WHERE execution_status = 'placed' AND observed_at >= NOW() - INTERVAL '24h') THEN 2 ELSE 1 END AS \"Mode\"", "format": "table"}],
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "PAPER", "color": "yellow"}, "2": {"text": "LIVE", "color": "green"}}}], "color": {"mode": "fixed", "fixedColor": "yellow"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
     },
@@ -348,6 +348,111 @@
           {"matcher": {"id": "byName", "options": "current"}, "properties": [{"id": "decimals", "value": 4}]},
           {"matcher": {"id": "byName", "options": "pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]},
           {"matcher": {"id": "byName", "options": "our_size"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "observed_at", "desc": true}]}
+    },
+
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Paper vs Live Execution",
+      "gridPos": {"x": 0, "y": 58, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 301,
+      "type": "stat",
+      "title": "Paper PnL",
+      "gridPos": {"x": 0, "y": 59, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(pnl), 0)::numeric, 2) AS \"Paper\" FROM pm_live_trades WHERE resolved = true AND fill_price IS NOT NULL", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "yellow"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 302,
+      "type": "stat",
+      "title": "Live PnL",
+      "gridPos": {"x": 4, "y": 59, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(real_pnl), 0)::numeric, 2) AS \"Live\" FROM pm_live_trades WHERE resolved = true AND real_pnl IS NOT NULL", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 303,
+      "type": "stat",
+      "title": "Slippage Cost",
+      "description": "Paper PnL minus Live PnL — cost of execution delay",
+      "gridPos": {"x": 8, "y": 59, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND((COALESCE(SUM(pnl), 0) - COALESCE(SUM(real_pnl), 0))::numeric, 2) AS \"Slippage\" FROM pm_live_trades WHERE resolved = true AND real_pnl IS NOT NULL", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 1, "color": "yellow"}, {"value": 5, "color": "red"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 304,
+      "type": "stat",
+      "title": "Avg Slippage/Trade",
+      "gridPos": {"x": 12, "y": 59, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(AVG(our_entry_price - fill_price)::numeric * 100, 2) AS \"cents\" FROM pm_live_trades WHERE fill_price IS NOT NULL AND resolved = true", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "string", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 1, "color": "yellow"}, {"value": 3, "color": "red"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 305,
+      "type": "stat",
+      "title": "Orders Placed",
+      "gridPos": {"x": 16, "y": 59, "w": 3, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status = 'placed'", "format": "table"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "green"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 306,
+      "type": "stat",
+      "title": "Skipped (Slippage)",
+      "gridPos": {"x": 19, "y": 59, "w": 3, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status = 'skipped_slippage'", "format": "table"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "yellow"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 307,
+      "type": "stat",
+      "title": "Errors",
+      "gridPos": {"x": 22, "y": 59, "w": 2, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status IN ('error', 'rejected')", "format": "table"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 1, "color": "red"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 308,
+      "type": "timeseries",
+      "title": "Paper vs Live Equity Curves",
+      "gridPos": {"x": 0, "y": 63, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT resolved_at AS time, SUM(pnl::float) OVER (ORDER BY resolved_at) AS \"Paper\" FROM pm_live_trades WHERE resolved = true AND fill_price IS NOT NULL ORDER BY time", "format": "time_series"},
+        {"refId": "B", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT resolved_at AS time, SUM(real_pnl::float) OVER (ORDER BY resolved_at) AS \"Live\" FROM pm_live_trades WHERE resolved = true AND real_pnl IS NOT NULL ORDER BY time", "format": "time_series"}
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD", "decimals": 2, "custom": {"lineWidth": 2, "fillOpacity": 5}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Paper"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "Live"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
+      },
+      "options": {"tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 309,
+      "type": "table",
+      "title": "Recent Executed Trades",
+      "gridPos": {"x": 12, "y": 63, "w": 12, "h": 8},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT observed_at, trader_alias AS \"trader\", market_slug AS \"market\", outcome, our_entry_price::float AS \"paper_price\", fill_price::float AS \"live_price\", ROUND((fill_price - our_entry_price)::numeric * 100, 2)::float AS \"slip_cents\", execution_status AS \"status\", order_id FROM pm_live_trades WHERE execution_status IS NOT NULL AND execution_status != 'paper' ORDER BY observed_at DESC LIMIT 30", "format": "table"}],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "paper_price"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "live_price"}, "properties": [{"id": "decimals", "value": 4}]}
         ]
       },
       "options": {"showHeader": true, "sortBy": [{"displayName": "observed_at", "desc": true}]}
