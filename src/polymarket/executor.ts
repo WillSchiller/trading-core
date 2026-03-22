@@ -61,14 +61,22 @@ export class CopyExecutor {
         return { status: 'skipped_slippage' };
       }
 
-      const size = sizeUsd / Math.max(orderPrice, 0.001);
-      const roundedSize = Math.round(size * 100) / 100;
       const tickSize = '0.01';
+      const tick = parseFloat(tickSize);
+      const roundedPrice = Math.round(orderPrice / tick) * tick;
+      const size = sizeUsd / Math.max(roundedPrice, 0.001);
+      const roundedSize = Math.round(size * 100) / 100;
+
+      if (roundedSize < 1) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, size: roundedSize }, 'Order too small, skipping');
+        await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_small');
+        return { status: 'skipped_small' };
+      }
 
       const result = await this.clobClient.createAndPostOrder(
         {
           tokenID: activity.tokenId,
-          price: orderPrice,
+          price: roundedPrice,
           side: this.Side.BUY,
           size: roundedSize,
         },
@@ -76,11 +84,14 @@ export class CopyExecutor {
         this.OrderType.GTC,
       );
 
+      log.info({ clobResponse: JSON.stringify(result) }, 'CLOB createAndPostOrder response');
+
       if (result.success === false || result.errorMsg) {
         log.warn({
           trader: trader.alias,
           market: activity.marketSlug,
           error: result.errorMsg,
+          result: JSON.stringify(result),
         }, 'CLOB order rejected');
         await this.persistence.updateLiveTradeExecution(
           liveTradeId, null, null, null, 'rejected',
@@ -88,23 +99,25 @@ export class CopyExecutor {
         return { status: 'rejected' };
       }
 
+      const orderId = result.orderID || result.orderIds?.[0] || result.order_id || null;
+
       log.info({
-        orderId: result.orderID,
+        orderId,
         trader: trader.alias,
         market: activity.marketSlug,
         outcome: activity.outcome,
         sizeUsd: sizeUsd.toFixed(2),
-        orderPrice,
+        orderPrice: roundedPrice,
         traderPrice: activity.price,
       }, 'Live CLOB order placed');
 
       await this.persistence.updateLiveTradeExecution(
-        liveTradeId, result.orderID, orderPrice, roundedSize, 'placed',
+        liveTradeId, orderId, roundedPrice, roundedSize, 'placed',
       );
 
       return {
-        orderId: result.orderID,
-        fillPrice: orderPrice,
+        orderId,
+        fillPrice: roundedPrice,
         fillSize: roundedSize,
         status: 'placed',
       };
