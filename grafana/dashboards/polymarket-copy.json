@@ -72,7 +72,7 @@
       "type": "stat",
       "title": "Mode",
       "gridPos": {"x": 20, "y": 1, "w": 4, "h": 3},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_live_trades WHERE execution_status = 'placed' AND observed_at >= NOW() - INTERVAL '24h') THEN 2 ELSE 1 END AS \"Mode\"", "format": "table"}],
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT CASE WHEN EXISTS(SELECT 1 FROM pm_live_trades WHERE execution_status IN ('filled', 'unfilled', 'rejected') AND observed_at >= NOW() - INTERVAL '24h') THEN 2 ELSE 1 END AS \"Mode\"", "format": "table"}],
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "PAPER", "color": "yellow"}, "2": {"text": "LIVE", "color": "green"}}}], "color": {"mode": "fixed", "fixedColor": "yellow"}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"}
     },
