@@ -8,6 +8,7 @@ import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js
 const log = createChildLogger({ component: 'pm-executor' });
 
 const MAX_SLIPPAGE_CENTS = 3;
+const FILL_CHECK_DELAY_MS = 3000;
 
 export class CopyExecutor {
   private clobClient: any = null;
@@ -73,24 +74,25 @@ export class CopyExecutor {
         return { status: 'skipped_small' };
       }
 
-      const result = await this.clobClient.createAndPostOrder(
+      // Use market order (FOK) — fill immediately or cancel
+      const result = await this.clobClient.createAndPostMarketOrder(
         {
           tokenID: activity.tokenId,
-          price: roundedPrice,
+          amount: sizeUsd,
           side: this.Side.BUY,
-          size: roundedSize,
+          price: roundedPrice,
         },
         { tickSize, negRisk: activity.negRisk },
-        this.OrderType.GTC,
+        this.OrderType.FOK,
       );
 
-      log.info({ clobResponse: JSON.stringify(result) }, 'CLOB createAndPostOrder response');
+      log.info({ clobResponse: JSON.stringify(result) }, 'CLOB market order response');
 
-      if (result.success === false || result.errorMsg) {
+      if (!result || result.success === false || result.errorMsg) {
         log.warn({
           trader: trader.alias,
           market: activity.marketSlug,
-          error: result.errorMsg,
+          error: result?.errorMsg || 'no response',
           result: JSON.stringify(result),
         }, 'CLOB order rejected');
         await this.persistence.updateLiveTradeExecution(
@@ -101,26 +103,40 @@ export class CopyExecutor {
 
       const orderId = result.orderID || result.orderIds?.[0] || result.order_id || null;
 
-      log.info({
+      // Wait briefly then check if we actually got a fill
+      await new Promise(r => setTimeout(r, FILL_CHECK_DELAY_MS));
+      const fill = await this.checkFill(orderId, activity.tokenId);
+
+      if (fill) {
+        log.info({
+          orderId,
+          trader: trader.alias,
+          market: activity.marketSlug,
+          outcome: activity.outcome,
+          sizeUsd: sizeUsd.toFixed(2),
+          fillPrice: fill.price,
+          fillSize: fill.size,
+        }, 'CLOB order FILLED');
+
+        await this.persistence.updateLiveTradeExecution(
+          liveTradeId, orderId, fill.price, fill.size, 'filled',
+        );
+        return { orderId, fillPrice: fill.price, fillSize: fill.size, status: 'filled' };
+      }
+
+      // FOK should either fill or cancel — if no fill, it was cancelled
+      log.warn({
         orderId,
         trader: trader.alias,
         market: activity.marketSlug,
-        outcome: activity.outcome,
-        sizeUsd: sizeUsd.toFixed(2),
         orderPrice: roundedPrice,
-        traderPrice: activity.price,
-      }, 'Live CLOB order placed');
+      }, 'FOK order not filled — cancelled');
 
       await this.persistence.updateLiveTradeExecution(
-        liveTradeId, orderId, roundedPrice, roundedSize, 'placed',
+        liveTradeId, orderId, null, null, 'unfilled',
       );
+      return { orderId, status: 'unfilled' };
 
-      return {
-        orderId,
-        fillPrice: roundedPrice,
-        fillSize: roundedSize,
-        status: 'placed',
-      };
     } catch (err) {
       log.error({
         trader: trader.alias,
@@ -131,6 +147,26 @@ export class CopyExecutor {
         liveTradeId, null, null, null, 'error',
       );
       return { status: 'error' };
+    }
+  }
+
+  private async checkFill(orderId: string | null, tokenId: string): Promise<{ price: number; size: number } | null> {
+    if (!orderId) return null;
+    try {
+      const trades = await this.clobClient.getTrades({ asset_id: tokenId });
+      if (!trades || !Array.isArray(trades)) return null;
+      const myFill = trades.find((t: any) => t.order_id === orderId || t.id === orderId);
+      if (myFill) {
+        return { price: parseFloat(myFill.price), size: parseFloat(myFill.size) };
+      }
+      // Also try getOrder directly
+      const order = await this.clobClient.getOrder(orderId);
+      if (order && parseFloat(order.size_matched) > 0) {
+        return { price: parseFloat(order.price), size: parseFloat(order.size_matched) };
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 

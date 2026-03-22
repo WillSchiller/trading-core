@@ -80,16 +80,36 @@
     {
       "id": 100,
       "type": "row",
-      "title": "Live Performance — Post-Qualification Only",
+      "title": "Performance — Paper vs Real",
       "gridPos": {"x": 0, "y": 4, "w": 24, "h": 1},
       "collapsed": false
     },
     {
+      "id": 310,
+      "type": "stat",
+      "title": "REAL PnL (Filled Orders)",
+      "description": "Actual money made from confirmed CLOB fills only",
+      "gridPos": {"x": 0, "y": 5, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(real_pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_live_trades WHERE resolved = true AND execution_status = 'filled'", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 311,
+      "type": "stat",
+      "title": "Filled Orders",
+      "description": "Number of confirmed CLOB fills",
+      "gridPos": {"x": 4, "y": 5, "w": 2, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status = 'filled'", "format": "table"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "green"}]}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
       "id": 20,
       "type": "stat",
-      "title": "Live PnL",
-      "description": "PnL from trades observed after trader became eligible (no backfill)",
-      "gridPos": {"x": 0, "y": 5, "w": 4, "h": 4},
+      "title": "Paper PnL (Hypothetical)",
+      "description": "Hypothetical PnL if all trades filled at trader price — NOT real money",
+      "gridPos": {"x": 6, "y": 5, "w": 4, "h": 4},
       "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_live_trades WHERE resolved = true", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
