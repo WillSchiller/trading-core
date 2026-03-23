@@ -62,8 +62,6 @@ export class TraderDiscovery {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
         const copyEligible = stats ? this.isEligible(stats) : false;
-        const isNew = !this.knownAddresses.has(entry.address);
-
         const trader: TrackedTrader = {
           address: entry.address,
           alias: entry.displayName || `trader-${entry.rank}`,
@@ -77,11 +75,9 @@ export class TraderDiscovery {
         await this.persistence.upsertTrader(trader);
         this.knownAddresses.add(entry.address);
 
-        if (isNew) {
-          const alreadyBackfilled = await this.backfill.isTraderBackfilled(entry.address);
-          if (!alreadyBackfilled) {
-            this.enqueueBackfill(entry.address, trader.alias, bankroll);
-          }
+        const alreadyBackfilled = await this.backfill.isTraderBackfilled(entry.address);
+        if (!alreadyBackfilled) {
+          this.enqueueBackfill(entry.address, trader.alias, bankroll);
         }
       }
 
