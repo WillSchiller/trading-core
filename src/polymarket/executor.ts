@@ -65,11 +65,8 @@ export class CopyExecutor {
       const tickSize = '0.01';
       const tick = parseFloat(tickSize);
       const roundedPrice = Math.round(orderPrice / tick) * tick;
-      const size = sizeUsd / Math.max(roundedPrice, 0.001);
-      const roundedSize = Math.round(size * 100) / 100;
-
-      if (roundedSize < 1) {
-        log.warn({ trader: trader.alias, market: activity.marketSlug, size: roundedSize }, 'Order too small, skipping');
+      if (sizeUsd < 1) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, sizeUsd }, 'Order below $1 minimum, skipping');
         await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_small');
         return { status: 'skipped_small' };
       }
@@ -88,17 +85,19 @@ export class CopyExecutor {
 
       log.info({ clobResponse: JSON.stringify(result) }, 'CLOB market order response');
 
-      if (!result || result.success === false || result.errorMsg) {
+      const errorMsg = result?.error || result?.errorMsg;
+      if (!result || result.success === false || errorMsg) {
+        const status = errorMsg?.includes('fully filled') ? 'unfilled' : 'rejected';
         log.warn({
           trader: trader.alias,
           market: activity.marketSlug,
-          error: result?.errorMsg || 'no response',
-          result: JSON.stringify(result),
-        }, 'CLOB order rejected');
+          error: errorMsg || 'no response',
+          status,
+        }, `CLOB order ${status}`);
         await this.persistence.updateLiveTradeExecution(
-          liveTradeId, null, null, null, 'rejected',
+          liveTradeId, null, null, null, status,
         );
-        return { status: 'rejected' };
+        return { status };
       }
 
       const orderId = result.orderID || result.orderIds?.[0] || result.order_id || null;
