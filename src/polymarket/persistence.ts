@@ -69,41 +69,44 @@ export class PolymarketPersistence {
 
   async getDailyPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(pnl), 0) as pnl
+      `SELECT COALESCE(SUM(real_pnl), 0) as pnl
        FROM pm_live_trades
-       WHERE resolved = true AND resolved_at >= (NOW() AT TIME ZONE 'UTC')::date`,
+       WHERE resolved = true AND execution_status = 'filled'
+         AND resolved_at >= (NOW() AT TIME ZONE 'UTC')::date`,
     );
     return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalPnl(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(pnl), 0) as pnl FROM pm_live_trades WHERE resolved = true`,
+      `SELECT COALESCE(SUM(real_pnl), 0) as pnl
+       FROM pm_live_trades WHERE resolved = true AND execution_status = 'filled'`,
     );
     return parseFloat(result.rows[0].pnl);
   }
 
   async getTotalExposure(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(our_size * our_entry_price), 0) as exposure FROM pm_live_trades WHERE resolved = false`,
+      `SELECT COALESCE(SUM(COALESCE(fill_size, our_size) * COALESCE(fill_price, our_entry_price)), 0) as exposure
+       FROM pm_live_trades WHERE resolved = false AND execution_status = 'filled'`,
     );
     return parseFloat(result.rows[0].exposure);
   }
 
   async getOpenMarketsCount(): Promise<number> {
     const result = await this.pool.query(
-      `SELECT COUNT(DISTINCT condition_id)::int as count FROM pm_live_trades WHERE resolved = false`,
+      `SELECT COUNT(DISTINCT condition_id)::int as count FROM pm_live_trades WHERE resolved = false AND execution_status = 'filled'`,
     );
     return result.rows[0].count;
   }
 
   async getPositionByCondition(conditionId: string): Promise<{ size: number; avgEntry: number; notional: number; tradeCount: number } | null> {
     const result = await this.pool.query(
-      `SELECT COALESCE(SUM(our_size), 0)::float as size,
-              COALESCE(AVG(our_entry_price), 0)::float as "avgEntry",
-              COALESCE(SUM(our_size * our_entry_price), 0)::float as notional,
+      `SELECT COALESCE(SUM(COALESCE(fill_size, our_size)), 0)::float as size,
+              COALESCE(AVG(COALESCE(fill_price, our_entry_price)), 0)::float as "avgEntry",
+              COALESCE(SUM(COALESCE(fill_size, our_size) * COALESCE(fill_price, our_entry_price)), 0)::float as notional,
               COUNT(*)::int as "tradeCount"
-       FROM pm_live_trades WHERE condition_id = $1 AND resolved = false`,
+       FROM pm_live_trades WHERE condition_id = $1 AND resolved = false AND execution_status = 'filled'`,
       [conditionId],
     );
     const row = result.rows[0];
