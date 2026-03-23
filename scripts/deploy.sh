@@ -18,9 +18,9 @@ echo "=== SQL files ==="
 ls -la sql/
 
 echo "=== Logging into ECR ==="
-export AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+export AWS_REGION="${AWS_REGION:-eu-west-1}"
 export PROJECT_NAME="${PROJECT_NAME:-dislocation-trader}"
-export ECR_REGISTRY="${ECR_REGISTRY:-386166838496.dkr.ecr.ap-southeast-1.amazonaws.com}"
+export ECR_REGISTRY="${ECR_REGISTRY:-386166838496.dkr.ecr.eu-west-1.amazonaws.com}"
 export ECR_REPOSITORY_URL="${ECR_REPOSITORY_URL:-$ECR_REGISTRY/dislocation-trader-production}"
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 S3_BUCKET="${S3_BUCKET:-blockhelixasia}"
 INSTANCE_NAME="${INSTANCE_NAME:-dislocation-trader-production}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

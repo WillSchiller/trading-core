@@ -16,7 +16,7 @@ on:
       - 'grafana/provisioning/**'
 
 env:
-  AWS_REGION: ap-southeast-1
+  AWS_REGION: eu-west-1
   INSTANCE_NAME: dislocation-trader-production
   S3_BUCKET: blockhelixasia
 

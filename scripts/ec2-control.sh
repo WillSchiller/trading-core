@@ -2,7 +2,7 @@
 set -e
 
 INSTANCE_NAME="dislocation-trader-production"
-AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 
 get_instance_id() {
   aws ec2 describe-instances \

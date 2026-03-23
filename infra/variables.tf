@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for deployment (set via TF_VAR_aws_region env var or terraform.tfvars)"
   type        = string
-  default     = "ap-southeast-1"
+  default     = "eu-west-1"
 }
 
 variable "environment" {
