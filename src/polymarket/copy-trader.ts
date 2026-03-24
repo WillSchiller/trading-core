@@ -69,6 +69,13 @@ export class PolymarketCopyTrader {
           traderTimestamp: activity.timestamp,
         };
         await this.persistence.saveShadowTrade(shadow);
+        if (activity.side === 'SELL' && this.executor.isLive()) {
+          const position = await this.persistence.getFilledPositionForSell(trader.address, activity.conditionId, activity.tokenId);
+          if (position) {
+            log.info({ trader: trader.alias, market: activity.marketSlug, outcome: activity.outcome, entryPrice: position.fillPrice, size: position.fillSize }, 'Trader selling — copying exit');
+            await this.executor.executeSellOrder(position.id, trader, activity, position);
+          }
+        }
         if (trader.copyEligible && activity.side === 'BUY') {
           const minEntry = Number(process.env.PM_MIN_ENTRY_PRICE || 0.15);
           const maxEntry = Number(process.env.PM_MAX_ENTRY_PRICE || 0.85);

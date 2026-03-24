@@ -147,6 +147,85 @@ export class CopyExecutor {
     }
   }
 
+  async executeSellOrder(
+    liveTradeId: number,
+    trader: TrackedTrader,
+    activity: TraderActivity,
+    position: { fillSize: number; fillPrice: number },
+  ): Promise<{ orderId?: string; exitPrice?: number; status: string }> {
+    if (!this.clobClient) return { status: 'no_client' };
+
+    try {
+      const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
+      const sellPrice = midPrice ?? activity.price;
+
+      const tickSize = '0.01';
+      const tick = parseFloat(tickSize);
+      const roundedPrice = Math.round(sellPrice / tick) * tick;
+      const size = Math.round(position.fillSize * 100) / 100;
+
+      if (size < 1) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, size }, 'Sell too small, skipping');
+        return { status: 'skipped_small' };
+      }
+
+      // Try FOK sell first
+      const fokResult = await this.clobClient.createAndPostMarketOrder(
+        { tokenID: activity.tokenId, amount: size, side: this.Side.SELL, price: roundedPrice },
+        { tickSize, negRisk: activity.negRisk },
+        this.OrderType.FOK,
+      );
+
+      const fokError = fokResult?.error || fokResult?.errorMsg;
+      if (fokResult?.success && !fokError) {
+        const orderId = fokResult.orderID || fokResult.orderIds?.[0] || null;
+        await new Promise(r => setTimeout(r, FILL_CHECK_DELAY_MS));
+        const fill = await this.checkFill(orderId, activity.tokenId);
+        if (fill) {
+          const realPnl = (fill.price - position.fillPrice) * position.fillSize;
+          log.info({ orderId, trader: trader.alias, market: activity.marketSlug, exitPrice: fill.price, entryPrice: position.fillPrice, realPnl: realPnl.toFixed(2) }, 'FOK SELL FILLED');
+          await this.persistence.markLiveTradeSold(liveTradeId, fill.price, realPnl, orderId);
+          return { orderId, exitPrice: fill.price, status: 'sold' };
+        }
+      }
+
+      // GTC fallback
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError }, 'FOK sell missed, trying GTC');
+      const gtcResult = await this.clobClient.createAndPostOrder(
+        { tokenID: activity.tokenId, price: roundedPrice, side: this.Side.SELL, size },
+        { tickSize, negRisk: activity.negRisk },
+        this.OrderType.GTC,
+      );
+
+      const gtcError = gtcResult?.error || gtcResult?.errorMsg;
+      if (!gtcResult?.success || gtcError) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, error: gtcError }, 'GTC sell rejected');
+        return { status: 'rejected' };
+      }
+
+      const orderId = gtcResult.orderID || gtcResult.orderIds?.[0] || null;
+      log.info({ orderId, trader: trader.alias, market: activity.marketSlug, price: roundedPrice, size }, 'GTC sell placed, waiting 5min');
+
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 10_000));
+        const fill = await this.checkFill(orderId, activity.tokenId);
+        if (fill) {
+          const realPnl = (fill.price - position.fillPrice) * position.fillSize;
+          log.info({ orderId, trader: trader.alias, market: activity.marketSlug, exitPrice: fill.price, realPnl: realPnl.toFixed(2) }, 'GTC SELL FILLED');
+          await this.persistence.markLiveTradeSold(liveTradeId, fill.price, realPnl, orderId);
+          return { orderId, exitPrice: fill.price, status: 'sold' };
+        }
+      }
+
+      try { await this.clobClient.cancelOrder({ orderID: orderId }); } catch { /* ok */ }
+      log.warn({ orderId, trader: trader.alias, market: activity.marketSlug }, 'GTC sell cancelled after 5min timeout');
+      return { orderId, status: 'unfilled' };
+    } catch (err) {
+      log.error({ trader: trader.alias, market: activity.marketSlug, error: (err as Error).message }, 'Sell order failed');
+      return { status: 'error' };
+    }
+  }
+
   private async checkFill(orderId: string | null, tokenId: string): Promise<{ price: number; size: number } | null> {
     if (!orderId) return null;
     try {
