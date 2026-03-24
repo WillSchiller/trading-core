@@ -10,8 +10,8 @@ export class PolymarketPersistence {
 
   async upsertTrader(trader: TrackedTrader): Promise<void> {
     await this.pool.query(
-      `INSERT INTO pm_tracked_traders (address, alias, pnl, volume, bankroll_estimate, rank, enabled, copy_eligible)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO pm_tracked_traders (address, alias, pnl, volume, bankroll_estimate, rank, enabled, copy_eligible, category)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (address) DO UPDATE SET
          alias = EXCLUDED.alias,
          pnl = EXCLUDED.pnl,
@@ -20,8 +20,9 @@ export class PolymarketPersistence {
          rank = EXCLUDED.rank,
          enabled = EXCLUDED.enabled,
          copy_eligible = EXCLUDED.copy_eligible,
+         category = EXCLUDED.category,
          updated_at = NOW()`,
-      [trader.address, trader.alias, trader.pnl, trader.volume, trader.bankrollEstimate, trader.rank, trader.enabled, trader.copyEligible ?? false],
+      [trader.address, trader.alias, trader.pnl, trader.volume, trader.bankrollEstimate, trader.rank, trader.enabled, trader.copyEligible ?? false, trader.category || 'SPORTS'],
     );
   }
 
@@ -54,7 +55,7 @@ export class PolymarketPersistence {
   async getActiveTraders(): Promise<TrackedTrader[]> {
     const result = await this.pool.query(
       `SELECT address, alias, pnl::float, volume::float, bankroll_estimate::float as "bankrollEstimate",
-              rank, enabled, copy_eligible as "copyEligible", discovered_at as "discoveredAt", last_activity_at as "lastActivityAt"
+              rank, enabled, copy_eligible as "copyEligible", category, discovered_at as "discoveredAt", last_activity_at as "lastActivityAt"
        FROM pm_tracked_traders WHERE enabled = true ORDER BY rank ASC`,
     );
     return result.rows;

@@ -14,6 +14,8 @@ export interface PolymarketConfig {
   passphrase?: string;
   funderAddress?: string;
   signatureType?: number;
+  discoveryCategories: string[];
+  copyCategories: string[];
   clobApiUrl: string;
   gammaApiUrl: string;
   dataApiUrl: string;
@@ -36,6 +38,7 @@ export interface TrackedTrader {
   rank: number;
   enabled: boolean;
   copyEligible?: boolean;
+  category?: string;
   discoveredAt?: Date;
   lastActivityAt?: Date;
 }
@@ -139,6 +142,7 @@ export interface LeaderboardEntry {
   pnl: number;
   volume: number;
   rank: number;
+  category: string;
 }
 
 export interface TraderStats {

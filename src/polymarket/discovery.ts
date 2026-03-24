@@ -37,7 +37,12 @@ export class TraderDiscovery {
       () => this.refresh().catch(e => log.error({ err: e }, 'Discovery refresh error')),
       this.config.discoveryIntervalMs,
     );
-    log.info({ traders: this.traders.length, interval: this.config.discoveryIntervalMs }, 'Trader discovery started');
+    log.info({
+      traders: this.traders.length,
+      interval: this.config.discoveryIntervalMs,
+      discoveryCategories: this.config.discoveryCategories,
+      copyCategories: this.config.copyCategories,
+    }, 'Trader discovery started');
   }
 
   stop(): void {
@@ -50,18 +55,34 @@ export class TraderDiscovery {
 
   async refresh(): Promise<void> {
     try {
-      const entries = await this.fetchLeaderboard();
-      log.info({ found: entries.length }, 'Leaderboard fetched');
+      const allEntries: LeaderboardEntry[] = [];
+      for (const category of this.config.discoveryCategories) {
+        const entries = await this.fetchLeaderboard(category);
+        allEntries.push(...entries);
+      }
+
+      const seen = new Set<string>();
+      const dedupedEntries = allEntries.filter(e => {
+        if (seen.has(e.address)) return false;
+        seen.add(e.address);
+        return true;
+      });
+
+      log.info({
+        total: allEntries.length,
+        unique: dedupedEntries.length,
+        categories: this.config.discoveryCategories,
+      }, 'Leaderboards fetched');
 
       const shadowStats = await this.persistence.getTraderShadowStats();
-
-      // Disable traders with no proven edge — keeps profitable ones active
       await this.persistence.disableStaleTraders();
 
-      for (const entry of entries.slice(0, this.config.maxTraders)) {
+      for (const entry of dedupedEntries.slice(0, this.config.maxTraders)) {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
-        const copyEligible = stats ? this.isEligible(stats) : false;
+        const canCopy = this.config.copyCategories.includes(entry.category);
+        const copyEligible = canCopy && stats ? this.isEligible(stats) : false;
+
         const trader: TrackedTrader = {
           address: entry.address,
           alias: entry.displayName || `trader-${entry.rank}`,
@@ -71,6 +92,7 @@ export class TraderDiscovery {
           rank: entry.rank,
           enabled: true,
           copyEligible,
+          category: entry.category,
         };
         await this.persistence.upsertTrader(trader);
         this.knownAddresses.add(entry.address);
@@ -81,9 +103,12 @@ export class TraderDiscovery {
         }
       }
 
-      // Re-enable proven traders and update eligibility for all with shadow data
       for (const [address, stats] of shadowStats) {
-        const eligible = this.isEligible(stats);
+        const trader = dedupedEntries.find(e => e.address === address);
+        const category = trader?.category;
+        const canCopy = category ? this.config.copyCategories.includes(category) : false;
+        const eligible = canCopy && this.isEligible(stats);
+
         if (stats.trades >= 3 && stats.pnl > 0) {
           await this.persistence.enableProvenTrader(address, eligible);
         } else {
@@ -92,17 +117,20 @@ export class TraderDiscovery {
       }
 
       for (const [address, stats] of shadowStats) {
-        const eligible = this.isEligible(stats);
         if (stats.trades >= 10) {
+          const trader = dedupedEntries.find(e => e.address === address);
+          const canCopy = trader ? this.config.copyCategories.includes(trader.category) : false;
           log.info({
             address: address.slice(0, 10),
+            category: trader?.category || 'unknown',
             trades: stats.trades,
             pnl: stats.pnl.toFixed(2),
             sharpe: stats.sharpe.toFixed(4),
             pf: stats.profitFactor.toFixed(2),
             days: stats.activeDays,
             maxDD: stats.maxDrawdown.toFixed(2),
-            eligible,
+            eligible: canCopy && this.isEligible(stats),
+            copyEnabled: canCopy,
           }, 'Trader eligibility check');
         }
       }
@@ -112,7 +140,7 @@ export class TraderDiscovery {
       log.info({
         active: this.traders.length,
         copyEligible: eligible.length,
-        eligibleNames: eligible.map(t => t.alias),
+        eligibleNames: eligible.map(t => `${t.alias} (${t.category})`),
       }, 'Trader roster updated');
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Failed to refresh leaderboard');
@@ -125,29 +153,39 @@ export class TraderDiscovery {
     log.info({ loaded: this.traders.length }, 'Loaded traders from DB');
   }
 
-  private async fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-    const url = `${this.config.dataApiUrl}/v1/leaderboard?category=SPORTS&timePeriod=DAY&orderBy=PNL&limit=${this.config.maxTraders}&offset=0`;
-    const resp = await fetch(url);
+  private async fetchLeaderboard(category: string): Promise<LeaderboardEntry[]> {
+    const perCategory = Math.ceil(this.config.maxTraders / this.config.discoveryCategories.length);
+    const entries: LeaderboardEntry[] = [];
 
-    if (!resp.ok) {
-      throw new Error(`Leaderboard API ${resp.status}: ${await resp.text()}`);
+    for (let offset = 0; offset < perCategory; offset += 50) {
+      const limit = Math.min(50, perCategory - offset);
+      const url = `${this.config.dataApiUrl}/v1/leaderboard?category=${category}&timePeriod=DAY&orderBy=PNL&limit=${limit}&offset=${offset}`;
+      const resp = await fetch(url);
+      if (!resp.ok) break;
+
+      const data = await resp.json() as Array<{
+        proxyWallet?: string;
+        userName?: string;
+        pnl?: number;
+        vol?: number;
+        rank?: number;
+      }>;
+
+      if (!data.length) break;
+
+      for (const item of data) {
+        entries.push({
+          address: (item.proxyWallet || '').toLowerCase(),
+          displayName: item.userName || '',
+          pnl: item.pnl || 0,
+          volume: item.vol || 0,
+          rank: item.rank || entries.length + 1,
+          category,
+        });
+      }
     }
 
-    const data = await resp.json() as Array<{
-      proxyWallet?: string;
-      userName?: string;
-      pnl?: number;
-      vol?: number;
-      rank?: number;
-    }>;
-
-    return data.map((item, i) => ({
-      address: (item.proxyWallet || '').toLowerCase(),
-      displayName: item.userName || '',
-      pnl: item.pnl || 0,
-      volume: item.vol || 0,
-      rank: item.rank || i + 1,
-    }));
+    return entries;
   }
 
   private isEligible(stats: TraderStats): boolean {
