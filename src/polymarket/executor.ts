@@ -117,8 +117,8 @@ export class CopyExecutor {
       const orderId = gtcResult.orderID || gtcResult.orderIds?.[0] || null;
       log.info({ orderId, trader: trader.alias, market: activity.marketSlug, price: roundedPrice, size }, 'GTC order placed, waiting 60s');
 
-      // Poll for fill over 60 seconds
-      for (let i = 0; i < 6; i++) {
+      // Poll for fill over 5 minutes
+      for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 10_000));
         const fill = await this.checkFill(orderId, activity.tokenId);
         if (fill) {
@@ -130,7 +130,7 @@ export class CopyExecutor {
 
       // 60s elapsed, cancel unfilled GTC
       try { await this.clobClient.cancelOrder({ orderID: orderId }); } catch { /* ok */ }
-      log.warn({ orderId, trader: trader.alias, market: activity.marketSlug }, 'GTC order cancelled after 60s timeout');
+      log.warn({ orderId, trader: trader.alias, market: activity.marketSlug }, 'GTC order cancelled after 5min timeout');
       await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, null, null, 'unfilled');
       return { orderId, status: 'unfilled' };
 
