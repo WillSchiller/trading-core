@@ -71,8 +71,8 @@ export class CopyExecutor {
         return { status: 'skipped_small' };
       }
 
-      // Use market order (FOK) — fill immediately or cancel
-      const result = await this.clobClient.createAndPostMarketOrder(
+      // Try FOK first for instant fill
+      const fokResult = await this.clobClient.createAndPostMarketOrder(
         {
           tokenID: activity.tokenId,
           amount: sizeUsd,
@@ -83,57 +83,55 @@ export class CopyExecutor {
         this.OrderType.FOK,
       );
 
-      log.info({ clobResponse: JSON.stringify(result) }, 'CLOB market order response');
+      const fokError = fokResult?.error || fokResult?.errorMsg;
+      const fokFilled = fokResult?.success && !fokError;
 
-      const errorMsg = result?.error || result?.errorMsg;
-      if (!result || result.success === false || errorMsg) {
-        const status = errorMsg?.includes('fully filled') ? 'unfilled' : 'rejected';
-        log.warn({
-          trader: trader.alias,
-          market: activity.marketSlug,
-          error: errorMsg || 'no response',
-          status,
-        }, `CLOB order ${status}`);
-        await this.persistence.updateLiveTradeExecution(
-          liveTradeId, null, null, null, status,
-        );
-        return { status };
+      if (fokFilled) {
+        const orderId = fokResult.orderID || fokResult.orderIds?.[0] || null;
+        await new Promise(r => setTimeout(r, FILL_CHECK_DELAY_MS));
+        const fill = await this.checkFill(orderId, activity.tokenId);
+        if (fill) {
+          log.info({ orderId, trader: trader.alias, market: activity.marketSlug, outcome: activity.outcome, sizeUsd: sizeUsd.toFixed(2), fillPrice: fill.price }, 'FOK order FILLED');
+          await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fill.price, fill.size, 'filled');
+          return { orderId, fillPrice: fill.price, fillSize: fill.size, status: 'filled' };
+        }
       }
 
-      const orderId = result.orderID || result.orderIds?.[0] || result.order_id || null;
+      // FOK failed — fall back to GTC limit at ask with 60s timeout
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError }, 'FOK missed, trying GTC fallback');
 
-      // Wait briefly then check if we actually got a fill
-      await new Promise(r => setTimeout(r, FILL_CHECK_DELAY_MS));
-      const fill = await this.checkFill(orderId, activity.tokenId);
-
-      if (fill) {
-        log.info({
-          orderId,
-          trader: trader.alias,
-          market: activity.marketSlug,
-          outcome: activity.outcome,
-          sizeUsd: sizeUsd.toFixed(2),
-          fillPrice: fill.price,
-          fillSize: fill.size,
-        }, 'CLOB order FILLED');
-
-        await this.persistence.updateLiveTradeExecution(
-          liveTradeId, orderId, fill.price, fill.size, 'filled',
-        );
-        return { orderId, fillPrice: fill.price, fillSize: fill.size, status: 'filled' };
-      }
-
-      // FOK should either fill or cancel — if no fill, it was cancelled
-      log.warn({
-        orderId,
-        trader: trader.alias,
-        market: activity.marketSlug,
-        orderPrice: roundedPrice,
-      }, 'FOK order not filled — cancelled');
-
-      await this.persistence.updateLiveTradeExecution(
-        liveTradeId, orderId, null, null, 'unfilled',
+      const size = Math.max(5, Math.round(sizeUsd / roundedPrice));
+      const gtcResult = await this.clobClient.createAndPostOrder(
+        { tokenID: activity.tokenId, price: roundedPrice, side: this.Side.BUY, size },
+        { tickSize, negRisk: activity.negRisk },
+        this.OrderType.GTC,
       );
+
+      const gtcError = gtcResult?.error || gtcResult?.errorMsg;
+      if (!gtcResult?.success || gtcError) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, error: gtcError }, 'GTC order rejected');
+        await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'rejected');
+        return { status: 'rejected' };
+      }
+
+      const orderId = gtcResult.orderID || gtcResult.orderIds?.[0] || null;
+      log.info({ orderId, trader: trader.alias, market: activity.marketSlug, price: roundedPrice, size }, 'GTC order placed, waiting 60s');
+
+      // Poll for fill over 60 seconds
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 10_000));
+        const fill = await this.checkFill(orderId, activity.tokenId);
+        if (fill) {
+          log.info({ orderId, trader: trader.alias, market: activity.marketSlug, fillPrice: fill.price, fillSize: fill.size }, 'GTC order FILLED');
+          await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fill.price, fill.size, 'filled');
+          return { orderId, fillPrice: fill.price, fillSize: fill.size, status: 'filled' };
+        }
+      }
+
+      // 60s elapsed, cancel unfilled GTC
+      try { await this.clobClient.cancelOrder({ orderID: orderId }); } catch { /* ok */ }
+      log.warn({ orderId, trader: trader.alias, market: activity.marketSlug }, 'GTC order cancelled after 60s timeout');
+      await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, null, null, 'unfilled');
       return { orderId, status: 'unfilled' };
 
     } catch (err) {
