@@ -77,7 +77,7 @@ export class TraderDiscovery {
       const shadowStats = await this.persistence.getTraderShadowStats();
       await this.persistence.disableStaleTraders();
 
-      for (const entry of dedupedEntries.slice(0, this.config.maxTraders)) {
+      for (const entry of dedupedEntries) {
         const bankroll = this.estimateBankroll(entry);
         const stats = shadowStats.get(entry.address);
         const canCopy = this.config.copyCategories.includes(entry.category);
@@ -154,34 +154,41 @@ export class TraderDiscovery {
   }
 
   private async fetchLeaderboard(category: string): Promise<LeaderboardEntry[]> {
-    const perCategory = Math.ceil(this.config.maxTraders / this.config.discoveryCategories.length);
+    const periods = ['DAY', 'WEEK', 'MONTH'];
+    const perPeriod = 200;
     const entries: LeaderboardEntry[] = [];
+    const seen = new Set<string>();
 
-    for (let offset = 0; offset < perCategory; offset += 50) {
-      const limit = Math.min(50, perCategory - offset);
-      const url = `${this.config.dataApiUrl}/v1/leaderboard?category=${category}&timePeriod=DAY&orderBy=PNL&limit=${limit}&offset=${offset}`;
-      const resp = await fetch(url);
-      if (!resp.ok) break;
+    for (const period of periods) {
+      for (let offset = 0; offset < perPeriod; offset += 50) {
+        const limit = Math.min(50, perPeriod - offset);
+        const url = `${this.config.dataApiUrl}/v1/leaderboard?category=${category}&timePeriod=${period}&orderBy=PNL&limit=${limit}&offset=${offset}`;
+        const resp = await fetch(url);
+        if (!resp.ok) break;
 
-      const data = await resp.json() as Array<{
-        proxyWallet?: string;
-        userName?: string;
-        pnl?: number;
-        vol?: number;
-        rank?: number;
-      }>;
+        const data = await resp.json() as Array<{
+          proxyWallet?: string;
+          userName?: string;
+          pnl?: number;
+          vol?: number;
+          rank?: number;
+        }>;
 
-      if (!data.length) break;
+        if (!data.length) break;
 
-      for (const item of data) {
-        entries.push({
-          address: (item.proxyWallet || '').toLowerCase(),
-          displayName: item.userName || '',
-          pnl: item.pnl || 0,
-          volume: item.vol || 0,
-          rank: item.rank || entries.length + 1,
-          category,
-        });
+        for (const item of data) {
+          const addr = (item.proxyWallet || '').toLowerCase();
+          if (seen.has(addr)) continue;
+          seen.add(addr);
+          entries.push({
+            address: addr,
+            displayName: item.userName || '',
+            pnl: item.pnl || 0,
+            volume: item.vol || 0,
+            rank: item.rank || entries.length + 1,
+            category,
+          });
+        }
       }
     }
 
