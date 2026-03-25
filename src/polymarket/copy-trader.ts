@@ -200,7 +200,7 @@ export class PolymarketCopyTrader {
         cashBalance = await this.executor.getBalance();
       } catch { /* assume we have cash */ }
     }
-    const needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
+    let needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
 
     let updated = 0;
     let resolved = 0;
@@ -230,7 +230,7 @@ export class PolymarketCopyTrader {
               updated++;
 
               if (needCash && trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
-                log.info({ market: trade.marketSlug, price: currentPrice, size: trade.fillSize }, 'Auto-selling decided winner');
+                log.info({ market: trade.marketSlug, price: currentPrice, size: trade.fillSize, cashBalance: cashBalance.toFixed(2) }, 'Auto-selling decided winner');
                 const activity: import('./types.js').TraderActivity = {
                   id: '', traderAddress: '', timestamp: Date.now(),
                   conditionId: trade.conditionId, tokenId: trade.tokenId,
@@ -242,9 +242,13 @@ export class PolymarketCopyTrader {
                   address: '', alias: 'auto-sell', pnl: 0, volume: 0,
                   bankrollEstimate: 0, rank: 0, enabled: true,
                 };
-                await this.executor.executeSellOrder(trade.id, dummyTrader, activity, {
+                const result = await this.executor.executeSellOrder(trade.id, dummyTrader, activity, {
                   fillSize: trade.fillSize, fillPrice: trade.fillPrice || trade.ourEntryPrice || 0,
                 });
+                if (result.status === 'sold') {
+                  cashBalance += trade.fillSize * (result.exitPrice || currentPrice);
+                  needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
+                }
               }
             }
           }
