@@ -165,11 +165,13 @@ export class PolymarketPersistence {
     return result.rows[0]?.id ?? 0;
   }
 
-  async getUnresolvedLiveTrades(): Promise<(ShadowTrade & { id: number })[]> {
+  async getUnresolvedLiveTrades(): Promise<(ShadowTrade & { id: number; executionStatus: string; fillPrice: number | null; fillSize: number | null })[]> {
     const result = await this.pool.query(
       `SELECT id, condition_id as "conditionId", token_id as "tokenId", side,
               our_size::float as "ourSize", our_entry_price::float as "ourEntryPrice",
-              current_price::float as "currentPrice", market_slug as "marketSlug"
+              current_price::float as "currentPrice", market_slug as "marketSlug",
+              execution_status as "executionStatus", fill_price::float as "fillPrice",
+              fill_size::float as "fillSize"
        FROM pm_live_trades WHERE resolved = false AND side = 'BUY'
        ORDER BY observed_at ASC`,
     );

@@ -220,6 +220,24 @@ export class PolymarketCopyTrader {
               const pnl = (currentPrice - (trade.ourEntryPrice || 0)) * trade.ourSize;
               await this.persistence.updateLiveTradePrice(trade.id, currentPrice, pnl);
               updated++;
+
+              if (trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
+                log.info({ market: trade.marketSlug, price: currentPrice, size: trade.fillSize }, 'Auto-selling decided winner');
+                const activity: import('./types.js').TraderActivity = {
+                  id: '', traderAddress: '', timestamp: Date.now(),
+                  conditionId: trade.conditionId, tokenId: trade.tokenId,
+                  side: 'SELL', size: trade.fillSize, price: currentPrice,
+                  outcome: '', marketSlug: trade.marketSlug || '',
+                  marketQuestion: '', negRisk: false,
+                };
+                const dummyTrader: import('./types.js').TrackedTrader = {
+                  address: '', alias: 'auto-sell', pnl: 0, volume: 0,
+                  bankrollEstimate: 0, rank: 0, enabled: true,
+                };
+                await this.executor.executeSellOrder(trade.id, dummyTrader, activity, {
+                  fillSize: trade.fillSize, fillPrice: trade.fillPrice || trade.ourEntryPrice || 0,
+                });
+              }
             }
           }
         }
