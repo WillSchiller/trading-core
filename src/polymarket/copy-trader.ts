@@ -246,7 +246,7 @@ export class PolymarketCopyTrader {
                   fillSize: trade.fillSize, fillPrice: trade.fillPrice || trade.ourEntryPrice || 0,
                 });
                 if (result.status === 'sold') {
-                  cashBalance += trade.fillSize * (result.exitPrice || currentPrice);
+                  try { cashBalance = await this.executor.getBalance(); } catch { /* use estimate */ cashBalance += trade.fillSize * (result.exitPrice || currentPrice); }
                   needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
                 }
               }
