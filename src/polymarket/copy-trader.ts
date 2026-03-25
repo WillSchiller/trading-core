@@ -242,13 +242,10 @@ export class PolymarketCopyTrader {
                   address: '', alias: 'auto-sell', pnl: 0, volume: 0,
                   bankrollEstimate: 0, rank: 0, enabled: true,
                 };
-                const result = await this.executor.executeSellOrder(trade.id, dummyTrader, activity, {
+                await this.executor.executeSellOrder(trade.id, dummyTrader, activity, {
                   fillSize: trade.fillSize, fillPrice: trade.fillPrice || trade.ourEntryPrice || 0,
                 });
-                if (result.status === 'sold') {
-                  try { cashBalance = await this.executor.getBalance(); } catch { /* use estimate */ cashBalance += trade.fillSize * (result.exitPrice || currentPrice); }
-                  needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
-                }
+                needCash = false;
               }
             }
           }
