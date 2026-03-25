@@ -87,10 +87,20 @@
     {
       "id": 310,
       "type": "stat",
-      "title": "REAL PnL (Filled)",
-      "description": "Actual money made from confirmed CLOB fills only",
-      "gridPos": {"x": 0, "y": 5, "w": 4, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(real_pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_live_trades WHERE resolved = true AND execution_status = 'filled'", "format": "table"}],
+      "title": "Net Deposited",
+      "description": "Total deposits minus withdrawals",
+      "gridPos": {"x": 0, "y": 5, "w": 3, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(SUM(CASE WHEN type = 'deposit' THEN amount ELSE -amount END)::numeric, 2) AS \"Deposited\" FROM pm_deposits", "format": "table"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 312,
+      "type": "stat",
+      "title": "Realized PnL",
+      "description": "PnL from resolved + sold trades (DB tracked)",
+      "gridPos": {"x": 3, "y": 5, "w": 3, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(real_pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_live_trades WHERE resolved = true AND execution_status IN ('filled', 'sold')", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
@@ -99,8 +109,8 @@
       "type": "stat",
       "title": "Filled",
       "description": "Number of confirmed CLOB fills",
-      "gridPos": {"x": 4, "y": 5, "w": 2, "h": 4},
-      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status = 'filled'", "format": "table"}],
+      "gridPos": {"x": 6, "y": 5, "w": 2, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT COUNT(*)::int AS \"N\" FROM pm_live_trades WHERE execution_status IN ('filled', 'sold')", "format": "table"}],
       "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
     },
