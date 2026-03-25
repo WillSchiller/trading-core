@@ -6,7 +6,10 @@ CREATE TABLE IF NOT EXISTS pm_deposits (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Seed with initial deposits
-INSERT INTO pm_deposits (amount, type, note, created_at) VALUES
-  (100, 'deposit', 'Initial deposit', '2026-03-20 00:00:00+00'),
-  (2, 'deposit', 'Top-up', '2026-03-25 00:00:00+00');
+-- Seed with initial deposits (only if empty)
+INSERT INTO pm_deposits (amount, type, note, created_at)
+SELECT 100, 'deposit', 'Initial deposit', '2026-03-20 00:00:00+00'
+WHERE NOT EXISTS (SELECT 1 FROM pm_deposits);
+INSERT INTO pm_deposits (amount, type, note, created_at)
+SELECT 1.20, 'deposit', 'Top-up', '2026-03-23 00:00:00+00'
+WHERE (SELECT COUNT(*) FROM pm_deposits) = 1;
