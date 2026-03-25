@@ -6,12 +6,18 @@ import type { PolymarketConfig, TrackedTrader, LeaderboardEntry, TraderStats } f
 
 const log = createChildLogger({ component: 'pm-discovery' });
 
-const MIN_TRADES = Number(process.env.PM_MIN_TRADES || 50);
-const MIN_ACTIVE_DAYS = Number(process.env.PM_MIN_ACTIVE_DAYS || 14);
-const MIN_SHARPE = Number(process.env.PM_MIN_SHARPE || 0.05);
-const MIN_PROFIT_FACTOR = Number(process.env.PM_MIN_PROFIT_FACTOR || 1.3);
-const MAX_DD_RATIO = Number(process.env.PM_MAX_DD_RATIO || 0.5);
-const MIN_COINFLIP_WR = Number(process.env.PM_MIN_COINFLIP_WR || 0.55);
+const FILTER_VERSION = Number(process.env.PM_FILTER_VERSION || 1);
+
+const V1 = { minTrades: 50, minSharpe: 0.05, minPF: 1.3, minCfWR: 0.55, maxDdRatio: 0.5, minDays: 14 };
+const V2 = { minTrades: 20, minSharpe: 0.01, minPF: 1.0, minCfWR: 0.50, maxDdRatio: 0.7, minDays: 7 };
+const DEFAULTS = FILTER_VERSION >= 2 ? V2 : V1;
+
+const MIN_TRADES = Number(process.env.PM_MIN_TRADES || DEFAULTS.minTrades);
+const MIN_ACTIVE_DAYS = Number(process.env.PM_MIN_ACTIVE_DAYS || DEFAULTS.minDays);
+const MIN_SHARPE = Number(process.env.PM_MIN_SHARPE || DEFAULTS.minSharpe);
+const MIN_PROFIT_FACTOR = Number(process.env.PM_MIN_PROFIT_FACTOR || DEFAULTS.minPF);
+const MAX_DD_RATIO = Number(process.env.PM_MAX_DD_RATIO || DEFAULTS.maxDdRatio);
+const MIN_COINFLIP_WR = Number(process.env.PM_MIN_COINFLIP_WR || DEFAULTS.minCfWR);
 
 export class TraderDiscovery {
   private traders: TrackedTrader[] = [];

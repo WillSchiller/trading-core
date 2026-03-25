@@ -28,6 +28,9 @@ export class PolymarketCopyTrader {
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+  private recencyWindow = 0;
+  private recencyMinPF = 0.8;
+  private recencyMinWR = 0.40;
 
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
@@ -89,6 +92,8 @@ export class PolymarketCopyTrader {
               log.info({ trader: trader.alias, streak: traderStats.consecutiveLosses }, 'Trader circuit breaker: consecutive losses');
             } else if (traderStats.pnl < -maxTraderLoss) {
               log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
+            } else if (await this.failsRecencyCheck(trader.address, trader.alias)) {
+              // v2 recency gate — skip but don't log excessively
             } else {
               const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
               if (allowed) {
@@ -109,6 +114,13 @@ export class PolymarketCopyTrader {
         log.error({ error: (err as Error).message }, 'Shadow trade save error');
       }
     });
+
+    this.recencyWindow = Number(process.env.PM_RECENCY_WINDOW || 0);
+    this.recencyMinPF = Number(process.env.PM_RECENCY_MIN_PF || 0.8);
+    this.recencyMinWR = Number(process.env.PM_RECENCY_MIN_WR || 0.40);
+    if (this.recencyWindow > 0) {
+      log.info({ window: this.recencyWindow, minPF: this.recencyMinPF, minWR: this.recencyMinWR }, 'Recency gate enabled (v2 filters)');
+    }
 
     this.monitor.start();
     this.riskManager.startPeriodicCheck();
@@ -253,6 +265,17 @@ export class PolymarketCopyTrader {
       } catch { /* skip */ }
     }
     log.info({ updated, resolved, open: liveTrades.length, markets: byMarket.size }, 'Live prices updated');
+  }
+
+  private async failsRecencyCheck(traderAddress: string, alias: string): Promise<boolean> {
+    if (this.recencyWindow <= 0) return false;
+    const stats = await this.persistence.getTraderRecencyStats(traderAddress, this.recencyWindow);
+    if (stats.trades < this.recencyWindow) return false;
+    if (stats.profitFactor < this.recencyMinPF || stats.winRate < this.recencyMinWR) {
+      log.debug({ trader: alias, recentPF: stats.profitFactor.toFixed(2), recentWR: (stats.winRate * 100).toFixed(0) + '%', window: this.recencyWindow }, 'Recency gate: trader cold');
+      return true;
+    }
+    return false;
   }
 
   private async fetchMarket(conditionId: string, slug?: string): Promise<MarketData | null> {

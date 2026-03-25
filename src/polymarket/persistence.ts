@@ -234,6 +234,26 @@ export class PolymarketPersistence {
     );
   }
 
+  async getTraderRecencyStats(traderAddress: string, window: number): Promise<{ trades: number; winRate: number; profitFactor: number }> {
+    const result = await this.pool.query(
+      `SELECT pnl_if_copied::float as pnl
+       FROM pm_shadow_trades
+       WHERE trader_address = $1 AND resolved = true AND side = 'BUY' AND our_entry_price > 0
+       ORDER BY trader_timestamp DESC LIMIT $2`,
+      [traderAddress, window],
+    );
+    const pnls = result.rows.map((r: { pnl: number }) => r.pnl);
+    if (pnls.length < window) return { trades: pnls.length, winRate: 1, profitFactor: 99 };
+    const wins = pnls.filter((p: number) => p > 0).length;
+    const grossWins = pnls.filter((p: number) => p > 0).reduce((a: number, b: number) => a + b, 0);
+    const grossLosses = Math.abs(pnls.filter((p: number) => p < 0).reduce((a: number, b: number) => a + b, 0));
+    return {
+      trades: pnls.length,
+      winRate: wins / pnls.length,
+      profitFactor: grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 99 : 0,
+    };
+  }
+
   async getTraderLiveStats(traderAddress: string): Promise<{ trades: number; pnl: number; consecutiveLosses: number }> {
     const result = await this.pool.query(
       `SELECT COUNT(*)::int as trades, COALESCE(SUM(pnl), 0)::float as pnl
