@@ -167,7 +167,7 @@ export class CopyExecutor {
 
       const tickSize = '0.01';
       const tick = parseFloat(tickSize);
-      const roundedPrice = Math.round(sellPrice / tick) * tick;
+      const roundedPrice = Math.min(0.99, Math.round(sellPrice / tick) * tick);
       const size = Math.round(position.fillSize * 100) / 100;
 
       if (size < 1) {
