@@ -33,6 +33,12 @@ export class CopyExecutor {
     return this.clobClient !== null;
   }
 
+  async getBalance(): Promise<number> {
+    if (!this.clobClient) return 0;
+    const bal = await this.clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' });
+    return parseFloat(bal?.balance || '0') / 1e6;
+  }
+
   async executeLiveOrder(
     liveTradeId: number,
     trader: TrackedTrader,

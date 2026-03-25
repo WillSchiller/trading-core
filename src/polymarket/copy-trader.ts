@@ -194,6 +194,14 @@ export class PolymarketCopyTrader {
     const liveTrades = await this.persistence.getUnresolvedLiveTrades();
     if (liveTrades.length === 0) return;
 
+    let cashBalance = Infinity;
+    if (this.executor.isLive()) {
+      try {
+        cashBalance = await this.executor.getBalance();
+      } catch { /* assume we have cash */ }
+    }
+    const needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
+
     let updated = 0;
     let resolved = 0;
     const byMarket = new Map<string, typeof liveTrades>();
@@ -221,7 +229,7 @@ export class PolymarketCopyTrader {
               await this.persistence.updateLiveTradePrice(trade.id, currentPrice, pnl);
               updated++;
 
-              if (trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
+              if (needCash && trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
                 log.info({ market: trade.marketSlug, price: currentPrice, size: trade.fillSize }, 'Auto-selling decided winner');
                 const activity: import('./types.js').TraderActivity = {
                   id: '', traderAddress: '', timestamp: Date.now(),
