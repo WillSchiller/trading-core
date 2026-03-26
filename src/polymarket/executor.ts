@@ -95,7 +95,7 @@ export class CopyExecutor {
       if (fokFilled) {
         const orderId = fokResult.orderID || fokResult.orderIds?.[0] || null;
         await new Promise(r => setTimeout(r, FILL_CHECK_DELAY_MS));
-        const fill = await this.checkFill(orderId, activity.tokenId);
+        const fill = await this.checkFill(orderId, activity.tokenId, sizeUsd);
         if (fill) {
           log.info({ orderId, trader: trader.alias, market: activity.marketSlug, outcome: activity.outcome, sizeUsd: sizeUsd.toFixed(2), fillPrice: fill.price }, 'FOK order FILLED');
           await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fill.price, fill.size, 'filled');
@@ -126,7 +126,7 @@ export class CopyExecutor {
       // Poll for fill over 5 minutes
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 10_000));
-        const fill = await this.checkFill(orderId, activity.tokenId);
+        const fill = await this.checkFill(orderId, activity.tokenId, sizeUsd);
         if (fill) {
           log.info({ orderId, trader: trader.alias, market: activity.marketSlug, fillPrice: fill.price, fillSize: fill.size }, 'GTC order FILLED');
           await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fill.price, fill.size, 'filled');
@@ -232,19 +232,21 @@ export class CopyExecutor {
     }
   }
 
-  private async checkFill(orderId: string | null, tokenId: string): Promise<{ price: number; size: number } | null> {
+  private async checkFill(orderId: string | null, tokenId: string, maxSizeUsd?: number): Promise<{ price: number; size: number } | null> {
     if (!orderId) return null;
     try {
-      const trades = await this.clobClient.getTrades({ asset_id: tokenId });
-      if (!trades || !Array.isArray(trades)) return null;
-      const myFill = trades.find((t: any) => t.order_id === orderId || t.id === orderId);
-      if (myFill) {
-        return { price: parseFloat(myFill.price), size: parseFloat(myFill.size) };
-      }
-      // Also try getOrder directly
       const order = await this.clobClient.getOrder(orderId);
       if (order && parseFloat(order.size_matched) > 0) {
-        return { price: parseFloat(order.price), size: parseFloat(order.size_matched) };
+        const price = parseFloat(order.price);
+        let size = parseFloat(order.size_matched);
+        if (maxSizeUsd && price > 0) {
+          const maxShares = maxSizeUsd / price;
+          if (size > maxShares * 1.5) {
+            log.warn({ orderId, reportedSize: size, maxShares, price }, 'Fill size exceeds expected — capping');
+            size = maxShares;
+          }
+        }
+        return { price, size };
       }
       return null;
     } catch {
