@@ -476,6 +476,11 @@ describe('Grafana Dashboard Validation', () => {
         'pm_positions',
         'pm_kill_switch_events',
         'pm_shadow_trades',
+        'pm_live_trades',
+        'pm_deposits',
+        'pmm_stats',
+        'pmm_active_markets',
+        'pmm_fills',
         'v_pm_shadow_performance',
       ];
 

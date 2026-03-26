@@ -350,8 +350,15 @@ describe('SQL Query Anti-Pattern Detection', () => {
         'asset',
         'run_id',
         'mode',
+        'execution_status',
+        'our_size',
+        'copy_eligible',
+        'enabled',
+        'trader_address',
+        'condition_id',
+        'type',
       ];
-      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config', 'perps_kill_switch_events'];
+      const smallTables = ['connector_health', 'risk_state', 'slippage_calibration', 'latest_slippage_curves', 'venues', 'pairs', 'pair_venue_config', 'perps_kill_switch_events', 'pm_tracked_traders', 'pm_kill_switch_events', 'pm_deposits'];
 
       const errors: string[] = [];
 

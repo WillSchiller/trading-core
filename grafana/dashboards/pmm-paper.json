@@ -283,7 +283,7 @@
       "targets": [{
         "refId": "A",
         "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT LEFT(slug, 30) AS \"Market\", mid_price AS \"Mid\", volume_24h AS \"Vol 24h\", liquidity AS \"Liq\", score AS \"Score\", end_date AS \"Ends\" FROM pmm_active_markets ORDER BY score DESC",
+        "rawSql": "SELECT LEFT(slug, 30) AS \"Market\", mid_price AS \"Mid\", volume_24h AS \"Vol 24h\", liquidity AS \"Liq\", score AS \"Score\", end_date AS \"Ends\" FROM pmm_active_markets ORDER BY score DESC LIMIT 20",
         "format": "table"
       }],
       "fieldConfig": {

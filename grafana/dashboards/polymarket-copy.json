@@ -119,7 +119,7 @@
       "type": "stat",
       "title": "Paper PnL (Hypothetical)",
       "description": "Hypothetical PnL if all trades filled at trader price — NOT real money",
-      "gridPos": {"x": 6, "y": 5, "w": 4, "h": 4},
+      "gridPos": {"x": 8, "y": 5, "w": 2, "h": 4},
       "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT ROUND(COALESCE(SUM(pnl), 0)::numeric, 2) AS \"PnL\" FROM pm_live_trades WHERE resolved = true", "format": "table"}],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 0, "color": "green"}]}}},
       "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
@@ -256,7 +256,7 @@
       "gridPos": {"x": 12, "y": 15, "w": 12, "h": 8},
       "targets": [
         {"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "SELECT date_trunc('day', resolved_at) AS time, ROUND(SUM(pnl)::numeric, 2)::float AS \"Daily PnL\" FROM pm_live_trades WHERE resolved = true GROUP BY 1 ORDER BY time", "format": "time_series"},
-        {"refId": "B", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH daily AS (SELECT date_trunc('day', resolved_at) AS day, SUM(pnl) AS pnl FROM pm_live_trades WHERE resolved = true GROUP BY 1), cum AS (SELECT day, SUM(pnl) OVER (ORDER BY day) AS equity FROM daily), dd AS (SELECT day AS time, equity - MAX(equity) OVER (ORDER BY day) AS \"Drawdown\" FROM cum) SELECT * FROM dd ORDER BY time", "format": "time_series"}
+        {"refId": "B", "datasource": {"type": "postgres", "uid": "postgresql"}, "rawSql": "WITH daily AS (SELECT date_trunc('day', resolved_at) AS day, SUM(pnl) AS pnl FROM pm_live_trades WHERE resolved = true GROUP BY 1), cum AS (SELECT day, SUM(pnl) OVER (ORDER BY day) AS equity FROM daily), dd AS (SELECT day AS time, equity - MAX(equity) OVER (ORDER BY day) AS \"Drawdown\" FROM cum) SELECT time, \"Drawdown\" FROM dd ORDER BY time", "format": "time_series"}
       ],
       "fieldConfig": {
         "defaults": {"unit": "currencyUSD", "decimals": 2, "custom": {"fillOpacity": 30, "lineWidth": 2, "drawStyle": "bars"}},
