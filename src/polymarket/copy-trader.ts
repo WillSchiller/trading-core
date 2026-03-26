@@ -101,6 +101,7 @@ export class PolymarketCopyTrader {
             } else if (this.scorer.isEnabled() && !(await this.scorer.score(trader, activity)).pass) {
               // ML scorer gate
             } else {
+              log.info({ trader: trader.alias, market: activity.marketSlug, ourSize, notional: (ourSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
               const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
               if (allowed) {
                 try {
