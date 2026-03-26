@@ -112,6 +112,9 @@ export class PolymarketCopyTrader {
                 // ML scorer gate
               } else {
               const minBet = Number(process.env.PM_MIN_BET_USD || 1);
+              if (tradeSize > 0 && tradeSize < minBet) {
+                tradeSize = minBet;
+              }
               if (tradeSize < minBet) {
                 log.debug({ trader: trader.alias, market: activity.marketSlug, kellySize: tradeSize.toFixed(2) }, 'Below minimum bet');
               } else {
