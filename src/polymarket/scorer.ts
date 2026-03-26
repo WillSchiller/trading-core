@@ -25,6 +25,7 @@ interface TraderRollingStats {
 export class TradeScorer {
   private session: any = null;
   private capitalSession: any = null;
+  private kellySession: any = null;
   private traderStats = new Map<string, TraderRollingStats>();
   private marketCounts = new Map<string, number>();
   private minScore: number;
@@ -46,8 +47,10 @@ export class TradeScorer {
       const capPath = path.resolve(__dirname, '../../models/pm_scorer_capital.onnx');
       this.session = await ort.InferenceSession.create(winPath);
       try { this.capitalSession = await ort.InferenceSession.create(capPath); } catch { /* optional */ }
+      const kellyPath = path.resolve(__dirname, '../../models/pm_scorer_kelly.onnx');
+      try { this.kellySession = await ort.InferenceSession.create(kellyPath); } catch { /* optional */ }
       this.enabled = true;
-      log.info({ minScore: this.minScore, activeModel: this.activeModel, hasCapitalModel: !!this.capitalSession }, 'ML scorer loaded');
+      log.info({ minScore: this.minScore, activeModel: this.activeModel, hasCapitalModel: !!this.capitalSession, hasKellyModel: !!this.kellySession }, 'ML scorer loaded');
     } catch (err) {
       log.warn({ error: (err as Error).message }, 'ML scorer not available — running without scoring');
       this.enabled = false;
@@ -82,6 +85,13 @@ export class TradeScorer {
         capScore = (capProbs && capProbs.length >= 2) ? capProbs[1] : 0.5;
       }
 
+      let kellyScore = 0;
+      if (this.kellySession) {
+        const kellyResult = await this.kellySession.run({ features: tensor });
+        const kellyOut = kellyResult.variable?.data || kellyResult.predictions?.data;
+        kellyScore = kellyOut ? kellyOut[0] : 0;
+      }
+
       const activeScore = this.activeModel === 'capital' ? capScore : winScore;
       const pass = activeScore >= this.minScore;
 
@@ -90,6 +100,7 @@ export class TradeScorer {
         market: activity.marketSlug,
         winScore: (winScore as number).toFixed(3),
         capScore: (capScore as number).toFixed(3),
+        kellyScore: (kellyScore as number).toFixed(4),
         active: this.activeModel,
         pass,
       }, 'Trade scored');
