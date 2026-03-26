@@ -97,7 +97,8 @@ export class TradeScorer {
 
       const bankroll = Number(process.env.POLYMARKET_BANKROLL_USD || 500);
       const edge = Math.max(0, kellyScore as number);
-      const kellyFrac = Math.min(0.05, edge * 0.1);
+      const kellyMult = Number(process.env.PM_KELLY_MULTIPLIER || 0.1);
+      const kellyFrac = Math.min(0.10, edge * kellyMult);
       const kellySize = Math.round(bankroll * kellyFrac * 100) / 100;
 
       log.info({

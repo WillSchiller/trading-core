@@ -92,6 +92,8 @@ services:
       PM_MIN_SCORE: ${PM_MIN_SCORE:-0.5}
       PM_SCORER_MODEL: ${PM_SCORER_MODEL:-capital}
       PM_MIN_BET_USD: ${PM_MIN_BET_USD:-1}
+      # Kelly multiplier: 0.1 for $5k+, 0.5 for $1k, 1.0 for $100-500
+      PM_KELLY_MULTIPLIER: ${PM_KELLY_MULTIPLIER:-1.0}
       PM_MIN_TRADES: ${PM_MIN_TRADES:-50}
       PM_MIN_ACTIVE_DAYS: ${PM_MIN_ACTIVE_DAYS:-14}
       PM_MIN_SHARPE: ${PM_MIN_SHARPE:-0.05}
