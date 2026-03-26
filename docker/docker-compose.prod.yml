@@ -87,6 +87,8 @@ services:
       PM_RECENCY_WINDOW: ${PM_RECENCY_WINDOW:-20}
       PM_RECENCY_MIN_PF: ${PM_RECENCY_MIN_PF:-0.8}
       PM_RECENCY_MIN_WR: ${PM_RECENCY_MIN_WR:-0.40}
+      # ML scorer: set PM_MIN_SCORE=0 to disable, 0.5-0.8 for scoring
+      PM_MIN_SCORE: ${PM_MIN_SCORE:-0.5}
       PM_MIN_TRADES: ${PM_MIN_TRADES:-50}
       PM_MIN_ACTIVE_DAYS: ${PM_MIN_ACTIVE_DAYS:-14}
       PM_MIN_SHARPE: ${PM_MIN_SHARPE:-0.05}

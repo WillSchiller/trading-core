@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
@@ -9,6 +9,7 @@ COPY dist/ ./dist/
 COPY config/ ./config/
 COPY sql/ ./sql/
 COPY scripts/ ./scripts/
+COPY models/ ./models/
 
 RUN npm install -g tsx
 

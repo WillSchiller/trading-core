@@ -1,0 +1,18 @@
+[
+  "entry_price",
+  "price_dist_from_half",
+  "implied_edge",
+  "cat_sports",
+  "cat_crypto",
+  "cat_politics",
+  "hour",
+  "dow",
+  "size_vs_median",
+  "roll_wr_20",
+  "roll_pf_20",
+  "roll_streak",
+  "lifetime_wr",
+  "lifetime_pf",
+  "trade_num",
+  "market_trader_count"
+]

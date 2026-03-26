@@ -232,7 +232,7 @@ export class CopyExecutor {
     }
   }
 
-  private async checkFill(orderId: string | null, tokenId: string, maxSizeUsd?: number): Promise<{ price: number; size: number } | null> {
+  private async checkFill(orderId: string | null, _tokenId: string, maxSizeUsd?: number): Promise<{ price: number; size: number } | null> {
     if (!orderId) return null;
     try {
       const order = await this.clobClient.getOrder(orderId);

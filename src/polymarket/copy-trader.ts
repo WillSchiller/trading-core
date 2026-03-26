@@ -6,6 +6,7 @@ import { TraderDiscovery } from './discovery.js';
 import { ActivityMonitor } from './monitor.js';
 import { PolymarketRiskManager } from './risk-manager.js';
 import { CopyExecutor } from './executor.js';
+import { TradeScorer } from './scorer.js';
 import { getTokenPrice, getResolutionPrice } from './market-utils.js';
 import type { PolymarketConfig, ShadowTrade } from './types.js';
 
@@ -25,6 +26,7 @@ export class PolymarketCopyTrader {
   private monitor: ActivityMonitor;
   private riskManager: PolymarketRiskManager;
   private executor: CopyExecutor;
+  private scorer: TradeScorer;
   private traderRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private shadowUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
@@ -39,11 +41,13 @@ export class PolymarketCopyTrader {
     this.monitor = new ActivityMonitor(this.config);
     this.riskManager = new PolymarketRiskManager(this.config, this.persistence);
     this.executor = new CopyExecutor(this.config, this.persistence);
+    this.scorer = new TradeScorer(this.persistence);
   }
 
   async start(): Promise<void> {
     await this.discovery.start();
     await this.executor.start();
+    await this.scorer.start();
 
     const traders = this.discovery.getTrackedTraders();
     this.monitor.setTraders(traders);
@@ -93,7 +97,9 @@ export class PolymarketCopyTrader {
             } else if (traderStats.pnl < -maxTraderLoss) {
               log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
             } else if (await this.failsRecencyCheck(trader.address, trader.alias)) {
-              // v2 recency gate — skip but don't log excessively
+              // v2 recency gate
+            } else if (this.scorer.isEnabled() && !(await this.scorer.score(trader, activity)).pass) {
+              // ML scorer gate
             } else {
               const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
               if (allowed) {
