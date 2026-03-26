@@ -44,6 +44,7 @@ COPY --from=builder --chown=trader:trader /build/package*.json ./
 COPY --chown=trader:trader config ./config
 COPY --chown=trader:trader sql ./sql
 COPY --chown=trader:trader scripts ./scripts
+COPY --chown=trader:trader models ./models
 
 USER trader
 
