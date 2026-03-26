@@ -98,21 +98,38 @@ export class PolymarketCopyTrader {
               log.info({ trader: trader.alias, pnl: traderStats.pnl.toFixed(2) }, 'Trader circuit breaker: max loss');
             } else if (await this.failsRecencyCheck(trader.address, trader.alias)) {
               // v2 recency gate
-            } else if (this.scorer.isEnabled() && !(await this.scorer.score(trader, activity)).pass) {
-              // ML scorer gate
             } else {
-              log.info({ trader: trader.alias, market: activity.marketSlug, ourSize, notional: (ourSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
-              const { allowed, release } = await this.riskManager.canTrade(ourSize * activity.price, activity.conditionId);
+              let tradeSize = ourSize;
+              let scorerPassed = true;
+              if (this.scorer.isEnabled()) {
+                const scoreResult = await this.scorer.score(trader, activity);
+                scorerPassed = scoreResult.pass;
+                if (scorerPassed && scoreResult.kellySize > 0) {
+                  tradeSize = scoreResult.kellySize;
+                }
+              }
+              if (!scorerPassed) {
+                // ML scorer gate
+              } else {
+              const minBet = Number(process.env.PM_MIN_BET_USD || 1);
+              if (tradeSize < minBet) {
+                log.debug({ trader: trader.alias, market: activity.marketSlug, kellySize: tradeSize.toFixed(2) }, 'Below minimum bet');
+              } else {
+              log.info({ trader: trader.alias, market: activity.marketSlug, tradeSize: tradeSize.toFixed(2), notional: (tradeSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
+              shadow.ourSize = tradeSize;
+              const { allowed, release } = await this.riskManager.canTrade(tradeSize * activity.price, activity.conditionId);
               if (allowed) {
                 try {
                   const liveTradeId = await this.persistence.saveLiveTrade(shadow);
                   if (liveTradeId > 0 && this.executor.isLive()) {
-                    await this.executor.executeLiveOrder(liveTradeId, trader, activity, ourSize);
+                    await this.executor.executeLiveOrder(liveTradeId, trader, activity, tradeSize);
                   }
                 } finally {
                   release?.();
                 }
               }
+            }
+            }
             }
           }
         }

@@ -64,9 +64,9 @@ export class TradeScorer {
   async score(
     trader: TrackedTrader,
     activity: TraderActivity,
-  ): Promise<{ score: number; pass: boolean }> {
+  ): Promise<{ score: number; pass: boolean; kellySize: number }> {
     if (!this.enabled || !this.session) {
-      return { score: 1.0, pass: true };
+      return { score: 1.0, pass: true, kellySize: 0 };
     }
 
     try {
@@ -95,20 +95,26 @@ export class TradeScorer {
       const activeScore = this.activeModel === 'capital' ? capScore : winScore;
       const pass = activeScore >= this.minScore;
 
+      const bankroll = Number(process.env.POLYMARKET_BANKROLL_USD || 500);
+      const edge = Math.max(0, kellyScore as number);
+      const kellyFrac = Math.min(0.05, edge * 0.1);
+      const kellySize = Math.round(bankroll * kellyFrac * 100) / 100;
+
       log.info({
         trader: trader.alias,
         market: activity.marketSlug,
         winScore: (winScore as number).toFixed(3),
         capScore: (capScore as number).toFixed(3),
         kellyScore: (kellyScore as number).toFixed(4),
+        kellySize: kellySize.toFixed(2),
         active: this.activeModel,
         pass,
       }, 'Trade scored');
 
-      return { score: activeScore as number, pass };
+      return { score: activeScore as number, pass, kellySize };
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Scoring error — allowing trade');
-      return { score: 1.0, pass: true };
+      return { score: 1.0, pass: true, kellySize: 0 };
     }
   }
 
