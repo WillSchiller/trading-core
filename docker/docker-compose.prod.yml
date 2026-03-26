@@ -90,7 +90,7 @@ services:
       # ML scorer: set PM_MIN_SCORE=0 to disable, 0.5-0.8 for scoring
       # PM_SCORER_MODEL: win (default) or capital
       PM_MIN_SCORE: ${PM_MIN_SCORE:-0.5}
-      PM_SCORER_MODEL: ${PM_SCORER_MODEL:-win}
+      PM_SCORER_MODEL: ${PM_SCORER_MODEL:-capital}
       PM_MIN_TRADES: ${PM_MIN_TRADES:-50}
       PM_MIN_ACTIVE_DAYS: ${PM_MIN_ACTIVE_DAYS:-14}
       PM_MIN_SHARPE: ${PM_MIN_SHARPE:-0.05}
