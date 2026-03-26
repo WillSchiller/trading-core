@@ -24,25 +24,30 @@ interface TraderRollingStats {
 
 export class TradeScorer {
   private session: any = null;
+  private capitalSession: any = null;
   private traderStats = new Map<string, TraderRollingStats>();
   private marketCounts = new Map<string, number>();
   private minScore: number;
   private enabled = false;
+  private activeModel: 'win' | 'capital';
 
   constructor(
     private readonly persistence: PolymarketPersistence,
   ) {
     this.minScore = Number(process.env.PM_MIN_SCORE || 0.5);
+    this.activeModel = (process.env.PM_SCORER_MODEL || 'win') as 'win' | 'capital';
   }
 
   async start(): Promise<void> {
     try {
       const ort = await import('onnxruntime-node');
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
-      const modelPath = path.resolve(__dirname, '../../models/pm_scorer.onnx');
-      this.session = await ort.InferenceSession.create(modelPath);
+      const winPath = path.resolve(__dirname, '../../models/pm_scorer.onnx');
+      const capPath = path.resolve(__dirname, '../../models/pm_scorer_capital.onnx');
+      this.session = await ort.InferenceSession.create(winPath);
+      try { this.capitalSession = await ort.InferenceSession.create(capPath); } catch { /* optional */ }
       this.enabled = true;
-      log.info({ minScore: this.minScore, features: FEATURES.length }, 'ML scorer loaded');
+      log.info({ minScore: this.minScore, activeModel: this.activeModel, hasCapitalModel: !!this.capitalSession }, 'ML scorer loaded');
     } catch (err) {
       log.warn({ error: (err as Error).message }, 'ML scorer not available — running without scoring');
       this.enabled = false;
@@ -65,25 +70,31 @@ export class TradeScorer {
       const features = await this.buildFeatures(trader, activity);
       const ort = await import('onnxruntime-node');
       const tensor = new ort.Tensor('float32', Float32Array.from(features), [1, FEATURES.length]);
-      const results = await this.session.run({ features: tensor });
-      const probs = results.probabilities?.data || results.output_probability?.data;
 
-      let winProb = 0.5;
-      if (probs && probs.length >= 2) {
-        winProb = probs[1];
+      const winResult = await this.session.run({ features: tensor });
+      const winProbs = winResult.probabilities?.data || winResult.output_probability?.data;
+      const winScore = (winProbs && winProbs.length >= 2) ? winProbs[1] : 0.5;
+
+      let capScore = 0.5;
+      if (this.capitalSession) {
+        const capResult = await this.capitalSession.run({ features: tensor });
+        const capProbs = capResult.probabilities?.data || capResult.output_probability?.data;
+        capScore = (capProbs && capProbs.length >= 2) ? capProbs[1] : 0.5;
       }
 
-      const pass = winProb >= this.minScore;
-      if (!pass) {
-        log.debug({
-          trader: trader.alias,
-          market: activity.marketSlug,
-          score: winProb.toFixed(3),
-          threshold: this.minScore,
-        }, 'Trade below score threshold');
-      }
+      const activeScore = this.activeModel === 'capital' ? capScore : winScore;
+      const pass = activeScore >= this.minScore;
 
-      return { score: winProb, pass };
+      log.info({
+        trader: trader.alias,
+        market: activity.marketSlug,
+        winScore: (winScore as number).toFixed(3),
+        capScore: (capScore as number).toFixed(3),
+        active: this.activeModel,
+        pass,
+      }, 'Trade scored');
+
+      return { score: activeScore as number, pass };
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Scoring error — allowing trade');
       return { score: 1.0, pass: true };
