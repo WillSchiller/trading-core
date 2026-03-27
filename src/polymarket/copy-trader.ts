@@ -103,9 +103,11 @@ export class PolymarketCopyTrader {
             } else {
               let tradeSize = ourSize;
               let scorerPassed = true;
+              let scores: { winScore?: number; capScore?: number; calProb?: number; kellySize?: number } = {};
               if (this.scorer.isEnabled()) {
                 const scoreResult = await this.scorer.score(trader, activity);
                 scorerPassed = scoreResult.pass;
+                scores = scoreResult.scores || {};
                 if (scorerPassed && scoreResult.kellySize > 0) {
                   tradeSize = scoreResult.kellySize;
                 }
@@ -137,7 +139,7 @@ export class PolymarketCopyTrader {
               if (allowed) {
                 this.recentOrders.set(dedupKey, Date.now());
                 try {
-                  const liveTradeId = await this.persistence.saveLiveTrade(shadow);
+                  const liveTradeId = await this.persistence.saveLiveTrade(shadow, scores);
                   if (liveTradeId > 0 && this.executor.isLive()) {
                     await this.executor.executeLiveOrder(liveTradeId, trader, activity, tradeSize);
                   }

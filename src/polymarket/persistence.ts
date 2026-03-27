@@ -152,15 +152,16 @@ export class PolymarketPersistence {
     );
   }
 
-  async saveLiveTrade(trade: ShadowTrade): Promise<number> {
+  async saveLiveTrade(trade: ShadowTrade, scores?: { winScore?: number; capScore?: number; calProb?: number; kellySize?: number }): Promise<number> {
     const result = await this.pool.query(
-      `INSERT INTO pm_live_trades (trader_address, trader_alias, condition_id, token_id, side, size, price, outcome, market_slug, our_size, our_entry_price, current_price, trader_timestamp)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO pm_live_trades (trader_address, trader_alias, condition_id, token_id, side, size, price, outcome, market_slug, our_size, our_entry_price, current_price, trader_timestamp, win_score, cap_score, cal_prob, kelly_size)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
        RETURNING id`,
       [trade.traderAddress, trade.traderAlias, trade.conditionId, trade.tokenId, trade.side,
        trade.size, trade.price, trade.outcome, trade.marketSlug,
-       trade.ourSize, trade.ourEntryPrice, trade.currentPrice, trade.traderTimestamp],
+       trade.ourSize, trade.ourEntryPrice, trade.currentPrice, trade.traderTimestamp,
+       scores?.winScore ?? null, scores?.capScore ?? null, scores?.calProb ?? null, scores?.kellySize ?? null],
     );
     return result.rows[0]?.id ?? 0;
   }

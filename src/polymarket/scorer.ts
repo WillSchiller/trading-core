@@ -73,9 +73,9 @@ export class TradeScorer {
   async score(
     trader: TrackedTrader,
     activity: TraderActivity,
-  ): Promise<{ score: number; pass: boolean; kellySize: number }> {
+  ): Promise<{ score: number; pass: boolean; kellySize: number; scores: { winScore?: number; capScore?: number; calProb?: number; kellySize?: number } }> {
     if (!this.enabled || !this.session) {
-      return { score: 1.0, pass: true, kellySize: 0 };
+      return { score: 1.0, pass: true, kellySize: 0, scores: {} };
     }
 
     try {
@@ -139,10 +139,10 @@ export class TradeScorer {
         pass,
       }, 'Trade scored');
 
-      return { score: activeScore as number, pass, kellySize };
+      return { score: activeScore as number, pass, kellySize, scores: { winScore: winScore as number, capScore: capScore as number, calProb: calibratedProb, kellySize } };
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Scoring error — allowing trade');
-      return { score: 1.0, pass: true, kellySize: 0 };
+      return { score: 1.0, pass: true, kellySize: 0, scores: {} };
     }
   }
 
