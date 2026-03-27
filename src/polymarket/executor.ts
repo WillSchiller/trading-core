@@ -103,16 +103,17 @@ export class CopyExecutor {
         }
       }
 
-      // FOK failed — place persistent GTC at best ask
+      // FOK failed — place GTC. Short-lived markets get +1c to fill fast.
+      const isShortLived = /updown-[0-9]+m/.test(activity.marketSlug);
       let gtcPrice = roundedPrice;
       try {
         const askData = await this.clobClient.getPrice(activity.tokenId, this.Side.BUY);
         const bestAsk = parseFloat(askData?.price || '0');
         if (bestAsk > 0) {
-          gtcPrice = Math.round(bestAsk / tick) * tick;
+          gtcPrice = Math.round((bestAsk + (isShortLived ? 0.01 : 0)) / tick) * tick;
         }
       } catch { /* use mid price */ }
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice }, 'FOK missed, placing persistent GTC at ask');
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice, shortLived: isShortLived }, 'FOK missed, placing GTC');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
