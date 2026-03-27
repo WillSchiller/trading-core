@@ -270,6 +270,18 @@ export class PolymarketCopyTrader {
         const market = await this.fetchMarket(first.conditionId, first.marketSlug);
         if (!market) continue;
         for (const trade of trades) {
+          // Check pending GTC orders for fills
+          if (trade.executionStatus === 'pending' && this.executor.isLive()) {
+            try {
+              const filled = await this.executor.checkPendingOrder(trade.id);
+              if (filled) { log.info({ market: trade.marketSlug, id: trade.id }, 'Pending GTC filled'); updated++; continue; }
+              // If market closed while pending, cancel the order
+              if (market.closed) {
+                await this.executor.cancelPendingOrder(trade.id);
+                continue;
+              }
+            } catch { /* continue */ }
+          }
           if (market.closed) {
             const resPrice = getResolutionPrice(market, trade.tokenId);
             const pnl = trade.ourSize ? (resPrice - (trade.ourEntryPrice || 0)) * trade.ourSize : 0;

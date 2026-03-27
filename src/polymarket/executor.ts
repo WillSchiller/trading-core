@@ -131,24 +131,9 @@ export class CopyExecutor {
       }
 
       const orderId = gtcResult.orderID || gtcResult.orderIds?.[0] || null;
-      log.info({ orderId, trader: trader.alias, market: activity.marketSlug, price: roundedPrice, size }, 'GTC order placed, waiting 60s');
-
-      // Poll for fill over 5 minutes
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 10_000));
-        const fill = await this.checkFill(orderId, activity.tokenId, sizeUsd);
-        if (fill) {
-          log.info({ orderId, trader: trader.alias, market: activity.marketSlug, fillPrice: fill.price, fillSize: fill.size }, 'GTC order FILLED');
-          await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fill.price, fill.size, 'filled');
-          return { orderId, fillPrice: fill.price, fillSize: fill.size, status: 'filled' };
-        }
-      }
-
-      // 60s elapsed, cancel unfilled GTC
-      try { await this.clobClient.cancelOrder({ orderID: orderId }); } catch { /* ok */ }
-      log.warn({ orderId, trader: trader.alias, market: activity.marketSlug }, 'GTC order cancelled after 5min timeout');
-      await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, null, null, 'unfilled');
-      return { orderId, status: 'unfilled' };
+      log.info({ orderId, trader: trader.alias, market: activity.marketSlug, price: gtcPrice, size }, 'GTC order placed — will check fill in price update cycle');
+      await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, gtcPrice, size, 'pending');
+      return { orderId, fillPrice: gtcPrice, fillSize: size, status: 'pending' };
 
     } catch (err) {
       log.error({
@@ -240,6 +225,39 @@ export class CopyExecutor {
       log.error({ trader: trader.alias, market: activity.marketSlug, error: (err as Error).message }, 'Sell order failed');
       return { status: 'error' };
     }
+  }
+
+  async checkPendingOrder(liveTradeId: number, tokenId: string): Promise<boolean> {
+    if (!this.clobClient) return false;
+    const result = await this.persistence.getPool().query(
+      `SELECT order_id, fill_price::float as price FROM pm_live_trades WHERE id = $1`, [liveTradeId]
+    );
+    const orderId = result.rows[0]?.order_id;
+    if (!orderId) return false;
+    try {
+      const order = await this.clobClient.getOrder(orderId);
+      if (order && parseFloat(order.size_matched || '0') > 0) {
+        const fillPrice = parseFloat(order.price);
+        const fillSize = parseFloat(order.size_matched);
+        await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, fillPrice, fillSize, 'filled');
+        return true;
+      }
+    } catch { /* not filled yet */ }
+    return false;
+  }
+
+  async cancelPendingOrder(liveTradeId: number): Promise<void> {
+    if (!this.clobClient) return;
+    const result = await this.persistence.getPool().query(
+      `SELECT order_id FROM pm_live_trades WHERE id = $1`, [liveTradeId]
+    );
+    const orderId = result.rows[0]?.order_id;
+    if (!orderId) return;
+    try {
+      await this.clobClient.cancelOrder({ orderID: orderId });
+      await this.persistence.updateLiveTradeExecution(liveTradeId, orderId, null, null, 'cancelled');
+      log.info({ orderId, liveTradeId }, 'Pending GTC cancelled');
+    } catch { /* already cancelled or filled */ }
   }
 
   private async checkFill(orderId: string | null, _tokenId: string, maxSizeUsd?: number): Promise<{ price: number; size: number } | null> {
