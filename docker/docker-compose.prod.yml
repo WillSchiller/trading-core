@@ -88,9 +88,9 @@ services:
       PM_RECENCY_MIN_PF: ${PM_RECENCY_MIN_PF:-0.8}
       PM_RECENCY_MIN_WR: ${PM_RECENCY_MIN_WR:-0.40}
       # ML scorer: set PM_MIN_SCORE=0 to disable, 0.5-0.8 for scoring
-      # PM_SCORER_MODEL: win (default) or capital
+      # PM_SCORER_MODEL: win | capital | kelly (kelly uses calibrated probs + Kelly criterion)
       PM_MIN_SCORE: ${PM_MIN_SCORE:-0.5}
-      PM_SCORER_MODEL: ${PM_SCORER_MODEL:-capital}
+      PM_SCORER_MODEL: ${PM_SCORER_MODEL:-kelly}
       PM_MIN_BET_USD: ${PM_MIN_BET_USD:-1}
       # Kelly multiplier: 0.1 for $5k+, 0.5 for $1k, 1.0 for $100-500
       PM_KELLY_MULTIPLIER: ${PM_KELLY_MULTIPLIER:-1.0}
