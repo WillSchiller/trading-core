@@ -123,7 +123,12 @@ export class PolymarketCopyTrader {
               const dedupKey = `${activity.conditionId}_${activity.tokenId}`;
               const lastOrder = this.recentOrders.get(dedupKey) || 0;
               if (Date.now() - lastOrder < 600_000) {
-                log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — duplicate market within 60s');
+                log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — duplicate within 10min');
+                return;
+              }
+              const existingPosition = await this.persistence.getPositionByCondition(activity.conditionId);
+              if (existingPosition && existingPosition.tradeCount > 0) {
+                log.debug({ trader: trader.alias, market: activity.marketSlug, existing: existingPosition.tradeCount }, 'Skipped — already have position in this market');
                 return;
               }
               log.info({ trader: trader.alias, market: activity.marketSlug, tradeSize: tradeSize.toFixed(2), notional: (tradeSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
