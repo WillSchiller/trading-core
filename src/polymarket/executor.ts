@@ -226,7 +226,7 @@ export class CopyExecutor {
     }
   }
 
-  async checkPendingOrder(liveTradeId: number, tokenId: string): Promise<boolean> {
+  async checkPendingOrder(liveTradeId: number, _tokenId?: string): Promise<boolean> {
     if (!this.clobClient) return false;
     const result = await this.persistence.getPool().query(
       `SELECT order_id, fill_price::float as price FROM pm_live_trades WHERE id = $1`, [liveTradeId]
