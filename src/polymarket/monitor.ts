@@ -1,7 +1,10 @@
+import WebSocket from 'ws';
 import { createChildLogger } from '../utils/logger.js';
 import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js';
 
 const log = createChildLogger({ component: 'pm-monitor' });
+
+const RTDS_WS_URL = 'wss://ws-live-data.polymarket.com';
 
 type TradeCallback = (trader: TrackedTrader, activity: TraderActivity) => Promise<void>;
 type ShadowCallback = (trader: TrackedTrader, activity: TraderActivity) => Promise<void>;
@@ -13,10 +16,15 @@ export class ActivityMonitor {
   private onNewTrade: TradeCallback | null = null;
   private onShadowTrade: ShadowCallback | null = null;
   private traders: TrackedTrader[] = [];
+  private traderMap = new Map<string, TrackedTrader>();
   private pollIndex = 0;
   private errorCount = 0;
   private successCount = 0;
+  private wsTradeCount = 0;
   private readonly bootTime = Date.now();
+  private ws: WebSocket | null = null;
+  private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private wsPingTimer: ReturnType<typeof setInterval> | null = null;
 
   private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(private readonly config: PolymarketConfig) {}
@@ -31,6 +39,10 @@ export class ActivityMonitor {
 
   setTraders(traders: TrackedTrader[]): void {
     this.traders = traders;
+    this.traderMap.clear();
+    for (const t of traders) {
+      this.traderMap.set(t.address.toLowerCase(), t);
+    }
   }
 
   start(): void {
@@ -45,16 +57,113 @@ export class ActivityMonitor {
       () => this.pollNext().catch(e => log.error({ err: e }, 'Poll error')),
       perTraderInterval,
     );
-    log.info({ traders: this.traders.length, perTraderMs: perTraderInterval, bootTime: this.bootTime }, 'Activity monitor started');
+    log.info({ traders: this.traders.length, perTraderMs: perTraderInterval, bootTime: this.bootTime }, 'Activity monitor started (polling)');
+
+    this.connectWebSocket();
 
     this.healthCheckTimer = setTimeout(() => {
-      log.info({ pollIndex: this.pollIndex, errors: this.errorCount, successes: this.successCount }, 'Monitor health check (30s)');
+      log.info({ pollIndex: this.pollIndex, errors: this.errorCount, successes: this.successCount, wsTrades: this.wsTradeCount }, 'Monitor health check (30s)');
     }, 30_000);
   }
 
   stop(): void {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     if (this.healthCheckTimer) { clearTimeout(this.healthCheckTimer); this.healthCheckTimer = null; }
+    if (this.wsPingTimer) { clearInterval(this.wsPingTimer); this.wsPingTimer = null; }
+    if (this.wsReconnectTimer) { clearTimeout(this.wsReconnectTimer); this.wsReconnectTimer = null; }
+    if (this.ws) { this.ws.close(); this.ws = null; }
+  }
+
+  private connectWebSocket(): void {
+    try {
+      this.ws = new WebSocket(RTDS_WS_URL);
+
+      this.ws.on('open', () => {
+        log.info({ trackedAddresses: this.traderMap.size }, 'RTDS WebSocket connected');
+        this.ws?.send(JSON.stringify({
+          action: 'subscribe',
+          subscriptions: [{ topic: 'activity', type: 'trades' }],
+        }));
+        this.wsPingTimer = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) this.ws.ping();
+        }, 5000);
+      });
+
+      this.ws.on('message', (data: Buffer) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'trade' || msg.event_type === 'trade' || msg.topic === 'activity') {
+            const trades = Array.isArray(msg.data) ? msg.data : (msg.data ? [msg.data] : [msg]);
+            for (const t of trades) {
+              this.handleWsTrade(t);
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      });
+
+      this.ws.on('close', () => {
+        log.warn('RTDS WebSocket closed, reconnecting in 5s');
+        if (this.wsPingTimer) { clearInterval(this.wsPingTimer); this.wsPingTimer = null; }
+        this.wsReconnectTimer = setTimeout(() => this.connectWebSocket(), 5000);
+      });
+
+      this.ws.on('error', (err) => {
+        log.warn({ error: err.message }, 'RTDS WebSocket error');
+      });
+    } catch (err) {
+      log.warn({ error: (err as Error).message }, 'Failed to connect RTDS WebSocket');
+      this.wsReconnectTimer = setTimeout(() => this.connectWebSocket(), 10000);
+    }
+  }
+
+  private handleWsTrade(data: Record<string, unknown>): void {
+    const wallet = ((data.proxyWallet as string) || '').toLowerCase();
+    const trader = this.traderMap.get(wallet);
+    if (!trader) return;
+
+    const id = (data.transactionHash as string) || `ws_${data.timestamp}_${data.conditionId}_${data.side}`;
+    if (this.seenTradeIds.has(id)) return;
+    this.seenTradeIds.add(id);
+
+    const timestamp = Number(data.timestamp || 0) * 1000;
+    const maxAge = Date.now() - 6 * 60 * 60_000;
+    if (timestamp < maxAge || timestamp <= (this.lastSeenTimestamp.get(trader.address) || maxAge)) return;
+
+    const activity: TraderActivity = {
+      id,
+      traderAddress: trader.address,
+      timestamp,
+      conditionId: (data.conditionId as string) || '',
+      tokenId: (data.asset as string) || '',
+      side: (data.side === 'BUY' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
+      size: Number(data.size || 0),
+      price: Number(data.price || 0),
+      outcome: (data.outcome as string) || '',
+      marketSlug: (data.slug as string) || '',
+      marketQuestion: (data.title as string) || '',
+      negRisk: false,
+    };
+
+    if (activity.price <= 0) return;
+
+    this.wsTradeCount++;
+    this.lastSeenTimestamp.set(trader.address, timestamp);
+
+    log.info({
+      trader: trader.alias,
+      market: activity.marketSlug,
+      side: activity.side,
+      size: activity.size,
+      price: activity.price,
+      source: 'ws',
+    }, 'New trader activity detected');
+
+    if (this.onShadowTrade) {
+      this.onShadowTrade(trader, activity).catch(e => log.error({ err: e }, 'WS shadow callback error'));
+    }
+    if (activity.side === 'BUY' && this.onNewTrade) {
+      this.onNewTrade(trader, activity).catch(e => log.error({ err: e }, 'WS trade callback error'));
+    }
   }
 
   private async pollNext(): Promise<void> {
