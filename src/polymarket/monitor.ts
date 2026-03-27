@@ -98,7 +98,7 @@ export class ActivityMonitor {
           if (msgCount <= 3) {
             log.info({ keys: Object.keys(msg), type: msg.type, topic: msg.topic, msgCount }, 'RTDS WS message sample');
           }
-          const trades = msg.data || msg.trades || (Array.isArray(msg) ? msg : null);
+          const trades = msg.payload || msg.data || msg.trades || (Array.isArray(msg) ? msg : null);
           if (trades && Array.isArray(trades)) {
             for (const t of trades) this.handleWsTrade(t);
           } else if (msg.proxyWallet || msg.asset) {
