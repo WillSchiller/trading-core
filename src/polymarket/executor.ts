@@ -113,6 +113,14 @@ export class CopyExecutor {
           gtcPrice = Math.round((bestAsk + (isShortLived ? 0.01 : 0)) / tick) * tick;
         }
       } catch { /* use mid price */ }
+      // Sanity check: GTC price must be within slippage of original mid
+      const gtcSlippage = Math.abs(gtcPrice - roundedPrice);
+      if (gtcSlippage > MAX_SLIPPAGE_CENTS / 100 || gtcPrice < 0.05) {
+        log.warn({ trader: trader.alias, market: activity.marketSlug, gtcPrice, midPrice: roundedPrice, slippage: (gtcSlippage * 100).toFixed(1) + 'c' }, 'GTC price too far from mid — skipping');
+        await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_slippage');
+        return { status: 'skipped_slippage' };
+      }
+
       log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice, shortLived: isShortLived }, 'FOK missed, placing GTC');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
