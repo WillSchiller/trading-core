@@ -33,6 +33,7 @@ export class PolymarketCopyTrader {
   private recencyWindow = 0;
   private recencyMinPF = 0.8;
   private recencyMinWR = 0.40;
+  private recentOrders = new Map<string, number>();
 
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
@@ -118,10 +119,17 @@ export class PolymarketCopyTrader {
               if (tradeSize < minBet) {
                 log.debug({ trader: trader.alias, market: activity.marketSlug, kellySize: tradeSize.toFixed(2) }, 'Below minimum bet');
               } else {
+              const dedupKey = `${activity.conditionId}_${activity.tokenId}`;
+              const lastOrder = this.recentOrders.get(dedupKey) || 0;
+              if (Date.now() - lastOrder < 60_000) {
+                log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — duplicate market within 60s');
+                return;
+              }
               log.info({ trader: trader.alias, market: activity.marketSlug, tradeSize: tradeSize.toFixed(2), notional: (tradeSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
               shadow.ourSize = tradeSize;
               const { allowed, release } = await this.riskManager.canTrade(tradeSize * activity.price, activity.conditionId);
               if (allowed) {
+                this.recentOrders.set(dedupKey, Date.now());
                 try {
                   const liveTradeId = await this.persistence.saveLiveTrade(shadow);
                   if (liveTradeId > 0 && this.executor.isLive()) {
