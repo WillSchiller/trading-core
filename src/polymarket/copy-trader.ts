@@ -122,7 +122,7 @@ export class PolymarketCopyTrader {
               } else {
               const dedupKey = `${activity.conditionId}_${activity.tokenId}`;
               const lastOrder = this.recentOrders.get(dedupKey) || 0;
-              if (Date.now() - lastOrder < 60_000) {
+              if (Date.now() - lastOrder < 600_000) {
                 log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — duplicate market within 60s');
                 return;
               }

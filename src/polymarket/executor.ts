@@ -103,12 +103,14 @@ export class CopyExecutor {
         }
       }
 
-      // FOK failed — fall back to GTC limit at ask with 60s timeout
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError }, 'FOK missed, trying GTC fallback');
+      // FOK failed — re-fetch mid price for GTC (may have moved since FOK attempt)
+      const freshMid = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
+      const gtcPrice = Math.round((freshMid ?? roundedPrice) / tick) * tick;
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice }, 'FOK missed, trying GTC fallback');
 
-      const size = Math.max(5, Math.round(sizeUsd / roundedPrice));
+      const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
-        { tokenID: activity.tokenId, price: roundedPrice, side: this.Side.BUY, size },
+        { tokenID: activity.tokenId, price: gtcPrice, side: this.Side.BUY, size },
         { tickSize, negRisk: activity.negRisk },
         this.OrderType.GTC,
       );
