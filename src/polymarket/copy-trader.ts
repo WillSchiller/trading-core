@@ -34,6 +34,7 @@ export class PolymarketCopyTrader {
   private recencyMinPF = 0.8;
   private recencyMinWR = 0.40;
   private recentOrders = new Map<string, number>();
+  private lastKnownCash = 0;
 
   constructor(pool: pg.Pool) {
     this.config = loadPolymarketConfig();
@@ -241,11 +242,15 @@ export class PolymarketCopyTrader {
     const liveTrades = await this.persistence.getUnresolvedLiveTrades();
     if (liveTrades.length === 0) return;
 
-    let cashBalance = 0;
+    let cashBalance = this.lastKnownCash;
     if (this.executor.isLive()) {
       try {
-        cashBalance = await this.executor.getBalance();
-      } catch { cashBalance = 0; }
+        const bal = await this.executor.getBalance();
+        if (bal >= 0) {
+          cashBalance = bal;
+          this.lastKnownCash = bal;
+        }
+      } catch { /* use last known balance */ }
     }
     let needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
 
