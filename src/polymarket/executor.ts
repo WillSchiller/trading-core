@@ -103,10 +103,16 @@ export class CopyExecutor {
         }
       }
 
-      // FOK failed — re-fetch mid price for GTC (may have moved since FOK attempt)
-      const freshMid = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
-      const gtcPrice = Math.round((freshMid ?? roundedPrice) / tick) * tick;
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice }, 'FOK missed, trying GTC fallback');
+      // FOK failed — get best ask from CLOB for GTC
+      let gtcPrice = roundedPrice;
+      try {
+        const askData = await this.clobClient.getPrice(activity.tokenId, this.Side.BUY);
+        const bestAsk = parseFloat(askData?.price || '0');
+        if (bestAsk > 0) {
+          gtcPrice = Math.round(bestAsk / tick) * tick;
+        }
+      } catch { /* use mid price */ }
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice }, 'FOK missed, trying GTC at best ask');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
