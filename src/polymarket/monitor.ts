@@ -89,20 +89,16 @@ export class ActivityMonitor {
         }, 5000);
       });
 
-      let msgCount = 0;
       this.ws.on('message', (data: Buffer) => {
         try {
           const raw = data.toString();
+          if (!raw || raw.length < 2) return;
           const msg = JSON.parse(raw);
-          msgCount++;
-          if (msgCount <= 3) {
-            log.info({ keys: Object.keys(msg), type: msg.type, topic: msg.topic, msgCount }, 'RTDS WS message sample');
-          }
-          const trades = msg.payload || msg.data || msg.trades || (Array.isArray(msg) ? msg : null);
-          if (trades && Array.isArray(trades)) {
-            for (const t of trades) this.handleWsTrade(t);
-          } else if (msg.proxyWallet || msg.asset) {
-            this.handleWsTrade(msg);
+          const payload = msg.payload || msg.data;
+          if (Array.isArray(payload)) {
+            for (const t of payload) this.handleWsTrade(t as Record<string, unknown>);
+          } else if (payload && typeof payload === 'object') {
+            this.handleWsTrade(payload as Record<string, unknown>);
           }
         } catch { /* ignore parse errors */ }
       });
