@@ -252,7 +252,8 @@ export class PolymarketCopyTrader {
         }
       } catch { /* use last known balance */ }
     }
-    let needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
+    const maxKellyBet = this.config.bankrollUsd * 0.125 * 0.5;
+    let needCash = cashBalance < maxKellyBet;
 
     let updated = 0;
     let resolved = 0;
