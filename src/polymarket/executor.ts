@@ -103,18 +103,16 @@ export class CopyExecutor {
         }
       }
 
-      // FOK failed — bid 1c above best ask to jump queue
-      let gtcPrice = roundedPrice + 0.01;
+      // FOK failed — place persistent GTC at best ask
+      let gtcPrice = roundedPrice;
       try {
         const askData = await this.clobClient.getPrice(activity.tokenId, this.Side.BUY);
         const bestAsk = parseFloat(askData?.price || '0');
         if (bestAsk > 0) {
-          gtcPrice = Math.round((bestAsk + 0.01) / tick) * tick;
+          gtcPrice = Math.round(bestAsk / tick) * tick;
         }
-      } catch { /* use mid + 1c */ }
-      // Don't overpay — cap at 3c above mid
-      gtcPrice = Math.min(gtcPrice, roundedPrice + 0.03);
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice }, 'FOK missed, trying GTC 1c above ask');
+      } catch { /* use mid price */ }
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice }, 'FOK missed, placing persistent GTC at ask');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
