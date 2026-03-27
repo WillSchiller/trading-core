@@ -241,11 +241,11 @@ export class PolymarketCopyTrader {
     const liveTrades = await this.persistence.getUnresolvedLiveTrades();
     if (liveTrades.length === 0) return;
 
-    let cashBalance = Infinity;
+    let cashBalance = 0;
     if (this.executor.isLive()) {
       try {
         cashBalance = await this.executor.getBalance();
-      } catch { /* assume we have cash */ }
+      } catch { cashBalance = 0; }
     }
     let needCash = cashBalance < this.config.riskLimits.maxPositionUsd;
 
