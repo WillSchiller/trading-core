@@ -294,7 +294,7 @@ export class PolymarketCopyTrader {
               await this.persistence.updateLiveTradePrice(trade.id, currentPrice, pnl);
               updated++;
 
-              if (needCash && trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
+              if (trade.executionStatus === 'filled' && currentPrice >= 0.995 && trade.fillSize) {
                 log.info({ market: trade.marketSlug, price: currentPrice, size: trade.fillSize, cashBalance: cashBalance.toFixed(2) }, 'Auto-selling decided winner');
                 const activity: import('./types.js').TraderActivity = {
                   id: '', traderAddress: '', timestamp: Date.now(),
