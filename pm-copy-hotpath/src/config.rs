@@ -101,6 +101,10 @@ impl AppConfig {
         if Path::new("config/pm-hotpath.toml").exists() {
             figment = figment.merge(Toml::file("config/pm-hotpath.toml"));
         }
+        // Docker: bind-mount config at /app/pm-hotpath/ (see docker-compose.prod.yml)
+        if Path::new("/app/pm-hotpath/pm-hotpath.toml").exists() {
+            figment = figment.merge(Toml::file("/app/pm-hotpath/pm-hotpath.toml"));
+        }
         figment = figment.merge(Env::prefixed("PM_HOTPATH_").split("__"));
 
         figment
