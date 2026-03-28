@@ -66,6 +66,8 @@ services:
       PMM_EXIT_BEFORE_RESOLUTION_H: ${PMM_EXIT_BEFORE_RESOLUTION_H:-6}
 
       POLYMARKET_ENABLED: ${POLYMARKET_ENABLED:-true}
+      # Set to false when running Rust `pm-hotpath` so only one process copies RTDS → CLOB
+      PM_NODE_COPY_TRADER: ${PM_NODE_COPY_TRADER:-true}
       POLYMARKET_PAPER_MODE: ${POLYMARKET_PAPER_MODE:-false}
       POLYMARKET_BANKROLL_USD: ${POLYMARKET_BANKROLL_USD:-76}
       POLYMARKET_MAX_POSITION_USD: ${POLYMARKET_MAX_POSITION_USD:-1}
@@ -132,6 +134,37 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # Rust RTDS → CLOB hot path. Enable with COMPOSE_PROFILES=pm-hotpath (see deploy.sh / .env).
+  # Use PM_NODE_COPY_TRADER=false on `app` when this profile is active.
+  pm-hotpath:
+    profiles:
+      - pm-hotpath
+    image: ${ECR_REPOSITORY_URL}:${IMAGE_TAG:-latest}
+    container_name: dislocation-pm-hotpath
+    restart: unless-stopped
+    command: ["/usr/local/bin/pm-copy-hotpath"]
+    working_dir: /app/pm-hotpath
+    environment:
+      RUST_LOG: ${PM_HOTPATH_LOG:-info,pm_copy_hotpath=debug}
+      POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+    volumes:
+      - ../pm-hotpath:/app/pm-hotpath:ro
+    networks:
+      - app-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
 
   postgres:
     image: postgres:16-alpine

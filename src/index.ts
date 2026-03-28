@@ -623,20 +623,6 @@ async function main() {
       }
     }
 
-    // Start Polymarket copy trader if enabled
-    if (process.env.POLYMARKET_ENABLED === 'true') {
-      polymarketTrader = new PolymarketCopyTrader(pool);
-      await polymarketTrader.start();
-      logger.info('Polymarket copy trader started');
-    }
-
-    // Start Polymarket market maker if enabled
-    if (process.env.PMM_ENABLED === 'true') {
-      pmmManager = new PMMManager(pool);
-      await pmmManager.start();
-      logger.info('Polymarket market maker started');
-    }
-
     pcaMonitor.setMarketContextProvider((asset) => marketContext?.getContext(asset));
 
     // Helper to wire persistence for a PCA monitor
@@ -786,6 +772,24 @@ async function main() {
         }
       }
     }, 30000);
+  }
+
+  // Polymarket copy trader (Node RTDS path) — disable when using Rust `pm-hotpath` container (PM_NODE_COPY_TRADER=false)
+  if (
+    process.env.POLYMARKET_ENABLED === 'true' &&
+    process.env.PM_NODE_COPY_TRADER !== 'false'
+  ) {
+    polymarketTrader = new PolymarketCopyTrader(pool);
+    await polymarketTrader.start();
+    logger.info('Polymarket copy trader started (Node RTDS path)');
+  } else if (process.env.POLYMARKET_ENABLED === 'true' && process.env.PM_NODE_COPY_TRADER === 'false') {
+    logger.info('Polymarket copy trader disabled in Node (PM_NODE_COPY_TRADER=false — use pm-hotpath container)');
+  }
+
+  if (process.env.PMM_ENABLED === 'true') {
+    pmmManager = new PMMManager(pool);
+    await pmmManager.start();
+    logger.info('Polymarket market maker started');
   }
 
   // Perps Execution Layer — supports multiple runs (paper + live side-by-side)

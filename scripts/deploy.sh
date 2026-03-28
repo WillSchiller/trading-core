@@ -4,11 +4,15 @@ set -e
 cd /home/ubuntu/app
 
 echo "=== Fetching deployment files ==="
-mkdir -p docker scripts grafana/provisioning grafana/dashboards sql
+mkdir -p docker scripts grafana/provisioning grafana/dashboards sql pm-hotpath
 aws s3 cp s3://blockhelixasia/deploy/docker-compose.prod.yml docker/docker-compose.prod.yml
 aws s3 cp s3://blockhelixasia/deploy/fetch-secrets.sh scripts/fetch-secrets.sh
 aws s3 sync s3://blockhelixasia/deploy/grafana/ grafana/ --delete
 aws s3 sync s3://blockhelixasia/deploy/sql/ sql/ --delete
+aws s3 sync s3://blockhelixasia/deploy/pm-hotpath/ pm-hotpath/ 2>/dev/null || true
+if [ ! -f pm-hotpath/traders.json ] || [ ! -f pm-hotpath/pm-hotpath.toml ]; then
+  echo "WARNING: pm-hotpath needs traders.json + pm-hotpath.toml under /home/ubuntu/app/pm-hotpath (see repo pm-hotpath/*.example). Container may restart until present."
+fi
 # NOTE: config/ is NOT synced - it is baked into the Docker image to ensure
 # config and code are always in sync. This prevents crash-loops from config/code mismatch.
 chmod +x scripts/*.sh
@@ -82,6 +86,13 @@ sudo chmod 700 /data/postgres
 echo "=== Pulling images ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml pull
 
+# Optional Rust copy hot path: set PM_HOTPATH_ENABLED=true in .env (with pm-hotpath/ on host and PM_NODE_COPY_TRADER=false).
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-}"
+if grep -q '^PM_HOTPATH_ENABLED=true' .env 2>/dev/null; then
+  export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}pm-hotpath"
+  echo "COMPOSE_PROFILES includes pm-hotpath (Rust RTDS → CLOB)"
+fi
+
 echo "=== Starting postgres first ==="
 docker-compose --env-file .env -f docker/docker-compose.prod.yml up -d postgres
 
@@ -110,6 +121,9 @@ docker-compose --env-file .env -f docker/docker-compose.prod.yml ps
 echo "=== Final container logs (if any errors) ==="
 docker logs dislocation-postgres 2>&1 | tail -20 || true
 docker logs dislocation-trader-app 2>&1 | tail -20 || true
+if docker ps -q -f name=dislocation-pm-hotpath | grep -q .; then
+  docker logs dislocation-pm-hotpath 2>&1 | tail -20 || true
+fi
 
 echo "=== Verifying deployment ==="
 sleep 5

@@ -125,8 +125,10 @@ jobs:
           aws s3 cp scripts/deploy.sh s3://blockhelixasia/deploy/deploy.sh
           aws s3 sync grafana/ s3://blockhelixasia/deploy/grafana/ --delete
           aws s3 sync sql/ s3://blockhelixasia/deploy/sql/ --delete
+          aws s3 sync pm-hotpath/ s3://blockhelixasia/deploy/pm-hotpath/
           # NOTE: config/ is NOT synced to S3 - it is baked into the Docker image
           # to ensure config and code are always in sync. See docker/Dockerfile.
+          # pm-hotpath/ ships *.example templates; live traders.json stays on the host (not deleted by sync down).
 
       - name: Deploy via SSM
         env:

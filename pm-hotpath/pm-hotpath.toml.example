@@ -1,0 +1,19 @@
+# Copy to pm-hotpath.toml on the server (same directory as traders.json).
+# Container also loads /app/pm-hotpath/pm-hotpath.toml if present (see config.rs).
+
+feed_mode = "rtds_activity"
+rtds_ws_url = "wss://ws-live-data.polymarket.com"
+clob_http_url = "https://clob.polymarket.com"
+gamma_http_url = "https://gamma-api.polymarket.com"
+
+score_threshold = 0.5
+copy_size_usd = 25.0
+min_entry_price = 0.15
+max_entry_price = 0.85
+
+# Relative to this file’s directory when using default cwd layout
+traders_json_path = "traders.json"
+
+dry_run = true
+# Match POLYMARKET_SIGNATURE_TYPE in .env (0=EOA, 1=Proxy, 2=GnosisSafe)
+signature_type = 2

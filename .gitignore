@@ -10,6 +10,10 @@ dist/
 # Local trader scores (use traders.example.json; real file often has real addresses)
 pm-copy-hotpath/traders.json
 
+# Prod bind-mount for Rust hot path (see pm-hotpath/*.example)
+pm-hotpath/pm-hotpath.toml
+pm-hotpath/traders.json
+
 # Environment
 .env
 .env.local

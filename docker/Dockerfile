@@ -1,4 +1,20 @@
-# Build stage
+# --- Rust: Polymarket RTDS → CLOB hot path (no Node on this path) ---
+FROM rust:1.88-bookworm AS rust-hotpath
+
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    cmake \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pm-copy-hotpath/Cargo.toml pm-copy-hotpath/Cargo.lock ./
+COPY pm-copy-hotpath/src ./src
+COPY pm-copy-hotpath/benches ./benches
+
+RUN cargo build --locked --release
+
+# --- Node app (existing) ---
 FROM node:20-slim AS builder
 
 WORKDIR /build
@@ -46,6 +62,8 @@ COPY --chown=trader:trader sql ./sql
 COPY --chown=trader:trader scripts ./scripts
 COPY --chown=trader:trader models ./models
 
+USER root
+COPY --from=rust-hotpath --chmod=755 /build/target/release/pm-copy-hotpath /usr/local/bin/pm-copy-hotpath
 USER trader
 
 EXPOSE 8080
