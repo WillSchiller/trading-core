@@ -110,6 +110,10 @@ export class PolymarketCopyTrader {
                 scores = scoreResult.scores || {};
                 if (scorerPassed && scoreResult.kellySize > 0) {
                   tradeSize = scoreResult.kellySize;
+                  // Cap 5-minute markets at $2 — asymmetric payoff but high loss rate
+                  if (/updown-[0-9]+m/.test(activity.marketSlug)) {
+                    tradeSize = Math.min(tradeSize, 2);
+                  }
                 }
               }
               if (!scorerPassed) {
