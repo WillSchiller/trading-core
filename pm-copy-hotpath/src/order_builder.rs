@@ -87,7 +87,11 @@ impl OrderExecutor {
                 self.execute_copy_buy(signal, size_usd, min_entry, max_entry)
                     .await
             }
-            CopySide::Sell => self.execute_copy_sell(signal).await,
+            CopySide::Sell => {
+                // Sells handled by Node app which tracks positions
+                tracing::debug!("SELL signal ignored — handled by Node position tracker");
+                Ok(())
+            }
         }
     }
 
