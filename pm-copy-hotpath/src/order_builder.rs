@@ -165,6 +165,11 @@ impl OrderExecutor {
                 let _ = posted;
             }
             Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("not enough balance") {
+                    tracing::debug!("FAK rejected: no balance — skipping GTC too");
+                    return Err(e);
+                }
                 tracing::debug!(error = %e, "FAK error, falling through to GTC");
             }
         }
