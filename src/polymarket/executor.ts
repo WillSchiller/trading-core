@@ -59,7 +59,7 @@ export class CopyExecutor {
         return { status: 'skipped_small' };
       }
 
-      // Try FOK first for instant fill
+      // Try FAK (Fill And Kill) — takes whatever liquidity is available
       const fokResult = await this.clobClient.createAndPostMarketOrder(
         {
           tokenID: activity.tokenId,
@@ -68,7 +68,7 @@ export class CopyExecutor {
           price: roundedPrice,
         },
         { tickSize, negRisk: activity.negRisk },
-        this.OrderType.FOK,
+        this.OrderType.FAK,
       );
 
       const fokError = fokResult?.error || fokResult?.errorMsg;
