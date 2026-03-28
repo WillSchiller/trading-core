@@ -50,28 +50,9 @@ export class CopyExecutor {
     }
 
     try {
-      const midPrice = await this.fetchMidPrice(activity.conditionId, activity.tokenId);
-      const orderPrice = midPrice ?? activity.price;
-
-      const slippage = Math.abs(orderPrice - activity.price);
-      const maxSlip = activity.price * MAX_SLIPPAGE_PCT;
-      if (slippage > maxSlip) {
-        log.warn({
-          trader: trader.alias,
-          market: activity.marketSlug,
-          traderPrice: activity.price,
-          currentMid: orderPrice,
-          slippage: (slippage * 100).toFixed(1) + 'c',
-        }, 'Skipped — price moved too far from trader fill');
-        await this.persistence.updateLiveTradeExecution(
-          liveTradeId, null, null, null, 'skipped_slippage',
-        );
-        return { status: 'skipped_slippage' };
-      }
-
       const tickSize = '0.01';
       const tick = parseFloat(tickSize);
-      const roundedPrice = Math.round(orderPrice / tick) * tick;
+      const roundedPrice = Math.round(activity.price / tick) * tick;
       if (sizeUsd < 1) {
         log.warn({ trader: trader.alias, market: activity.marketSlug, sizeUsd }, 'Order below $1 minimum, skipping');
         await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_small');
@@ -104,26 +85,9 @@ export class CopyExecutor {
         }
       }
 
-      // FOK failed — place GTC. Short-lived markets get +1c to fill fast.
-      const isShortLived = /updown-[0-9]+m/.test(activity.marketSlug);
-      let gtcPrice = roundedPrice;
-      try {
-        const askData = await this.clobClient.getPrice(activity.tokenId, this.Side.BUY);
-        const bestAsk = parseFloat(askData?.price || '0');
-        if (bestAsk > 0) {
-          gtcPrice = Math.round((bestAsk + (isShortLived ? 0.01 : 0)) / tick) * tick;
-        }
-      } catch { /* use mid price */ }
-      // Sanity check: GTC price must be within slippage of original mid
-      const gtcSlippage = Math.abs(gtcPrice - roundedPrice);
-      const maxGtcSlip = roundedPrice * MAX_SLIPPAGE_PCT;
-      if (gtcSlippage > maxGtcSlip || gtcPrice < 0.05) {
-        log.warn({ trader: trader.alias, market: activity.marketSlug, gtcPrice, midPrice: roundedPrice, slippage: (gtcSlippage * 100).toFixed(1) + 'c' }, 'GTC price too far from mid — skipping');
-        await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_slippage');
-        return { status: 'skipped_slippage' };
-      }
-
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, midPrice: roundedPrice, shortLived: isShortLived }, 'FOK missed, placing GTC');
+      // FOK failed — GTC at trader's price + 1c to jump queue
+      const gtcPrice = Math.min(0.99, Math.round((roundedPrice + 0.01) / tick) * tick);
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, traderPrice: roundedPrice }, 'FOK missed, placing GTC at trader price +1c');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
