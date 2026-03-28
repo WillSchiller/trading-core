@@ -4,6 +4,12 @@ node_modules/
 # Build output
 dist/
 
+# Rust
+**/target/
+
+# Local trader scores (use traders.example.json; real file often has real addresses)
+pm-copy-hotpath/traders.json
+
 # Environment
 .env
 .env.local
