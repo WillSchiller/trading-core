@@ -59,6 +59,15 @@ export class CopyExecutor {
         return { status: 'skipped_small' };
       }
 
+      // Log book depth for future model training (non-blocking)
+      let bookDepth = 0;
+      try {
+        const book = await this.clobClient.getOrderBook(activity.tokenId);
+        const asks = book?.asks || [];
+        bookDepth = asks.reduce((s: number, a: { size: string }) => s + parseFloat(a.size || '0'), 0);
+        await this.persistence.getPool().query('UPDATE pm_live_trades SET book_depth = $1 WHERE id = $2', [bookDepth, liveTradeId]);
+      } catch { /* non-critical */ }
+
       // Try FAK (Fill And Kill) — takes whatever liquidity is available
       const fokResult = await this.clobClient.createAndPostMarketOrder(
         {
