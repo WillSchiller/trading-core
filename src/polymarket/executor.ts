@@ -7,7 +7,7 @@ import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js
 
 const log = createChildLogger({ component: 'pm-executor' });
 
-const MAX_SLIPPAGE_PCT = 0.15; // 15% of entry price
+const MAX_SLIPPAGE_PCT = 0.50; // 50% of entry price — aggressive fill, accept worse entry
 const FILL_CHECK_DELAY_MS = 3000;
 
 export class CopyExecutor {
