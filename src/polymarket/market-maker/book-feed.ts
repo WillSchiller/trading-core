@@ -80,7 +80,8 @@ export class PMMBookFeed {
   }
 
   private sendSubscribe(tokenId: string): void {
-    this.ws!.send(JSON.stringify({
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({
       assets_ids: [tokenId],
       type: 'market',
     }));
