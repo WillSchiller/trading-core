@@ -55,6 +55,7 @@ export class PolymarketCopyTrader {
     this.monitor.setTraders(traders);
 
     this.monitor.setShadowCallback(async (trader, activity) => {
+      const detectTime = Date.now();
       try {
         const proportionalSize = (activity.size / Math.max(trader.bankrollEstimate, 1)) * this.config.bankrollUsd;
         const clampedSize = Math.min(proportionalSize, this.config.riskLimits.maxPositionUsd);
@@ -77,7 +78,8 @@ export class PolymarketCopyTrader {
           currentPrice: activity.price,
           traderTimestamp: activity.timestamp,
         };
-        await this.persistence.saveShadowTrade(shadow);
+        // Defer shadow save — don't block the hot path
+        this.persistence.saveShadowTrade(shadow).catch(() => {});
         if (activity.side === 'SELL' && this.executor.isLive()) {
           const position = await this.persistence.getFilledPositionForSell(trader.address, activity.conditionId, activity.tokenId);
           if (position) {
@@ -86,9 +88,10 @@ export class PolymarketCopyTrader {
           }
         }
         if (trader.copyEligible && activity.side === 'BUY') {
-          const minEntry = Number(process.env.PM_MIN_ENTRY_PRICE || 0.15);
-          const maxEntry = Number(process.env.PM_MAX_ENTRY_PRICE || 0.85);
-          if (activity.price < minEntry || activity.price > maxEntry) {
+          if (/updown-5m/.test(activity.marketSlug)) {
+            log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — 5-min market blocked');
+          } else
+          if (activity.price < Number(process.env.PM_MIN_ENTRY_PRICE || 0.15) || activity.price > Number(process.env.PM_MAX_ENTRY_PRICE || 0.85)) {
             log.debug({ trader: trader.alias, price: activity.price, market: activity.marketSlug }, 'Skipped — entry price outside range');
           } else {
             const traderStats = await this.persistence.getTraderLiveStats(trader.address);
@@ -137,7 +140,8 @@ export class PolymarketCopyTrader {
                 log.debug({ trader: trader.alias, market: activity.marketSlug, existing: existingPosition.tradeCount }, 'Skipped — already have position in this market');
                 return;
               }
-              log.info({ trader: trader.alias, market: activity.marketSlug, tradeSize: tradeSize.toFixed(2), notional: (tradeSize * activity.price).toFixed(2) }, 'Passed all gates, checking risk');
+              const gateLatency = Date.now() - detectTime;
+              log.info({ trader: trader.alias, market: activity.marketSlug, tradeSize: tradeSize.toFixed(2), latencyMs: gateLatency }, 'Passed all gates');
               shadow.ourSize = tradeSize;
               const { allowed, release } = await this.riskManager.canTrade(tradeSize * activity.price, activity.conditionId);
               if (allowed) {

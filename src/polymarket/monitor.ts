@@ -25,6 +25,7 @@ export class ActivityMonitor {
   private ws: WebSocket | null = null;
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private wsPingTimer: ReturnType<typeof setInterval> | null = null;
+  private negRiskCache = new Map<string, boolean>();
 
   private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(private readonly config: PolymarketConfig) {}
@@ -131,11 +132,19 @@ export class ActivityMonitor {
     const maxAge = Date.now() - 6 * 60 * 60_000;
     if (timestamp < maxAge || timestamp <= (this.lastSeenTimestamp.get(trader.address) || maxAge)) return;
 
+    const conditionId = (data.conditionId as string) || '';
+    let negRisk = this.negRiskCache.get(conditionId);
+    if (negRisk === undefined) {
+      // Fire-and-forget lookup, default false for now
+      negRisk = false;
+      this.lookupNegRisk(conditionId).catch(() => {});
+    }
+
     const activity: TraderActivity = {
       id,
       traderAddress: trader.address,
       timestamp,
-      conditionId: (data.conditionId as string) || '',
+      conditionId,
       tokenId: (data.asset as string) || '',
       side: (data.side === 'BUY' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
       size: Number(data.size || 0),
@@ -143,7 +152,7 @@ export class ActivityMonitor {
       outcome: (data.outcome as string) || '',
       marketSlug: (data.slug as string) || '',
       marketQuestion: (data.title as string) || '',
-      negRisk: false,
+      negRisk,
     };
 
     if (activity.price <= 0) return;
@@ -166,6 +175,17 @@ export class ActivityMonitor {
     if (activity.side === 'BUY' && this.onNewTrade) {
       this.onNewTrade(trader, activity).catch(e => log.error({ err: e }, 'WS trade callback error'));
     }
+  }
+
+  private async lookupNegRisk(conditionId: string): Promise<void> {
+    try {
+      const resp = await fetch(`${this.config.gammaApiUrl}/markets?condition_id=${conditionId}`);
+      if (!resp.ok) return;
+      const data = await resp.json() as Array<{ neg_risk?: boolean }>;
+      if (data.length > 0) {
+        this.negRiskCache.set(conditionId, !!data[0].neg_risk);
+      }
+    } catch { /* non-critical */ }
   }
 
   private async pollNext(): Promise<void> {

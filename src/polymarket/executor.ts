@@ -87,7 +87,7 @@ export class CopyExecutor {
 
       // FOK failed — GTC at trader's price + 5c to catch the move
       const gtcPrice = Math.min(0.99, Math.round((roundedPrice + 0.05) / tick) * tick);
-      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, traderPrice: roundedPrice }, 'FOK missed, placing GTC at trader price +1c');
+      log.info({ trader: trader.alias, market: activity.marketSlug, fokError, gtcPrice, traderPrice: roundedPrice }, 'FOK missed, placing GTC at trader price +5c');
 
       const size = Math.max(5, Math.round(sizeUsd / gtcPrice));
       const gtcResult = await this.clobClient.createAndPostOrder(
