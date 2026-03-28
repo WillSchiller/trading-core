@@ -7,7 +7,7 @@ import type { PolymarketConfig, TrackedTrader, TraderActivity } from './types.js
 
 const log = createChildLogger({ component: 'pm-executor' });
 
-const MAX_SLIPPAGE_CENTS = 3;
+const MAX_SLIPPAGE_PCT = 0.15; // 15% of entry price
 const FILL_CHECK_DELAY_MS = 3000;
 
 export class CopyExecutor {
@@ -54,7 +54,8 @@ export class CopyExecutor {
       const orderPrice = midPrice ?? activity.price;
 
       const slippage = Math.abs(orderPrice - activity.price);
-      if (slippage > MAX_SLIPPAGE_CENTS / 100) {
+      const maxSlip = activity.price * MAX_SLIPPAGE_PCT;
+      if (slippage > maxSlip) {
         log.warn({
           trader: trader.alias,
           market: activity.marketSlug,
@@ -115,7 +116,8 @@ export class CopyExecutor {
       } catch { /* use mid price */ }
       // Sanity check: GTC price must be within slippage of original mid
       const gtcSlippage = Math.abs(gtcPrice - roundedPrice);
-      if (gtcSlippage > MAX_SLIPPAGE_CENTS / 100 || gtcPrice < 0.05) {
+      const maxGtcSlip = roundedPrice * MAX_SLIPPAGE_PCT;
+      if (gtcSlippage > maxGtcSlip || gtcPrice < 0.05) {
         log.warn({ trader: trader.alias, market: activity.marketSlug, gtcPrice, midPrice: roundedPrice, slippage: (gtcSlippage * 100).toFixed(1) + 'c' }, 'GTC price too far from mid — skipping');
         await this.persistence.updateLiveTradeExecution(liveTradeId, null, null, null, 'skipped_slippage');
         return { status: 'skipped_slippage' };
