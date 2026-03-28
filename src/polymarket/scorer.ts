@@ -27,7 +27,9 @@ export class TradeScorer {
   private capitalSession: any = null;
   private kellySession: any = null;
   private kellyProperSession: any = null;
+  private apySession: any = null;
   private kellyCalibration: { x: number[]; y: number[] } | null = null;
+  private apyCalibration: { x: number[]; y: number[] } | null = null;
   private traderStats = new Map<string, TraderRollingStats>();
   private marketCounts = new Map<string, number>();
   private minScore: number;
@@ -58,6 +60,13 @@ export class TradeScorer {
         const fs = await import('fs');
         this.kellyCalibration = JSON.parse(fs.readFileSync(calPath, 'utf-8'));
       } catch { /* optional */ }
+      const apyPath = path.resolve(__dirname, '../../models/pm_scorer_apy.onnx');
+      try { this.apySession = await ort.InferenceSession.create(apyPath); } catch { /* optional */ }
+      const apyCalPath = path.resolve(__dirname, '../../models/pm_apy_calibration.json');
+      try {
+        const fs = await import('fs');
+        this.apyCalibration = JSON.parse(fs.readFileSync(apyCalPath, 'utf-8'));
+      } catch { /* optional */ }
       this.enabled = true;
       log.info({ minScore: this.minScore, activeModel: this.activeModel, hasCapitalModel: !!this.capitalSession, hasKellyModel: !!this.kellySession }, 'ML scorer loaded');
     } catch (err) {
@@ -73,7 +82,7 @@ export class TradeScorer {
   async score(
     trader: TrackedTrader,
     activity: TraderActivity,
-  ): Promise<{ score: number; pass: boolean; kellySize: number; scores: { winScore?: number; capScore?: number; calProb?: number; kellySize?: number } }> {
+  ): Promise<{ score: number; pass: boolean; kellySize: number; scores: { winScore?: number; capScore?: number; calProb?: number; kellySize?: number; apyScore?: number } }> {
     if (!this.enabled || !this.session) {
       return { score: 1.0, pass: true, kellySize: 0, scores: {} };
     }
@@ -116,6 +125,22 @@ export class TradeScorer {
         properKellySize = Math.round(bankroll * kellyF * 100) / 100;
       }
 
+      // APY model (shadow scoring only — has extra payoff_ratio feature)
+      let apyScore = 0;
+      if (this.apySession) {
+        const apyFeatures = [...features];
+        const payoffRatio = (1 / Math.max(activity.price, 0.01)) - 1;
+        apyFeatures.splice(3, 0, payoffRatio); // insert payoff_ratio at position 3
+        const ort2 = await import('onnxruntime-node');
+        const apyTensor = new ort2.Tensor('float32', Float32Array.from(apyFeatures), [1, 17]);
+        try {
+          const apyResult = await this.apySession.run({ features: apyTensor });
+          const apyProbs = apyResult.probabilities?.data || apyResult.output_probability?.data;
+          const rawApy = (apyProbs && apyProbs.length >= 2) ? apyProbs[1] as number : 0.5;
+          apyScore = this.apyCalibration ? this.calibrateWith(rawApy, this.apyCalibration) : rawApy;
+        } catch { /* optional */ }
+      }
+
       // Old Kelly (regression-based)
       const bankroll = Number(process.env.POLYMARKET_BANKROLL_USD || 500);
       const edge = Math.max(0, kellyScore as number);
@@ -133,17 +158,30 @@ export class TradeScorer {
         winScore: (winScore as number).toFixed(3),
         capScore: (capScore as number).toFixed(3),
         calProb: calibratedProb.toFixed(3),
-        oldKelly: oldKellySize.toFixed(2),
+        apyScore: apyScore.toFixed(3),
         properKelly: properKellySize.toFixed(2),
         active: this.activeModel,
         pass,
       }, 'Trade scored');
 
-      return { score: activeScore as number, pass, kellySize, scores: { winScore: winScore as number, capScore: capScore as number, calProb: calibratedProb, kellySize } };
+      return { score: activeScore as number, pass, kellySize, scores: { winScore: winScore as number, capScore: capScore as number, calProb: calibratedProb, kellySize, apyScore } };
     } catch (err) {
       log.error({ error: (err as Error).message }, 'Scoring error — allowing trade');
       return { score: 1.0, pass: true, kellySize: 0, scores: {} };
     }
+  }
+
+  private calibrateWith(rawProb: number, cal: { x: number[]; y: number[] }): number {
+    const { x, y } = cal;
+    if (rawProb <= x[0]) return y[0];
+    if (rawProb >= x[x.length - 1]) return y[y.length - 1];
+    for (let i = 0; i < x.length - 1; i++) {
+      if (rawProb >= x[i] && rawProb <= x[i + 1]) {
+        const t = (rawProb - x[i]) / (x[i + 1] - x[i]);
+        return y[i] + t * (y[i + 1] - y[i]);
+      }
+    }
+    return rawProb;
   }
 
   private calibrate(rawProb: number): number {
