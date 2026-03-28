@@ -196,6 +196,7 @@ impl OrderExecutor {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn execute_copy_sell(&self, signal: &TradeSignal) -> Result<(), HotPathError> {
         if signal.size < 5.0 {
             warn!(size = signal.size, "SELL below minimum share size (5)");
