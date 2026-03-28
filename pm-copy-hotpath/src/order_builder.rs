@@ -155,11 +155,18 @@ impl OrderExecutor {
             .sign(self.signer.as_ref(), market)
             .await
             .map_err(HotPathError::from)?;
-        let posted = self.client.post_order(signed).await?;
-
-        if posted.success {
-            tracing::info!(order_id = %posted.order_id, "BUY FAK posted");
-            return Ok(());
+        match self.client.post_order(signed).await {
+            Ok(posted) if posted.success => {
+                tracing::info!(order_id = %posted.order_id, "BUY FAK posted");
+                return Ok(());
+            }
+            Ok(posted) => {
+                tracing::debug!("FAK not matched, falling through to GTC");
+                let _ = posted;
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "FAK error, falling through to GTC");
+            }
         }
 
         let gtc_raw = (rounded + dec!(0.05)).min(dec!(0.99));
