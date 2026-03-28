@@ -1,3 +1,13 @@
+# Deploy Node app to EC2: build Docker image → ECR → SSM runs deploy.sh on the instance.
+#
+# Required GitHub repository secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID      — IAM user/key with ECR push, S3 write to deploy bucket, SSM SendCommand
+#   AWS_SECRET_ACCESS_KEY
+#   ECR_REGISTRY           — e.g. 386166838496.dkr.ecr.eu-west-1.amazonaws.com (no trailing slash)
+#
+# Required on the EC2 instance (IAM instance profile): S3 read deploy prefix, ECR pull, Secrets Manager.
+# Instance must be running and tagged Name=dislocation-trader-production (see INSTANCE_NAME below).
+
 name: Deploy
 
 on:
@@ -98,6 +108,15 @@ jobs:
             --output text)
           echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "instance-ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+
+      - name: Verify EC2 instance
+        run: |
+          IID="${{ steps.get-instance.outputs.instance-id }}"
+          if [ -z "$IID" ] || [ "$IID" = "None" ] || [ "$IID" = "null" ]; then
+            echo "::error::No running EC2 instance with tag Name='${{ env.INSTANCE_NAME }}' in ${{ env.AWS_REGION }}. Start the instance or fix INSTANCE_NAME / AWS credentials."
+            exit 1
+          fi
+          echo "Using instance $IID (IP ${{ steps.get-instance.outputs.instance-ip }})"
 
       - name: Upload deployment files via S3
         run: |

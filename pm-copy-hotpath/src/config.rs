@@ -2,7 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use figment::{Figment, providers::{Env, Format, Toml}};
+use figment::{
+    Figment,
+    providers::{Env, Format, Toml},
+};
 use serde::Deserialize;
 
 use crate::types::{FeedMode, HotPathError};
@@ -100,7 +103,9 @@ impl AppConfig {
         }
         figment = figment.merge(Env::prefixed("PM_HOTPATH_").split("__"));
 
-        figment.extract().map_err(|e| HotPathError::Config(e.to_string()))
+        figment
+            .extract()
+            .map_err(|e| HotPathError::Config(e.to_string()))
     }
 
     pub fn feed_mode(&self) -> FeedMode {

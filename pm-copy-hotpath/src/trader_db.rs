@@ -62,7 +62,13 @@ mod tests {
         let p = dir.join("pm-traders-test.json");
         std::fs::write(&p, &json).unwrap();
         let db = TraderDb::load(&p).unwrap();
-        assert!((db.score_for("0xabcdef0123456789abcdef0123456789abcdef01").unwrap() - 0.9).abs() < 1e-9);
+        assert!(
+            (db.score_for("0xabcdef0123456789abcdef0123456789abcdef01")
+                .unwrap()
+                - 0.9)
+                .abs()
+                < 1e-9
+        );
         std::fs::remove_file(p).ok();
     }
 }

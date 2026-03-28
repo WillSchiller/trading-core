@@ -104,7 +104,10 @@ impl OrderExecutor {
         }
 
         if signal.price < min_entry || signal.price > max_entry {
-            warn!(price = signal.price, min_entry, max_entry, "entry price band");
+            warn!(
+                price = signal.price,
+                min_entry, max_entry, "entry price band"
+            );
             return Ok(());
         }
 
@@ -112,9 +115,9 @@ impl OrderExecutor {
             U256::from_str(&signal.token_id).map_err(|e| HotPathError::Clob(e.to_string()))?;
 
         let tick = dec!(0.01);
-        let rounded = (Decimal::from_f64_retain(signal.price).ok_or_else(|| {
-            HotPathError::Config("bad signal.price".to_owned())
-        })? / tick)
+        let rounded = (Decimal::from_f64_retain(signal.price)
+            .ok_or_else(|| HotPathError::Config("bad signal.price".to_owned()))?
+            / tick)
             .round_dp(0)
             * tick;
 
@@ -199,9 +202,9 @@ impl OrderExecutor {
             U256::from_str(&signal.token_id).map_err(|e| HotPathError::Clob(e.to_string()))?;
 
         let tick = dec!(0.01);
-        let rounded = (Decimal::from_f64_retain(signal.price).ok_or_else(|| {
-            HotPathError::Config("bad signal.price".to_owned())
-        })? / tick)
+        let rounded = (Decimal::from_f64_retain(signal.price)
+            .ok_or_else(|| HotPathError::Config("bad signal.price".to_owned()))?
+            / tick)
             .round_dp(0)
             * tick;
 
@@ -242,7 +245,10 @@ impl OrderExecutor {
         if posted.success {
             tracing::info!(order_id = %posted.order_id, "SELL FAK posted");
         } else {
-            warn!(?posted, "SELL FAK missed — add GTC exit like TS executor if needed");
+            warn!(
+                ?posted,
+                "SELL FAK missed — add GTC exit like TS executor if needed"
+            );
         }
 
         Ok(())

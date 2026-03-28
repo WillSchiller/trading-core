@@ -17,8 +17,8 @@ use polymarket_client_sdk::ws::config::Config as WsConfig;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::broadcast;
+use tracing::{Level, span};
 use tracing::{debug, instrument, trace, warn};
-use tracing::{span, Level};
 
 use crate::clob_client;
 use crate::config::AppConfig;
@@ -155,14 +155,10 @@ fn parse_activity_item(
         return None;
     }
 
-    let dedup_key = t.transaction_hash.clone().unwrap_or_else(|| {
-        format!(
-            "ws_{:?}_{}_{}",
-            t.timestamp,
-            t.condition_id,
-            t.side
-        )
-    });
+    let dedup_key = t
+        .transaction_hash
+        .clone()
+        .unwrap_or_else(|| format!("ws_{:?}_{}_{}", t.timestamp, t.condition_id, t.side));
 
     if seen.contains(&dedup_key) {
         return None;

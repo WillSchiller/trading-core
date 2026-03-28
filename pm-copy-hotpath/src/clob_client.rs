@@ -23,11 +23,7 @@ pub async fn run_clob_market_telemetry(
     let ws = ClobWsClient::new(endpoint, WsConfig::default())
         .map_err(|e| HotPathError::Clob(e.to_string()))?;
 
-    let ids: Result<Vec<U256>, _> = config
-        .asset_ids
-        .iter()
-        .map(|s| U256::from_str(s))
-        .collect();
+    let ids: Result<Vec<U256>, _> = config.asset_ids.iter().map(|s| U256::from_str(s)).collect();
     let asset_ids = ids.map_err(|e| HotPathError::Clob(e.to_string()))?;
 
     if asset_ids.is_empty() {
