@@ -40,15 +40,15 @@ impl PositionTracker {
     }
 
     pub fn trade_count(&self, condition_id: &str) -> usize {
-        self.by_condition
-            .get(condition_id)
-            .map_or(0, |v| v.len())
+        self.by_condition.get(condition_id).map_or(0, |v| v.len())
     }
 
     pub fn notional(&self, condition_id: &str) -> f64 {
-        self.by_condition.get(condition_id).map_or(0.0, |positions| {
-            positions.iter().map(|p| p.fill_price * p.fill_size).sum()
-        })
+        self.by_condition
+            .get(condition_id)
+            .map_or(0.0, |positions| {
+                positions.iter().map(|p| p.fill_price * p.fill_size).sum()
+            })
     }
 
     pub fn open_market_count(&self) -> usize {
@@ -56,7 +56,11 @@ impl PositionTracker {
     }
 
     pub fn total_exposure(&self) -> f64 {
-        self.by_condition.values().flat_map(|v| v.iter()).map(|p| p.fill_price * p.fill_size).sum()
+        self.by_condition
+            .values()
+            .flat_map(|v| v.iter())
+            .map(|p| p.fill_price * p.fill_size)
+            .sum()
     }
 
     pub fn all_positions(&self) -> Vec<&Position> {
@@ -73,7 +77,9 @@ impl PositionTracker {
 
     pub fn remove_position(&mut self, condition_id: &str, live_trade_id: i64) -> Option<Position> {
         let positions = self.by_condition.get_mut(condition_id)?;
-        let idx = positions.iter().position(|p| p.live_trade_id == live_trade_id)?;
+        let idx = positions
+            .iter()
+            .position(|p| p.live_trade_id == live_trade_id)?;
         let pos = positions.remove(idx);
         if positions.is_empty() {
             self.by_condition.remove(condition_id);

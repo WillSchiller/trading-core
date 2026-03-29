@@ -118,10 +118,13 @@ impl RiskManager {
 
     pub fn record_order(&mut self, condition_id: &str, size_usd: f64) {
         self.pending_exposure += size_usd;
-        let entry = self.markets.entry(condition_id.to_owned()).or_insert(MarketEntry {
-            last_order: Instant::now(),
-            trade_count: 0,
-        });
+        let entry = self
+            .markets
+            .entry(condition_id.to_owned())
+            .or_insert(MarketEntry {
+                last_order: Instant::now(),
+                trade_count: 0,
+            });
         entry.last_order = Instant::now();
         entry.trade_count += 1;
     }
@@ -143,10 +146,14 @@ impl RiskManager {
     pub fn seed_market_counts(&mut self, counts: Vec<(String, usize)>) {
         for (condition_id, count) in counts {
             self.markets.entry(condition_id).or_insert(MarketEntry {
-                last_order: Instant::now() - std::time::Duration::from_secs(self.market_dedup_seconds + 1),
+                last_order: Instant::now()
+                    - std::time::Duration::from_secs(self.market_dedup_seconds + 1),
                 trade_count: count,
             });
         }
-        info!(markets = self.markets.len(), "risk manager seeded with existing positions");
+        info!(
+            markets = self.markets.len(),
+            "risk manager seeded with existing positions"
+        );
     }
 }

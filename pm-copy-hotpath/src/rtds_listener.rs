@@ -7,7 +7,7 @@ use polymarket_client_sdk::rtds::types::request::Subscription;
 use polymarket_client_sdk::ws::config::Config as WsConfig;
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 use tracing::{debug, info, trace, warn};
 
 use crate::clob_client;
@@ -70,7 +70,9 @@ pub async fn run_feed(
     shutdown: broadcast::Receiver<()>,
 ) -> Result<(), HotPathError> {
     match config.feed_mode() {
-        FeedMode::RtdsActivity => run_rtds(config, db, exec, fill_db, positions, risk, scorer, shutdown).await,
+        FeedMode::RtdsActivity => {
+            run_rtds(config, db, exec, fill_db, positions, risk, scorer, shutdown).await
+        }
         FeedMode::ClobMarketTelemetry => {
             clob_client::run_clob_market_telemetry(config, shutdown).await
         }
@@ -339,7 +341,10 @@ async fn process_buy(
     let mv = model_version.clone();
 
     tokio::spawn(async move {
-        match exec.execute_copy(&sig, trade_size, min_entry, max_entry).await {
+        match exec
+            .execute_copy(&sig, trade_size, min_entry, max_entry)
+            .await
+        {
             Ok(Some(result)) => {
                 let fill_size = trade_size / result.fill_price.max(0.01);
                 if let Some(ref db) = fdb {
@@ -390,7 +395,9 @@ async fn process_sell(
     fill_db: Option<&Arc<FillDb>>,
     positions: &Arc<Mutex<PositionTracker>>,
 ) {
-    let Some(exec) = exec else { return; };
+    let Some(exec) = exec else {
+        return;
+    };
 
     let tracker = positions.lock().await;
     let pos_list = match tracker.get_positions(&signal.condition_id) {
@@ -421,9 +428,19 @@ async fn process_sell(
                     "SELL filled"
                 );
                 if let Some(ref db) = fill_db {
-                    let _ = db.mark_sold(pos.live_trade_id, result.fill_price, real_pnl, &result.order_id).await;
+                    let _ = db
+                        .mark_sold(
+                            pos.live_trade_id,
+                            result.fill_price,
+                            real_pnl,
+                            &result.order_id,
+                        )
+                        .await;
                 }
-                positions.lock().await.remove_position(&signal.condition_id, pos.live_trade_id);
+                positions
+                    .lock()
+                    .await
+                    .remove_position(&signal.condition_id, pos.live_trade_id);
             }
             Ok(None) => debug!(id = pos.live_trade_id, "sell: no fill"),
             Err(e) => warn!(id = pos.live_trade_id, error = %e, "sell error"),

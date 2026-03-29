@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use pm_copy_hotpath::{config, db, order_builder, positions, resolver, risk, rtds_listener, scorer, trader_db};
-use tokio::sync::{broadcast, Mutex};
+use pm_copy_hotpath::{
+    config, db, order_builder, positions, resolver, risk, rtds_listener, scorer, trader_db,
+};
+use tokio::sync::{Mutex, broadcast};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -95,7 +97,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             risk_clone,
             scorer_clone,
             shutdown_rx,
-        ).await {
+        )
+        .await
+        {
             tracing::error!(error = %e, "feed exited with error");
         }
     });

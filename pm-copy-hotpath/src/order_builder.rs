@@ -321,5 +321,4 @@ impl OrderExecutor {
         warn!("SELL GTC rejected");
         Ok(None)
     }
-
 }

@@ -132,20 +132,48 @@ fn default_traders_json() -> PathBuf {
     PathBuf::from("traders.json")
 }
 
-fn default_execution_mode() -> String { "control".to_owned() }
-fn default_kelly_mult() -> f64 { 0.5 }
-fn default_min_bet() -> f64 { 1.0 }
-fn default_max_kelly() -> f64 { 0.125 }
-fn default_bankroll() -> f64 { 120.0 }
-fn default_max_position() -> f64 { 25.0 }
-fn default_max_exposure() -> f64 { 500.0 }
-fn default_daily_loss() -> f64 { 50.0 }
-fn default_max_markets() -> usize { 999 }
-fn default_max_trades_per_market() -> usize { 3 }
-fn default_market_dedup_secs() -> u64 { 600 }
-fn default_resolution_poll() -> u64 { 60 }
-fn default_auto_sell() -> f64 { 0.995 }
-fn default_stale_gtc() -> u64 { 30 }
+fn default_execution_mode() -> String {
+    "control".to_owned()
+}
+fn default_kelly_mult() -> f64 {
+    0.5
+}
+fn default_min_bet() -> f64 {
+    1.0
+}
+fn default_max_kelly() -> f64 {
+    0.125
+}
+fn default_bankroll() -> f64 {
+    120.0
+}
+fn default_max_position() -> f64 {
+    25.0
+}
+fn default_max_exposure() -> f64 {
+    500.0
+}
+fn default_daily_loss() -> f64 {
+    50.0
+}
+fn default_max_markets() -> usize {
+    999
+}
+fn default_max_trades_per_market() -> usize {
+    3
+}
+fn default_market_dedup_secs() -> u64 {
+    600
+}
+fn default_resolution_poll() -> u64 {
+    60
+}
+fn default_auto_sell() -> f64 {
+    0.995
+}
+fn default_stale_gtc() -> u64 {
+    30
+}
 
 impl AppConfig {
     pub fn load() -> Result<Self, HotPathError> {

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ahash::AHashMap;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 use crate::config::AppConfig;
 use crate::db::{FillDb, TraderRollingStats};
@@ -14,8 +14,12 @@ struct Calibration {
 
 impl Calibration {
     fn interpolate(&self, raw: f64) -> f64 {
-        if raw <= self.x[0] { return self.y[0]; }
-        if raw >= *self.x.last().unwrap() { return *self.y.last().unwrap(); }
+        if raw <= self.x[0] {
+            return self.y[0];
+        }
+        if raw >= *self.x.last().unwrap() {
+            return *self.y.last().unwrap();
+        }
         for i in 0..self.x.len() - 1 {
             if raw >= self.x[i] && raw <= self.x[i + 1] {
                 let t = (raw - self.x[i]) / (self.x[i + 1] - self.x[i]);
@@ -76,7 +80,10 @@ impl Scorer {
             if cal_path.exists() {
                 let data = std::fs::read_to_string(cal_path).map_err(|e| e.to_string())?;
                 #[derive(serde::Deserialize)]
-                struct CalData { x: Vec<f64>, y: Vec<f64> }
+                struct CalData {
+                    x: Vec<f64>,
+                    y: Vec<f64>,
+                }
                 let cal: CalData = serde_json::from_str(&data).map_err(|e| e.to_string())?;
                 self.calibration = Some(Calibration { x: cal.x, y: cal.y });
                 info!("calibration loaded");
@@ -97,7 +104,9 @@ impl Scorer {
                 continue;
             }
             match db.get_trader_rolling_stats(addr).await {
-                Ok(stats) => { self.trader_stats.insert(addr.clone(), stats); }
+                Ok(stats) => {
+                    self.trader_stats.insert(addr.clone(), stats);
+                }
                 Err(e) => debug!(trader = addr, error = %e, "failed to load trader stats"),
             }
         }
@@ -106,23 +115,32 @@ impl Scorer {
     pub fn score(&mut self, signal: &TradeSignal, trader_category: &str) -> ScoreResult {
         let session = match &mut self.session {
             Some(s) => s,
-            None => return ScoreResult { win_score: 1.0, cal_prob: 0.5, kelly_size: 0.0, pass: true },
+            None => {
+                return ScoreResult {
+                    win_score: 1.0,
+                    cal_prob: 0.5,
+                    kelly_size: 0.0,
+                    pass: true,
+                };
+            }
         };
 
         let stats = self.trader_stats.get(&signal.trader);
-        let features = build_features(
-            signal, trader_category, stats,
-            &mut self.market_counts,
-        );
+        let features = build_features(signal, trader_category, stats, &mut self.market_counts);
 
-        let input = ort::value::Tensor::from_array(([1usize, 16], features))
-            .expect("ort tensor creation");
+        let input =
+            ort::value::Tensor::from_array(([1usize, 16], features)).expect("ort tensor creation");
 
         let outputs = match session.run(ort::inputs![input]) {
             Ok(o) => o,
             Err(e) => {
                 warn!(error = %e, "ONNX inference error — allowing trade");
-                return ScoreResult { win_score: 1.0, cal_prob: 0.5, kelly_size: 0.0, pass: true };
+                return ScoreResult {
+                    win_score: 1.0,
+                    cal_prob: 0.5,
+                    kelly_size: 0.0,
+                    pass: true,
+                };
             }
         };
 
@@ -190,7 +208,7 @@ fn extract_prob(outputs: &ort::session::SessionOutputs<'_>) -> f64 {
     0.5
 }
 
-use chrono::{Timelike, Datelike};
+use chrono::{Datelike, Timelike};
 
 fn build_features(
     signal: &TradeSignal,
@@ -199,15 +217,24 @@ fn build_features(
     market_counts: &mut AHashMap<String, usize>,
 ) -> Vec<f32> {
     let entry_price = signal.price;
-    let mc = market_counts.entry(signal.condition_id.clone()).or_insert(0);
+    let mc = market_counts
+        .entry(signal.condition_id.clone())
+        .or_insert(0);
     *mc += 1;
     let market_count = *mc;
 
-    let (roll_wr_20, roll_pf_20, roll_streak, lifetime_wr, lifetime_pf, total_trades, size_vs_median) =
-        match stats {
-            Some(s) => compute_rolling_stats(s, signal.size),
-            None => (0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 1.0),
-        };
+    let (
+        roll_wr_20,
+        roll_pf_20,
+        roll_streak,
+        lifetime_wr,
+        lifetime_pf,
+        total_trades,
+        size_vs_median,
+    ) = match stats {
+        Some(s) => compute_rolling_stats(s, signal.size),
+        None => (0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 1.0),
+    };
 
     let now = chrono::Utc::now();
     let hour = now.hour() as f32;
@@ -216,7 +243,11 @@ fn build_features(
     vec![
         entry_price as f32,
         (entry_price - 0.5).abs() as f32,
-        if entry_price < 0.5 { 1.0 - entry_price as f32 } else { entry_price as f32 },
+        if entry_price < 0.5 {
+            1.0 - entry_price as f32
+        } else {
+            entry_price as f32
+        },
         if category == "SPORTS" { 1.0 } else { 0.0 },
         if category == "CRYPTO" { 1.0 } else { 0.0 },
         if category == "POLITICS" { 1.0 } else { 0.0 },
@@ -233,7 +264,10 @@ fn build_features(
     ]
 }
 
-fn compute_rolling_stats(stats: &TraderRollingStats, trade_size: f64) -> (f64, f64, f64, f64, f64, f64, f64) {
+fn compute_rolling_stats(
+    stats: &TraderRollingStats,
+    trade_size: f64,
+) -> (f64, f64, f64, f64, f64, f64, f64) {
     let pnls = &stats.pnls;
     let n = pnls.len();
 
@@ -249,7 +283,13 @@ fn compute_rolling_stats(stats: &TraderRollingStats, trade_size: f64) -> (f64, f
         roll_wr_20 = wins as f64 / 20.0;
         let gw: f64 = recent.iter().filter(|&&p| p > 0.0).sum();
         let gl: f64 = recent.iter().filter(|&&p| p < 0.0).map(|p| p.abs()).sum();
-        roll_pf_20 = if gl > 0.0 { gw / gl } else if gw > 0.0 { 99.0 } else { 0.0 };
+        roll_pf_20 = if gl > 0.0 {
+            gw / gl
+        } else if gw > 0.0 {
+            99.0
+        } else {
+            0.0
+        };
     }
 
     if n > 0 {
@@ -257,17 +297,43 @@ fn compute_rolling_stats(stats: &TraderRollingStats, trade_size: f64) -> (f64, f
         lifetime_wr = wins as f64 / n as f64;
         let gw: f64 = pnls.iter().filter(|&&p| p > 0.0).sum();
         let gl: f64 = pnls.iter().filter(|&&p| p < 0.0).map(|p| p.abs()).sum();
-        lifetime_pf = if gl > 0.0 { gw / gl } else if gw > 0.0 { 99.0 } else { 0.0 };
+        lifetime_pf = if gl > 0.0 {
+            gw / gl
+        } else if gw > 0.0 {
+            99.0
+        } else {
+            0.0
+        };
 
         let last_win = *pnls.last().unwrap() > 0.0;
         let mut streak = 0i32;
         for &p in pnls.iter().rev() {
-            if (p > 0.0) == last_win { streak += 1; } else { break; }
+            if (p > 0.0) == last_win {
+                streak += 1;
+            } else {
+                break;
+            }
         }
-        roll_streak = if last_win { streak as f64 } else { -(streak as f64) };
+        roll_streak = if last_win {
+            streak as f64
+        } else {
+            -(streak as f64)
+        };
     }
 
-    let size_vs_median = if stats.median_size > 0.0 { trade_size / stats.median_size } else { 1.0 };
+    let size_vs_median = if stats.median_size > 0.0 {
+        trade_size / stats.median_size
+    } else {
+        1.0
+    };
 
-    (roll_wr_20, roll_pf_20, roll_streak, lifetime_wr, lifetime_pf, n as f64, size_vs_median)
+    (
+        roll_wr_20,
+        roll_pf_20,
+        roll_streak,
+        lifetime_wr,
+        lifetime_pf,
+        n as f64,
+        size_vs_median,
+    )
 }

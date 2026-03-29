@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Mutex;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 use crate::config::AppConfig;
 use crate::db::FillDb;
@@ -84,7 +84,10 @@ async fn poll_once(
     debug!(open = condition_ids.len(), "resolver polling");
 
     for condition_id in &condition_ids {
-        let url = format!("{}/markets?condition_id={}", config.gamma_http_url, condition_id);
+        let url = format!(
+            "{}/markets?condition_id={}",
+            config.gamma_http_url, condition_id
+        );
         let resp = match http.get(&url).send().await {
             Ok(r) => r,
             Err(e) => {
@@ -116,7 +119,10 @@ async fn poll_once(
             for pos in &pos_list {
                 let resolution_price = get_token_price(market, &pos.token_id).unwrap_or(0.0);
                 let real_pnl = (resolution_price - pos.fill_price) * pos.fill_size;
-                if let Err(e) = db.resolve_trade(pos.live_trade_id, resolution_price, real_pnl).await {
+                if let Err(e) = db
+                    .resolve_trade(pos.live_trade_id, resolution_price, real_pnl)
+                    .await
+                {
                     warn!(id = pos.live_trade_id, error = %e, "resolve DB error");
                     continue;
                 }
@@ -133,7 +139,11 @@ async fn poll_once(
             let daily_pnl = db.get_daily_pnl().await.unwrap_or(0.0);
             risk.lock().await.check_kill_switch(daily_pnl);
 
-            debug!(condition_id, count = removed.len(), "removed resolved positions");
+            debug!(
+                condition_id,
+                count = removed.len(),
+                "removed resolved positions"
+            );
         } else {
             for pos in &pos_list {
                 if let Some(price) = get_token_price(market, &pos.token_id) {
@@ -144,8 +154,7 @@ async fn poll_once(
                         if let Some(executor) = exec {
                             info!(
                                 id = pos.live_trade_id,
-                                price,
-                                "auto-sell triggered (near 1.0)"
+                                price, "auto-sell triggered (near 1.0)"
                             );
                             let signal = crate::types::TradeSignal {
                                 trader: String::new(),
@@ -159,13 +168,27 @@ async fn poll_once(
                             };
                             match executor.execute_sell(&signal, pos.fill_size).await {
                                 Ok(Some(result)) => {
-                                    let real_pnl = (result.fill_price - pos.fill_price) * pos.fill_size;
-                                    let _ = db.mark_sold(pos.live_trade_id, result.fill_price, real_pnl, &result.order_id).await;
+                                    let real_pnl =
+                                        (result.fill_price - pos.fill_price) * pos.fill_size;
+                                    let _ = db
+                                        .mark_sold(
+                                            pos.live_trade_id,
+                                            result.fill_price,
+                                            real_pnl,
+                                            &result.order_id,
+                                        )
+                                        .await;
                                     tracker.remove_position(condition_id, pos.live_trade_id);
-                                    info!(id = pos.live_trade_id, real_pnl = format!("{:.2}", real_pnl), "auto-sold");
+                                    info!(
+                                        id = pos.live_trade_id,
+                                        real_pnl = format!("{:.2}", real_pnl),
+                                        "auto-sold"
+                                    );
                                 }
                                 Ok(None) => debug!(id = pos.live_trade_id, "auto-sell: no fill"),
-                                Err(e) => warn!(id = pos.live_trade_id, error = %e, "auto-sell error"),
+                                Err(e) => {
+                                    warn!(id = pos.live_trade_id, error = %e, "auto-sell error")
+                                }
                             }
                         }
                     }
