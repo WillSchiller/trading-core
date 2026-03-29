@@ -2,6 +2,7 @@
 
 pub mod clob_client;
 pub mod config;
+pub mod db;
 pub mod order_builder;
 pub mod rtds_listener;
 pub mod trader_db;

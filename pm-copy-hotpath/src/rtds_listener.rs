@@ -22,6 +22,7 @@ use tracing::{debug, instrument, trace, warn};
 
 use crate::clob_client;
 use crate::config::AppConfig;
+use crate::db::{FillDb, FillRecord};
 use crate::order_builder::OrderExecutor;
 use crate::trader_db::TraderDb;
 use crate::types::{CopySide, FeedMode, HotPathError, TradeSignal};
@@ -72,10 +73,11 @@ pub async fn run_feed(
     config: AppConfig,
     db: Arc<TraderDb>,
     exec: Option<Arc<OrderExecutor>>,
+    fill_db: Option<Arc<FillDb>>,
     shutdown: broadcast::Receiver<()>,
 ) -> Result<(), HotPathError> {
     match config.feed_mode() {
-        FeedMode::RtdsActivity => run_rtds(config, db, exec, shutdown).await,
+        FeedMode::RtdsActivity => run_rtds(config, db, exec, fill_db, shutdown).await,
         FeedMode::ClobMarketTelemetry => {
             clob_client::run_clob_market_telemetry(config, shutdown).await
         }
@@ -86,6 +88,7 @@ async fn run_rtds(
     config: AppConfig,
     db: Arc<TraderDb>,
     exec: Option<Arc<OrderExecutor>>,
+    fill_db: Option<Arc<FillDb>>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), HotPathError> {
     let client = RtdsClient::new(&config.rtds_ws_url, WsConfig::default())
@@ -130,7 +133,7 @@ async fn run_rtds(
 
                 for item in payload_items(&msg.payload) {
                     if let Some(sig) = parse_activity_item(&item, &mut seen, MAX_SEEN) {
-                        process_signal(sig, &config, &db, exec.as_ref()).await;
+                        process_signal(sig, &config, &db, exec.as_ref(), fill_db.as_ref()).await;
                     }
                 }
             }
@@ -192,6 +195,7 @@ async fn process_signal(
     config: &AppConfig,
     db: &TraderDb,
     exec: Option<&Arc<OrderExecutor>>,
+    fill_db: Option<&Arc<FillDb>>,
 ) {
     let lookup_span = span!(Level::TRACE, "trader_lookup");
     let _lg = lookup_span.enter();
@@ -225,10 +229,11 @@ async fn process_signal(
     let cfg = config.clone();
     let sig = signal.clone();
     let exec = Arc::clone(exec);
+    let fdb = fill_db.cloned();
     tokio::spawn(async move {
         let order_span = span!(Level::TRACE, "sign_and_post");
         let _o = order_span.enter();
-        if let Err(e) = exec
+        match exec
             .execute_copy(
                 &sig,
                 cfg.copy_size_usd,
@@ -237,7 +242,24 @@ async fn process_signal(
             )
             .await
         {
-            warn!(error = %e, "order path failed");
+            Ok(Some(result)) => {
+                if let Some(ref db) = fdb {
+                    let record = FillRecord {
+                        signal: sig,
+                        order_id: result.order_id,
+                        execution_status: result.status,
+                        size_usd: cfg.copy_size_usd,
+                        fill_price: result.fill_price,
+                    };
+                    if let Err(e) = db.insert_fill(&record).await {
+                        warn!(error = %e, "failed to persist fill to postgres");
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                warn!(error = %e, "order path failed");
+            }
         }
     });
 }

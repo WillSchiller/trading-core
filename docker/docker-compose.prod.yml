@@ -150,6 +150,7 @@ services:
     environment:
       RUST_LOG: ${PM_HOTPATH_LOG:-info,pm_copy_hotpath=debug}
       POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+      PM_HOTPATH__DATABASE_URL: postgresql://${POSTGRES_USER:-trader}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dislocation_trader}
     volumes:
       - ../pm-hotpath:/app/pm-hotpath:ro
     networks:

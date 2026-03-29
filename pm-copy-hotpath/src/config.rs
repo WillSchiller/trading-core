@@ -47,6 +47,9 @@ pub struct AppConfig {
     /// EOA signature type (0) unless you use Polymarket proxy workflow.
     #[serde(default = "default_sig_type")]
     pub signature_type: u8,
+    /// Postgres connection URL. If empty, fills are not persisted.
+    #[serde(default)]
+    pub database_url: String,
 }
 
 fn default_rtds_url() -> String {

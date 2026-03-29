@@ -34,6 +34,8 @@ pub enum HotPathError {
     BadAddress(String),
     #[error("CLOB / auth: {0}")]
     Clob(String),
+    #[error("DB: {0}")]
+    Db(String),
 }
 
 impl From<polymarket_client_sdk::error::Error> for HotPathError {
