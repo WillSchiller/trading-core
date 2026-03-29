@@ -87,7 +87,7 @@ export class PolymarketCopyTrader {
             await this.executor.executeSellOrder(position.id, trader, activity, position);
           }
         }
-        if (trader.copyEligible && activity.side === 'BUY') {
+        if (trader.copyEligible && activity.side === 'BUY' && process.env.PM_NODE_SKIP_BUYS !== 'true') {
           if (/updown-5m/.test(activity.marketSlug)) {
             log.debug({ trader: trader.alias, market: activity.marketSlug }, 'Skipped — 5-min market blocked');
           } else
