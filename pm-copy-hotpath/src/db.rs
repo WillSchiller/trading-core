@@ -57,7 +57,7 @@ impl FillDb {
                 order_id, fill_price, fill_size, execution_status, executed_at,
                 trader_timestamp, source, model_version,
                 win_score, cal_prob, kelly_size
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, 'rust', $14, $15, $16, $17)
+            ) VALUES ($1, $2, $3, $4, $5::float8::numeric, $6::float8::numeric, $7::float8::numeric, $8::float8::numeric, $9, $10::float8::numeric, $11::float8::numeric, $12, NOW(), $13, 'rust', $14, $15::float8::numeric, $16::float8::numeric, $17::float8::numeric)
             ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
             RETURNING id",
             &[
@@ -187,7 +187,7 @@ impl FillDb {
         client
             .execute(
                 "UPDATE pm_live_trades
-             SET resolved = true, resolution_price = $2, real_pnl = $3, resolved_at = NOW()
+             SET resolved = true, resolution_price = $2::float8::numeric, real_pnl = $3::float8::numeric, resolved_at = NOW()
              WHERE id = $1",
                 &[&live_trade_id, &resolution_price, &real_pnl],
             )
@@ -211,7 +211,7 @@ impl FillDb {
         client
             .execute(
                 "UPDATE pm_live_trades
-             SET execution_status = 'sold', resolution_price = $2, real_pnl = $3,
+             SET execution_status = 'sold', resolution_price = $2::float8::numeric, real_pnl = $3::float8::numeric,
                  resolved = true, resolved_at = NOW(), order_id = order_id || ',' || $4
              WHERE id = $1",
                 &[&live_trade_id, &exit_price, &real_pnl, &sell_order_id],
@@ -233,7 +233,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades SET current_price = $2 WHERE id = $1",
+                "UPDATE pm_live_trades SET current_price = $2::float8::numeric WHERE id = $1",
                 &[&live_trade_id, &current_price],
             )
             .await
