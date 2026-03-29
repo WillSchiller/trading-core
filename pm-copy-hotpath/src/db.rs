@@ -97,7 +97,7 @@ impl FillDb {
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
                     order_id, executed_at, COALESCE(model_version, '') as mv
              FROM pm_live_trades
-             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY'",
+             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'",
                 &[],
             )
             .await
@@ -139,7 +139,7 @@ impl FillDb {
                 "SELECT COALESCE(SUM(real_pnl), 0)::float8
              FROM pm_live_trades
              WHERE resolved = true AND execution_status IN ('filled', 'sold')
-               AND resolved_at >= CURRENT_DATE",
+               AND resolved_at >= CURRENT_DATE AND source = 'rust'",
                 &[],
             )
             .await
@@ -157,7 +157,7 @@ impl FillDb {
             .query(
                 "SELECT condition_id, COUNT(*)::int
              FROM pm_live_trades
-             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY'
+             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'
              GROUP BY condition_id",
                 &[],
             )
