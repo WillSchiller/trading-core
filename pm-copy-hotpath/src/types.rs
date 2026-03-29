@@ -44,6 +44,29 @@ impl From<polymarket_client_sdk::error::Error> for HotPathError {
     }
 }
 
+/// A filled position we're tracking.
+#[derive(Debug, Clone)]
+pub struct Position {
+    pub live_trade_id: i64,
+    pub condition_id: String,
+    pub token_id: String,
+    pub fill_price: f64,
+    pub fill_size: f64,
+    pub order_id: String,
+    pub neg_risk: bool,
+    pub filled_at: chrono::DateTime<chrono::Utc>,
+    pub model_version: String,
+}
+
+/// Result from ML scorer.
+#[derive(Debug, Clone)]
+pub struct ScoreResult {
+    pub win_score: f64,
+    pub cal_prob: f64,
+    pub kelly_size: f64,
+    pub pass: bool,
+}
+
 /// Which ingress backend is active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FeedMode {

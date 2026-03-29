@@ -1,9 +1,11 @@
-//! Library surface for `pm-copy-hotpath` (binary + `criterion` benches).
-
 pub mod clob_client;
 pub mod config;
 pub mod db;
 pub mod order_builder;
+pub mod positions;
+pub mod resolver;
+pub mod risk;
 pub mod rtds_listener;
+pub mod scorer;
 pub mod trader_db;
 pub mod types;

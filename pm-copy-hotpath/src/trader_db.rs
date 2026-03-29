@@ -39,6 +39,10 @@ impl TraderDb {
     pub fn is_empty(&self) -> bool {
         self.scores.is_empty()
     }
+
+    pub fn all_addresses(&self) -> Vec<String> {
+        self.scores.keys().cloned().collect()
+    }
 }
 
 fn normalize_key(addr: &str) -> Result<String, HotPathError> {

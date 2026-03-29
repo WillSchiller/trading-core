@@ -50,6 +50,46 @@ pub struct AppConfig {
     /// Postgres connection URL. If empty, fills are not persisted.
     #[serde(default)]
     pub database_url: String,
+
+    /// A/B test mode: "control" (JSON scores only), "ml" (ONNX Kelly only), "ab" (split by market hash)
+    #[serde(default = "default_execution_mode")]
+    pub execution_mode: String,
+
+    // --- ML scoring ---
+    #[serde(default)]
+    pub onnx_model_path: String,
+    #[serde(default)]
+    pub calibration_path: String,
+    #[serde(default = "default_kelly_mult")]
+    pub kelly_half_multiplier: f64,
+    #[serde(default = "default_min_bet")]
+    pub min_bet_usd: f64,
+    #[serde(default = "default_max_kelly")]
+    pub max_kelly_fraction: f64,
+    #[serde(default = "default_bankroll")]
+    pub bankroll_usd: f64,
+
+    // --- Risk limits ---
+    #[serde(default = "default_max_position")]
+    pub max_position_usd: f64,
+    #[serde(default = "default_max_exposure")]
+    pub max_total_exposure_usd: f64,
+    #[serde(default = "default_daily_loss")]
+    pub daily_loss_limit_usd: f64,
+    #[serde(default = "default_max_markets")]
+    pub max_markets_open: usize,
+    #[serde(default = "default_max_trades_per_market")]
+    pub max_trades_per_market: usize,
+    #[serde(default = "default_market_dedup_secs")]
+    pub market_dedup_seconds: u64,
+
+    // --- Resolution ---
+    #[serde(default = "default_resolution_poll")]
+    pub resolution_poll_seconds: u64,
+    #[serde(default = "default_auto_sell")]
+    pub auto_sell_threshold: f64,
+    #[serde(default = "default_stale_gtc")]
+    pub stale_gtc_cancel_minutes: u64,
 }
 
 fn default_rtds_url() -> String {
@@ -91,6 +131,21 @@ fn default_sig_type() -> u8 {
 fn default_traders_json() -> PathBuf {
     PathBuf::from("traders.json")
 }
+
+fn default_execution_mode() -> String { "control".to_owned() }
+fn default_kelly_mult() -> f64 { 0.5 }
+fn default_min_bet() -> f64 { 1.0 }
+fn default_max_kelly() -> f64 { 0.125 }
+fn default_bankroll() -> f64 { 120.0 }
+fn default_max_position() -> f64 { 25.0 }
+fn default_max_exposure() -> f64 { 500.0 }
+fn default_daily_loss() -> f64 { 50.0 }
+fn default_max_markets() -> usize { 999 }
+fn default_max_trades_per_market() -> usize { 3 }
+fn default_market_dedup_secs() -> u64 { 600 }
+fn default_resolution_poll() -> u64 { 60 }
+fn default_auto_sell() -> f64 { 0.995 }
+fn default_stale_gtc() -> u64 { 30 }
 
 impl AppConfig {
     pub fn load() -> Result<Self, HotPathError> {

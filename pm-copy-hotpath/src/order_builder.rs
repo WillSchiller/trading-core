@@ -223,46 +223,46 @@ impl OrderExecutor {
         Ok(None)
     }
 
-    #[allow(dead_code)]
-    async fn execute_copy_sell(&self, signal: &TradeSignal) -> Result<(), HotPathError> {
-        if signal.size < 5.0 {
-            warn!(size = signal.size, "SELL below minimum share size (5)");
-            return Ok(());
+    pub async fn execute_sell(
+        &self,
+        signal: &TradeSignal,
+        shares: f64,
+    ) -> Result<Option<OrderResult>, HotPathError> {
+        if shares < 1.0 {
+            warn!(shares, "SELL below minimum share size (1)");
+            return Ok(None);
         }
 
         let token_id =
             U256::from_str(&signal.token_id).map_err(|e| HotPathError::Clob(e.to_string()))?;
 
         let tick = dec!(0.01);
-        let rounded = (Decimal::from_f64_retain(signal.price)
+        let sell_price = (Decimal::from_f64_retain(signal.price)
             .ok_or_else(|| HotPathError::Config("bad signal.price".to_owned()))?
             / tick)
             .round_dp(0)
             * tick;
+        let sell_price = sell_price.min(dec!(0.99));
 
         if self.dry_run {
-            tracing::info!(
-                %token_id,
-                %rounded,
-                shares = signal.size,
-                "dry_run: SELL FAK"
-            );
-            return Ok(());
+            tracing::info!(%token_id, %sell_price, shares, "dry_run: SELL FAK");
+            return Ok(None);
         }
 
-        let shares = Decimal::from_f64_retain(signal.size)
-            .ok_or_else(|| HotPathError::Config("bad signal.size".to_owned()))?
+        let share_dec = Decimal::from_f64_retain(shares)
+            .ok_or_else(|| HotPathError::Config("bad shares".to_owned()))?
             .round_dp(2)
-            .max(dec!(5));
-        let amount = Amount::shares(shares).map_err(|e| HotPathError::Clob(e.to_string()))?;
+            .max(dec!(1));
+        let amount = Amount::shares(share_dec).map_err(|e| HotPathError::Clob(e.to_string()))?;
 
+        // Try FAK first
         let market = self
             .client
             .market_order()
             .token_id(token_id)
-            .amount(amount)
+            .amount(amount.clone())
             .side(Side::Sell)
-            .price(rounded)
+            .price(sell_price)
             .order_type(OrderType::FAK)
             .build()
             .await?;
@@ -272,17 +272,54 @@ impl OrderExecutor {
             .sign(self.signer.as_ref(), market)
             .await
             .map_err(HotPathError::from)?;
+
+        match self.client.post_order(signed).await {
+            Ok(posted) if posted.success => {
+                tracing::info!(order_id = %posted.order_id, "SELL FAK posted");
+                return Ok(Some(OrderResult {
+                    order_id: posted.order_id,
+                    status: "sold",
+                    fill_price: sell_price.to_string().parse().unwrap_or(signal.price),
+                }));
+            }
+            Ok(_) => {
+                tracing::debug!("SELL FAK not matched, trying GTC");
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "SELL FAK error, trying GTC");
+            }
+        }
+
+        // GTC fallback
+        let limit = self
+            .client
+            .limit_order()
+            .token_id(token_id)
+            .price(sell_price)
+            .size(share_dec)
+            .side(Side::Sell)
+            .order_type(OrderType::GTC)
+            .build()
+            .await?;
+
+        let signed = self
+            .client
+            .sign(self.signer.as_ref(), limit)
+            .await
+            .map_err(HotPathError::from)?;
         let posted = self.client.post_order(signed).await?;
 
         if posted.success {
-            tracing::info!(order_id = %posted.order_id, "SELL FAK posted");
-        } else {
-            warn!(
-                ?posted,
-                "SELL FAK missed — add GTC exit like TS executor if needed"
-            );
+            tracing::info!(order_id = %posted.order_id, %sell_price, "SELL GTC posted");
+            return Ok(Some(OrderResult {
+                order_id: posted.order_id,
+                status: "pending_sell",
+                fill_price: sell_price.to_string().parse().unwrap_or(signal.price),
+            }));
         }
 
-        Ok(())
+        warn!("SELL GTC rejected");
+        Ok(None)
     }
+
 }
