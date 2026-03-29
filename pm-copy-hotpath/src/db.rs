@@ -1,4 +1,4 @@
-use deadpool_postgres::{Config, Pool, Runtime, ManagerConfig, RecyclingMethod};
+use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
 use crate::types::{CopySide, HotPathError, TradeSignal};
@@ -29,7 +29,10 @@ impl FillDb {
     }
 
     pub async fn insert_fill(&self, fill: &FillRecord) -> Result<(), HotPathError> {
-        let client = self.pool.get().await
+        let client = self
+            .pool
+            .get()
+            .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
 
         let side = match fill.signal.side {

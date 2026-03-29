@@ -39,7 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let exec_clone = exec.clone();
     let fill_db_clone = fill_db.clone();
     let feed_task = tokio::spawn(async move {
-        if let Err(e) = rtds_listener::run_feed(cfg, db_clone, exec_clone, fill_db_clone, shutdown_rx).await {
+        if let Err(e) =
+            rtds_listener::run_feed(cfg, db_clone, exec_clone, fill_db_clone, shutdown_rx).await
+        {
             tracing::error!(error = %e, "feed exited with error");
         }
     });
