@@ -187,23 +187,19 @@ impl Scorer {
 }
 
 fn extract_prob(outputs: &ort::session::SessionOutputs<'_>) -> f64 {
-    // Try common output names for sklearn/xgboost exported models
     for name in &["probabilities", "output_probability"] {
-        if let Some(val) = outputs.get(*name) {
-            if let Ok((_shape, data)) = val.try_extract_tensor::<f32>() {
-                if data.len() >= 2 {
-                    return data[1] as f64;
-                }
-            }
+        if let Some(val) = outputs.get(*name)
+            && let Ok((_shape, data)) = val.try_extract_tensor::<f32>()
+            && data.len() >= 2
+        {
+            return data[1] as f64;
         }
     }
-    // Fallback: first output
-    if let Some((_name, val)) = outputs.iter().next() {
-        if let Ok((_shape, data)) = val.try_extract_tensor::<f32>() {
-            if data.len() >= 2 {
-                return data[1] as f64;
-            }
-        }
+    if let Some((_name, val)) = outputs.iter().next()
+        && let Ok((_shape, data)) = val.try_extract_tensor::<f32>()
+        && data.len() >= 2
+    {
+        return data[1] as f64;
     }
     0.5
 }

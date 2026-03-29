@@ -20,6 +20,16 @@ use crate::scorer::Scorer;
 use crate::trader_db::TraderDb;
 use crate::types::{CopySide, FeedMode, HotPathError, Position, TradeSignal};
 
+pub struct FeedCtx {
+    pub config: AppConfig,
+    pub trader_db: Arc<TraderDb>,
+    pub exec: Option<Arc<OrderExecutor>>,
+    pub fill_db: Option<Arc<FillDb>>,
+    pub positions: Arc<Mutex<PositionTracker>>,
+    pub risk: Arc<Mutex<RiskManager>>,
+    pub scorer: Arc<Mutex<Scorer>>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ActivityTrade {
@@ -59,37 +69,17 @@ fn payload_items(payload: &Value) -> Vec<Value> {
     }
 }
 
-pub async fn run_feed(
-    config: AppConfig,
-    db: Arc<TraderDb>,
-    exec: Option<Arc<OrderExecutor>>,
-    fill_db: Option<Arc<FillDb>>,
-    positions: Arc<Mutex<PositionTracker>>,
-    risk: Arc<Mutex<RiskManager>>,
-    scorer: Arc<Mutex<Scorer>>,
-    shutdown: broadcast::Receiver<()>,
-) -> Result<(), HotPathError> {
-    match config.feed_mode() {
-        FeedMode::RtdsActivity => {
-            run_rtds(config, db, exec, fill_db, positions, risk, scorer, shutdown).await
-        }
+pub async fn run_feed(ctx: FeedCtx, shutdown: broadcast::Receiver<()>) -> Result<(), HotPathError> {
+    match ctx.config.feed_mode() {
+        FeedMode::RtdsActivity => run_rtds(ctx, shutdown).await,
         FeedMode::ClobMarketTelemetry => {
-            clob_client::run_clob_market_telemetry(config, shutdown).await
+            clob_client::run_clob_market_telemetry(ctx.config, shutdown).await
         }
     }
 }
 
-async fn run_rtds(
-    config: AppConfig,
-    db: Arc<TraderDb>,
-    exec: Option<Arc<OrderExecutor>>,
-    fill_db: Option<Arc<FillDb>>,
-    positions: Arc<Mutex<PositionTracker>>,
-    risk: Arc<Mutex<RiskManager>>,
-    scorer: Arc<Mutex<Scorer>>,
-    mut shutdown: broadcast::Receiver<()>,
-) -> Result<(), HotPathError> {
-    let client = RtdsClient::new(&config.rtds_ws_url, WsConfig::default())
+async fn run_rtds(ctx: FeedCtx, mut shutdown: broadcast::Receiver<()>) -> Result<(), HotPathError> {
+    let client = RtdsClient::new(&ctx.config.rtds_ws_url, WsConfig::default())
         .map_err(|e| HotPathError::Clob(e.to_string()))?;
 
     let sub = Subscription::builder()
@@ -127,10 +117,7 @@ async fn run_rtds(
 
                 for item in payload_items(&msg.payload) {
                     if let Some(sig) = parse_activity_item(&item, &mut seen, MAX_SEEN) {
-                        process_signal(
-                            sig, &config, &db, exec.as_ref(), fill_db.as_ref(),
-                            &positions, &risk, &scorer,
-                        ).await;
+                        process_signal(sig, &ctx).await;
                     }
                 }
             }
@@ -186,63 +173,44 @@ fn parse_activity_item(
     })
 }
 
-async fn process_signal(
-    signal: TradeSignal,
-    config: &AppConfig,
-    db: &TraderDb,
-    exec: Option<&Arc<OrderExecutor>>,
-    fill_db: Option<&Arc<FillDb>>,
-    positions: &Arc<Mutex<PositionTracker>>,
-    risk: &Arc<Mutex<RiskManager>>,
-    scorer: &Arc<Mutex<Scorer>>,
-) {
-    let score = match db.score_for(&signal.trader) {
+async fn process_signal(signal: TradeSignal, ctx: &FeedCtx) {
+    let score = match ctx.trader_db.score_for(&signal.trader) {
         Some(s) => s,
         None => return,
     };
 
-    if score < config.score_threshold {
-        debug!(score, threshold = config.score_threshold, "below threshold");
+    if score < ctx.config.score_threshold {
+        debug!(
+            score,
+            threshold = ctx.config.score_threshold,
+            "below threshold"
+        );
         return;
     }
 
     match signal.side {
-        CopySide::Buy => {
-            process_buy(signal, config, exec, fill_db, positions, risk, scorer).await;
-        }
-        CopySide::Sell => {
-            process_sell(signal, exec, fill_db, positions).await;
-        }
+        CopySide::Buy => process_buy(signal, ctx).await,
+        CopySide::Sell => process_sell(signal, ctx).await,
     }
 }
 
-/// Deterministic assignment: hash condition_id to pick control vs ml.
 fn market_is_ml(condition_id: &str) -> bool {
     let mut h: u64 = 5381;
     for b in condition_id.bytes() {
         h = h.wrapping_mul(33).wrapping_add(b as u64);
     }
-    h % 2 == 0
+    h.is_multiple_of(2)
 }
 
-async fn process_buy(
-    signal: TradeSignal,
-    config: &AppConfig,
-    exec: Option<&Arc<OrderExecutor>>,
-    fill_db: Option<&Arc<FillDb>>,
-    positions: &Arc<Mutex<PositionTracker>>,
-    risk: &Arc<Mutex<RiskManager>>,
-    scorer: &Arc<Mutex<Scorer>>,
-) {
-    let Some(exec) = exec else {
+async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
+    let Some(exec) = &ctx.exec else {
         debug!(trader = %signal.trader, "no CLOB client");
         return;
     };
 
-    let mode = config.execution_mode.as_str();
+    let mode = ctx.config.execution_mode.as_str();
 
-    // Always run ML scorer for data collection (if enabled)
-    let mut scorer_guard = scorer.lock().await;
+    let mut scorer_guard = ctx.scorer.lock().await;
     let ml_result = if scorer_guard.is_enabled() {
         Some(scorer_guard.score(&signal, "SPORTS"))
     } else {
@@ -250,16 +218,15 @@ async fn process_buy(
     };
     drop(scorer_guard);
 
-    // Determine which path this market takes
     let use_ml = match mode {
         "ml" => true,
         "ab" => market_is_ml(&signal.condition_id),
-        _ => false, // "control" or default
+        _ => false,
     };
 
     let (trade_size, model_version) = if use_ml {
         match &ml_result {
-            Some(result) if result.pass && result.kelly_size >= config.min_bet_usd => {
+            Some(result) if result.pass && result.kelly_size >= ctx.config.min_bet_usd => {
                 (result.kelly_size, "ml_kelly".to_owned())
             }
             Some(result) => {
@@ -272,13 +239,12 @@ async fn process_buy(
                 return;
             }
             None => {
-                // ML mode but no model loaded — skip
                 debug!(trader = %signal.trader, "ML path but no model loaded");
                 return;
             }
         }
     } else {
-        (config.copy_size_usd, "control".to_owned())
+        (ctx.config.copy_size_usd, "control".to_owned())
     };
 
     if mode == "ab" {
@@ -292,20 +258,19 @@ async fn process_buy(
         );
     }
 
-    // Risk checks
-    let tracker = positions.lock().await;
+    let tracker = ctx.positions.lock().await;
     let total_exposure = tracker.total_exposure();
     let open_markets = tracker.open_market_count();
     let position_notional = tracker.notional(&signal.condition_id);
     let position_trade_count = tracker.trade_count(&signal.condition_id);
     drop(tracker);
 
-    let daily_pnl = match fill_db {
+    let daily_pnl = match &ctx.fill_db {
         Some(fdb) => fdb.get_daily_pnl().await.unwrap_or(0.0),
         None => 0.0,
     };
 
-    let mut risk_guard = risk.lock().await;
+    let mut risk_guard = ctx.risk.lock().await;
     if let Err(reason) = risk_guard.can_trade(
         trade_size,
         &signal.condition_id,
@@ -332,11 +297,11 @@ async fn process_buy(
 
     let sig = signal.clone();
     let exec = Arc::clone(exec);
-    let fdb = fill_db.cloned();
-    let pos = Arc::clone(positions);
-    let rsk = Arc::clone(risk);
-    let min_entry = config.min_entry_price;
-    let max_entry = config.max_entry_price;
+    let fdb = ctx.fill_db.clone();
+    let pos = Arc::clone(&ctx.positions);
+    let rsk = Arc::clone(&ctx.risk);
+    let min_entry = ctx.config.min_entry_price;
+    let max_entry = ctx.config.max_entry_price;
     let ml_scores = ml_result;
     let mv = model_version.clone();
 
@@ -347,7 +312,7 @@ async fn process_buy(
         {
             Ok(Some(result)) => {
                 let fill_size = trade_size / result.fill_price.max(0.01);
-                if let Some(ref db) = fdb {
+                if let Some(db) = &fdb {
                     let record = FillRecord {
                         signal: sig.clone(),
                         order_id: result.order_id.clone(),
@@ -389,17 +354,12 @@ async fn process_buy(
     });
 }
 
-async fn process_sell(
-    signal: TradeSignal,
-    exec: Option<&Arc<OrderExecutor>>,
-    fill_db: Option<&Arc<FillDb>>,
-    positions: &Arc<Mutex<PositionTracker>>,
-) {
-    let Some(exec) = exec else {
+async fn process_sell(signal: TradeSignal, ctx: &FeedCtx) {
+    let Some(exec) = &ctx.exec else {
         return;
     };
 
-    let tracker = positions.lock().await;
+    let tracker = ctx.positions.lock().await;
     let pos_list = match tracker.get_positions(&signal.condition_id) {
         Some(p) => p.clone(),
         None => return,
@@ -427,7 +387,7 @@ async fn process_sell(
                     real_pnl = format!("{:.2}", real_pnl),
                     "SELL filled"
                 );
-                if let Some(ref db) = fill_db {
+                if let Some(db) = &ctx.fill_db {
                     let _ = db
                         .mark_sold(
                             pos.live_trade_id,
@@ -437,7 +397,7 @@ async fn process_sell(
                         )
                         .await;
                 }
-                positions
+                ctx.positions
                     .lock()
                     .await
                     .remove_position(&signal.condition_id, pos.live_trade_id);

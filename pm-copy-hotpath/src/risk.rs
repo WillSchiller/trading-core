@@ -47,6 +47,7 @@ impl RiskManager {
     }
 
     /// Check all risk gates. Returns Ok(()) if trade is allowed, Err(reason) if not.
+    #[allow(clippy::too_many_arguments)]
     pub fn can_trade(
         &mut self,
         proposed_size_usd: f64,

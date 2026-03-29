@@ -260,7 +260,7 @@ impl OrderExecutor {
             .client
             .market_order()
             .token_id(token_id)
-            .amount(amount.clone())
+            .amount(amount)
             .side(Side::Sell)
             .price(sell_price)
             .order_type(OrderType::FAK)

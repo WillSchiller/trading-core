@@ -43,10 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Risk manager — seed with existing market counts
     let mut risk_mgr = risk::RiskManager::new(&app_config);
-    if let Some(ref fdb) = fill_db {
-        if let Ok(counts) = fdb.get_market_trade_counts().await {
-            risk_mgr.seed_market_counts(counts);
-        }
+    if let Some(fdb) = &fill_db
+        && let Ok(counts) = fdb.get_market_trade_counts().await
+    {
+        risk_mgr.seed_market_counts(counts);
     }
     let risk_mgr = Arc::new(Mutex::new(risk_mgr));
 
@@ -55,11 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ml_scorer.start(&app_config).unwrap_or_else(|e| {
         tracing::warn!(error = e, "scorer init failed — running without ML");
     });
-    if ml_scorer.is_enabled() {
-        if let Some(ref fdb) = fill_db {
-            let addrs: Vec<String> = trader_scores.all_addresses();
-            ml_scorer.preload_trader_stats(fdb, &addrs).await;
-        }
+    if ml_scorer.is_enabled()
+        && let Some(fdb) = &fill_db
+    {
+        let addrs: Vec<String> = trader_scores.all_addresses();
+        ml_scorer.preload_trader_stats(fdb, &addrs).await;
     }
     let ml_scorer = Arc::new(Mutex::new(ml_scorer));
 
@@ -80,26 +80,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // RTDS feed task
-    let cfg = app_config.clone();
-    let db_clone = Arc::clone(&trader_scores);
-    let exec_clone = exec.clone();
-    let fill_db_clone = fill_db.clone();
-    let pos_clone = Arc::clone(&position_tracker);
-    let risk_clone = Arc::clone(&risk_mgr);
-    let scorer_clone = Arc::clone(&ml_scorer);
+    let feed_ctx = rtds_listener::FeedCtx {
+        config: app_config.clone(),
+        trader_db: Arc::clone(&trader_scores),
+        exec: exec.clone(),
+        fill_db: fill_db.clone(),
+        positions: Arc::clone(&position_tracker),
+        risk: Arc::clone(&risk_mgr),
+        scorer: Arc::clone(&ml_scorer),
+    };
     let feed_task = tokio::spawn(async move {
-        if let Err(e) = rtds_listener::run_feed(
-            cfg,
-            db_clone,
-            exec_clone,
-            fill_db_clone,
-            pos_clone,
-            risk_clone,
-            scorer_clone,
-            shutdown_rx,
-        )
-        .await
-        {
+        if let Err(e) = rtds_listener::run_feed(feed_ctx, shutdown_rx).await {
             tracing::error!(error = %e, "feed exited with error");
         }
     });

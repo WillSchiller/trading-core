@@ -3,6 +3,7 @@ use tracing::info;
 
 use crate::types::Position;
 
+#[derive(Default)]
 pub struct PositionTracker {
     by_condition: AHashMap<String, Vec<Position>>,
 }

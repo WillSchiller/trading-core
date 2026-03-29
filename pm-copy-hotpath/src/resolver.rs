@@ -150,45 +150,44 @@ async fn poll_once(
                     let _ = db.update_current_price(pos.live_trade_id, price).await;
 
                     // Auto-sell at near-certainty
-                    if price >= config.auto_sell_threshold {
-                        if let Some(executor) = exec {
-                            info!(
-                                id = pos.live_trade_id,
-                                price, "auto-sell triggered (near 1.0)"
-                            );
-                            let signal = crate::types::TradeSignal {
-                                trader: String::new(),
-                                token_id: pos.token_id.clone(),
-                                side: crate::types::CopySide::Sell,
-                                price,
-                                size: pos.fill_size,
-                                condition_id: pos.condition_id.clone(),
-                                neg_risk: pos.neg_risk,
-                                dedup_key: format!("autosell_{}", pos.live_trade_id),
-                            };
-                            match executor.execute_sell(&signal, pos.fill_size).await {
-                                Ok(Some(result)) => {
-                                    let real_pnl =
-                                        (result.fill_price - pos.fill_price) * pos.fill_size;
-                                    let _ = db
-                                        .mark_sold(
-                                            pos.live_trade_id,
-                                            result.fill_price,
-                                            real_pnl,
-                                            &result.order_id,
-                                        )
-                                        .await;
-                                    tracker.remove_position(condition_id, pos.live_trade_id);
-                                    info!(
-                                        id = pos.live_trade_id,
-                                        real_pnl = format!("{:.2}", real_pnl),
-                                        "auto-sold"
-                                    );
-                                }
-                                Ok(None) => debug!(id = pos.live_trade_id, "auto-sell: no fill"),
-                                Err(e) => {
-                                    warn!(id = pos.live_trade_id, error = %e, "auto-sell error")
-                                }
+                    if price >= config.auto_sell_threshold
+                        && let Some(executor) = exec
+                    {
+                        info!(
+                            id = pos.live_trade_id,
+                            price, "auto-sell triggered (near 1.0)"
+                        );
+                        let signal = crate::types::TradeSignal {
+                            trader: String::new(),
+                            token_id: pos.token_id.clone(),
+                            side: crate::types::CopySide::Sell,
+                            price,
+                            size: pos.fill_size,
+                            condition_id: pos.condition_id.clone(),
+                            neg_risk: pos.neg_risk,
+                            dedup_key: format!("autosell_{}", pos.live_trade_id),
+                        };
+                        match executor.execute_sell(&signal, pos.fill_size).await {
+                            Ok(Some(result)) => {
+                                let real_pnl = (result.fill_price - pos.fill_price) * pos.fill_size;
+                                let _ = db
+                                    .mark_sold(
+                                        pos.live_trade_id,
+                                        result.fill_price,
+                                        real_pnl,
+                                        &result.order_id,
+                                    )
+                                    .await;
+                                tracker.remove_position(condition_id, pos.live_trade_id);
+                                info!(
+                                    id = pos.live_trade_id,
+                                    real_pnl = format!("{:.2}", real_pnl),
+                                    "auto-sold"
+                                );
+                            }
+                            Ok(None) => debug!(id = pos.live_trade_id, "auto-sell: no fill"),
+                            Err(e) => {
+                                warn!(id = pos.live_trade_id, error = %e, "auto-sell error")
                             }
                         }
                     }
