@@ -122,9 +122,9 @@ impl FillDb {
         let rows = client
             .query(
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
-                    order_id, executed_at, COALESCE(model_version, '') as mv
+                    order_id, created_at, COALESCE(model_version, '') as mv
              FROM pm_rust_trades
-             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'",
+             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY'",
                 &[],
             )
             .await
@@ -166,7 +166,7 @@ impl FillDb {
                 "SELECT COALESCE(SUM(real_pnl), 0)::float8
              FROM pm_rust_trades
              WHERE resolved = true AND execution_status IN ('filled', 'sold')
-               AND resolved_at >= CURRENT_DATE AND source = 'rust'",
+               AND resolved_at >= CURRENT_DATE",
                 &[],
             )
             .await
@@ -184,7 +184,7 @@ impl FillDb {
             .query(
                 "SELECT condition_id, COUNT(*)::int
              FROM pm_rust_trades
-             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'
+             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY'
              GROUP BY condition_id",
                 &[],
             )
@@ -211,15 +211,11 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        client
-            .execute(
-                "UPDATE pm_rust_trades
-             SET resolved = true, resolution_price = $2, real_pnl = $3, resolved_at = NOW()
-             WHERE id = $1",
-                &[&live_trade_id, &resolution_price, &real_pnl],
-            )
-            .await
-            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let sql = format!(
+            "UPDATE pm_rust_trades SET resolved = true, resolution_price = {}, real_pnl = {}, resolved_at = NOW() WHERE id = {}",
+            resolution_price, real_pnl, live_trade_id
+        );
+        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -235,16 +231,12 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        client
-            .execute(
-                "UPDATE pm_rust_trades
-             SET execution_status = 'sold', resolution_price = $2, real_pnl = $3,
-                 resolved = true, resolved_at = NOW(), order_id = order_id || ',' || $4
-             WHERE id = $1",
-                &[&live_trade_id, &exit_price, &real_pnl, &sell_order_id],
-            )
-            .await
-            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let esc_oid = sell_order_id.replace('\'', "''");
+        let sql = format!(
+            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = {}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{}' WHERE id = {}",
+            exit_price, real_pnl, esc_oid, live_trade_id
+        );
+        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -258,13 +250,8 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        client
-            .execute(
-                "UPDATE pm_rust_trades SET current_price = $2 WHERE id = $1",
-                &[&live_trade_id, &current_price],
-            )
-            .await
-            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let sql = format!("UPDATE pm_rust_trades SET pnl = {} WHERE id = {}", current_price, live_trade_id);
+        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -280,16 +267,13 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        client
-            .execute(
-                "UPDATE pm_rust_trades
-             SET execution_status = $2,
-                 fill_price = COALESCE($3, fill_price),
-                 fill_size = COALESCE($4, fill_size)
-             WHERE id = $1",
-                &[&live_trade_id, &status, &fill_price, &fill_size],
-            )
-            .await
+        let fp = fill_price.map(|v| format!("{v}")).unwrap_or("fill_price".to_owned());
+        let fs = fill_size.map(|v| format!("{v}")).unwrap_or("fill_size".to_owned());
+        let sql = format!(
+            "UPDATE pm_rust_trades SET execution_status = '{}', fill_price = {}, fill_size = {} WHERE id = {}",
+            status.replace('\'', "''"), fp, fs, live_trade_id
+        );
+        client.simple_query(&sql).await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
