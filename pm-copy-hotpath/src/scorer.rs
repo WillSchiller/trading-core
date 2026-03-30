@@ -30,54 +30,81 @@ impl Calibration {
     }
 }
 
-pub struct Scorer {
-    session: Option<ort::session::Session>,
+struct ModelInstance {
+    name: String,
+    session: ort::session::Session,
     calibration: Option<Calibration>,
+    features: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModelScore {
+    pub raw_prob: f64,
+    pub cal_prob: f64,
+    pub kelly_size: f64,
+    pub pass: bool,
+}
+
+pub struct Scorer {
+    models: Vec<ModelInstance>,
     trader_stats: AHashMap<String, TraderRollingStats>,
     market_counts: AHashMap<String, usize>,
     kelly_mult: f64,
     max_kelly_frac: f64,
     bankroll: f64,
     min_bet: f64,
+    primary_model: usize,
 }
 
 impl Scorer {
     pub fn new(config: &AppConfig) -> Self {
         Self {
-            session: None,
-            calibration: None,
+            models: Vec::new(),
             trader_stats: AHashMap::new(),
             market_counts: AHashMap::new(),
             kelly_mult: config.kelly_half_multiplier,
             max_kelly_frac: config.max_kelly_fraction,
             bankroll: config.bankroll_usd,
             min_bet: config.min_bet_usd,
+            primary_model: 0,
         }
     }
 
     pub fn start(&mut self, config: &AppConfig) -> Result<(), String> {
-        if config.onnx_model_path.is_empty() {
-            info!("no onnx_model_path configured — scoring disabled");
-            return Ok(());
-        }
+        let model_defs = [
+            (
+                "v2",
+                "/app/models/pm_scorer_v2.onnx",
+                "/app/models/pm_v2_calibration.json",
+                "/app/models/pm_v2_features.json",
+            ),
+            (
+                "v3",
+                "/app/models/pm_scorer_v3.onnx",
+                "/app/models/pm_v3_calibration.json",
+                "/app/models/pm_v3_features.json",
+            ),
+            (
+                "v4",
+                "/app/models/pm_scorer_v4.onnx",
+                "/app/models/pm_v4_calibration.json",
+                "/app/models/pm_v4_features.json",
+            ),
+        ];
 
-        let model_path = Path::new(&config.onnx_model_path);
-        if !model_path.exists() {
-            warn!(path = %config.onnx_model_path, "ONNX model file not found — scoring disabled");
-            return Ok(());
-        }
+        for (name, model_path, cal_path, feat_path) in &model_defs {
+            if !Path::new(model_path).exists() {
+                info!(model = name, "model file not found, skipping");
+                continue;
+            }
+            let session = ort::session::Session::builder()
+                .map_err(|e| e.to_string())?
+                .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)
+                .map_err(|e| e.to_string())?
+                .commit_from_file(model_path)
+                .map_err(|e| e.to_string())?;
 
-        let session = ort::session::Session::builder()
-            .map_err(|e| e.to_string())?
-            .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)
-            .map_err(|e| e.to_string())?
-            .commit_from_file(model_path)
-            .map_err(|e| e.to_string())?;
-        self.session = Some(session);
-
-        if !config.calibration_path.is_empty() {
-            let cal_path = Path::new(&config.calibration_path);
-            if cal_path.exists() {
+            let calibration = if Path::new(cal_path).exists() {
                 let data = std::fs::read_to_string(cal_path).map_err(|e| e.to_string())?;
                 #[derive(serde::Deserialize)]
                 struct CalData {
@@ -85,17 +112,73 @@ impl Scorer {
                     y: Vec<f64>,
                 }
                 let cal: CalData = serde_json::from_str(&data).map_err(|e| e.to_string())?;
-                self.calibration = Some(Calibration { x: cal.x, y: cal.y });
-                info!("calibration loaded");
+                Some(Calibration { x: cal.x, y: cal.y })
+            } else {
+                None
+            };
+
+            let features: Vec<String> = if Path::new(feat_path).exists() {
+                let data = std::fs::read_to_string(feat_path).map_err(|e| e.to_string())?;
+                serde_json::from_str(&data).map_err(|e| e.to_string())?
+            } else {
+                vec![]
+            };
+
+            info!(model = name, n_features = features.len(), "loaded");
+            self.models.push(ModelInstance {
+                name: name.to_string(),
+                session,
+                calibration,
+                features,
+            });
+        }
+
+        // Primary model is the last one loaded (v4 preferred)
+        if !self.models.is_empty() {
+            self.primary_model = self.models.len() - 1;
+            // Also try loading from config path for backwards compat
+        }
+
+        if self.models.is_empty() && !config.onnx_model_path.is_empty() {
+            let p = Path::new(&config.onnx_model_path);
+            if p.exists() {
+                let session = ort::session::Session::builder()
+                    .map_err(|e| e.to_string())?
+                    .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)
+                    .map_err(|e| e.to_string())?
+                    .commit_from_file(p)
+                    .map_err(|e| e.to_string())?;
+                let calibration = if !config.calibration_path.is_empty()
+                    && Path::new(&config.calibration_path).exists()
+                {
+                    let data = std::fs::read_to_string(&config.calibration_path)
+                        .map_err(|e| e.to_string())?;
+                    #[derive(serde::Deserialize)]
+                    struct CalData {
+                        x: Vec<f64>,
+                        y: Vec<f64>,
+                    }
+                    let cal: CalData = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+                    Some(Calibration { x: cal.x, y: cal.y })
+                } else {
+                    None
+                };
+                info!(model = %config.onnx_model_path, "fallback model loaded");
+                self.models.push(ModelInstance {
+                    name: "config".to_string(),
+                    session,
+                    calibration,
+                    features: vec![],
+                });
             }
         }
 
-        info!(model = %config.onnx_model_path, "ONNX scorer loaded");
+        info!(count = self.models.len(), "scorer ready");
         Ok(())
     }
 
     pub fn is_enabled(&self) -> bool {
-        self.session.is_some()
+        !self.models.is_empty()
     }
 
     pub async fn preload_trader_stats(&mut self, db: &FillDb, addresses: &[String]) {
@@ -115,79 +198,189 @@ impl Scorer {
     pub fn score(
         &mut self,
         signal: &TradeSignal,
-        trader_category: &str,
+        category: &str,
         outcome_name: &str,
     ) -> ScoreResult {
-        let session = match &mut self.session {
-            Some(s) => s,
-            None => {
-                return ScoreResult {
-                    win_score: 1.0,
-                    cal_prob: 0.5,
-                    kelly_size: 0.0,
-                    pass: true,
-                };
-            }
-        };
+        if self.models.is_empty() {
+            return ScoreResult {
+                win_score: 1.0,
+                cal_prob: 0.5,
+                kelly_size: 0.0,
+                pass: true,
+            };
+        }
 
         let stats = self.trader_stats.get(&signal.trader);
-        let features = build_features(
+        let all_features = build_all_features(
             signal,
-            trader_category,
+            category,
             outcome_name,
             stats,
             &mut self.market_counts,
         );
-        let n_features = features.len();
 
-        let input = ort::value::Tensor::from_array(([1usize, n_features], features))
-            .expect("ort tensor creation");
+        let mut all_scores: std::collections::HashMap<String, ModelScore> =
+            std::collections::HashMap::new();
+        let mut primary_result = ScoreResult {
+            win_score: 0.5,
+            cal_prob: 0.5,
+            kelly_size: 0.0,
+            pass: false,
+        };
 
-        let outputs = match session.run(ort::inputs![input]) {
-            Ok(o) => o,
-            Err(e) => {
-                warn!(error = %e, "ONNX inference error — allowing trade");
-                return ScoreResult {
+        for (i, model) in self.models.iter_mut().enumerate() {
+            let features = select_features(&all_features, &model.features);
+            let n = features.len();
+            if n == 0 {
+                continue;
+            }
+
+            let input = match ort::value::Tensor::from_array(([1usize, n], features)) {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!(model = %model.name, error = %e, "tensor creation failed");
+                    continue;
+                }
+            };
+            let outputs = match model.session.run(ort::inputs![input]) {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(model = %model.name, error = %e, "inference error");
+                    continue;
+                }
+            };
+
+            let raw_prob = extract_prob(&outputs);
+            let cal_prob = match &model.calibration {
+                Some(cal) => cal.interpolate(raw_prob),
+                None => raw_prob,
+            };
+            let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
+            let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
+                .max(0.0)
+                .min(self.max_kelly_frac)
+                * self.kelly_mult;
+            let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
+            let pass = kelly_size >= self.min_bet;
+
+            let score = ModelScore {
+                raw_prob,
+                cal_prob,
+                kelly_size,
+                pass,
+            };
+            if i == self.primary_model {
+                primary_result = ScoreResult {
+                    win_score: raw_prob,
+                    cal_prob,
+                    kelly_size,
+                    pass,
+                };
+            }
+            all_scores.insert(model.name.clone(), score);
+        }
+
+        if let Ok(json) = serde_json::to_string(&all_scores) {
+            debug!(
+                trader = %signal.trader,
+                scores = %json,
+                "multi-model scored"
+            );
+        }
+
+        primary_result
+    }
+
+    pub fn score_all_json(
+        &mut self,
+        signal: &TradeSignal,
+        category: &str,
+        outcome_name: &str,
+    ) -> (ScoreResult, String) {
+        if self.models.is_empty() {
+            return (
+                ScoreResult {
                     win_score: 1.0,
                     cal_prob: 0.5,
                     kelly_size: 0.0,
                     pass: true,
-                };
-            }
-        };
+                },
+                "{}".to_string(),
+            );
+        }
 
-        let raw_prob = extract_prob(&outputs);
-
-        let cal_prob = match &self.calibration {
-            Some(cal) => cal.interpolate(raw_prob),
-            None => raw_prob,
-        };
-
-        let entry_price = signal.price;
-        let payoff = (1.0 / entry_price.max(0.01)) - 1.0;
-        let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
-            .max(0.0)
-            .min(self.max_kelly_frac)
-            * self.kelly_mult;
-        let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
-
-        let pass = kelly_size >= self.min_bet;
-
-        debug!(
-            trader = %signal.trader,
-            raw_prob = format!("{:.3}", raw_prob),
-            cal_prob = format!("{:.3}", cal_prob),
-            kelly_size = format!("{:.2}", kelly_size),
-            pass,
-            "scored"
+        let stats = self.trader_stats.get(&signal.trader);
+        let all_features = build_all_features(
+            signal,
+            category,
+            outcome_name,
+            stats,
+            &mut self.market_counts,
         );
 
-        ScoreResult {
-            win_score: raw_prob,
-            cal_prob,
-            kelly_size,
-            pass,
+        let mut all_scores: std::collections::HashMap<String, ModelScore> =
+            std::collections::HashMap::new();
+        let mut primary_result = ScoreResult {
+            win_score: 0.5,
+            cal_prob: 0.5,
+            kelly_size: 0.0,
+            pass: false,
+        };
+
+        for (i, model) in self.models.iter_mut().enumerate() {
+            let features = select_features(&all_features, &model.features);
+            let n = features.len();
+            if n == 0 {
+                continue;
+            }
+
+            let input = match ort::value::Tensor::from_array(([1usize, n], features)) {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!(model = %model.name, error = %e, "tensor creation failed");
+                    continue;
+                }
+            };
+            let outputs = match model.session.run(ort::inputs![input]) {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!(model = %model.name, error = %e, "inference error");
+                    continue;
+                }
+            };
+
+            let raw_prob = extract_prob(&outputs);
+            let cal_prob = match &model.calibration {
+                Some(cal) => cal.interpolate(raw_prob),
+                None => raw_prob,
+            };
+            let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
+            let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
+                .max(0.0)
+                .min(self.max_kelly_frac)
+                * self.kelly_mult;
+            let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
+            let pass = kelly_size >= self.min_bet;
+
+            let score = ModelScore {
+                raw_prob,
+                cal_prob,
+                kelly_size,
+                pass,
+            };
+            if i == self.primary_model {
+                primary_result = ScoreResult {
+                    win_score: raw_prob,
+                    cal_prob,
+                    kelly_size,
+                    pass,
+                };
+            }
+            all_scores.insert(model.name.clone(), score);
         }
+
+        let json = serde_json::to_string(&all_scores).unwrap_or_else(|_| "{}".to_string());
+        (primary_result, json)
     }
 
     pub fn update_trader_pnl(&mut self, trader: &str, pnl: f64) {
@@ -218,13 +411,13 @@ fn extract_prob(outputs: &ort::session::SessionOutputs<'_>) -> f64 {
 
 use chrono::{Datelike, Timelike};
 
-fn build_features(
+fn build_all_features(
     signal: &TradeSignal,
     category: &str,
     outcome_name: &str,
     stats: Option<&TraderRollingStats>,
     market_counts: &mut AHashMap<String, usize>,
-) -> Vec<f32> {
+) -> AHashMap<String, f32> {
     let p = signal.price;
     let mc = market_counts
         .entry(signal.condition_id.clone())
@@ -252,45 +445,80 @@ fn build_features(
     let hour = now.hour() as f32;
     let dow = now.weekday().num_days_from_sunday() as f32;
 
-    let is_no = {
-        let o = outcome_name.to_lowercase();
-        (o == "no" || o == "under" || o == "draw" || o == "down") as u8 as f32
-    };
+    let o = outcome_name.to_lowercase();
+    let is_no = (o == "no" || o == "under" || o == "draw" || o == "down") as u8 as f32;
     let is_favourite = if p >= 0.5 { 1.0f32 } else { 0.0 };
-    let is_no_underdog = if is_no > 0.5 && p < 0.5 { 1.0 } else { 0.0 };
-    let is_no_favourite = if is_no > 0.5 && p >= 0.5 { 1.0 } else { 0.0 };
-    let is_yes_underdog = if is_no < 0.5 && p < 0.5 { 1.0 } else { 0.0 };
-    let is_yes_favourite = if is_no < 0.5 && p >= 0.5 { 1.0 } else { 0.0 };
 
-    // Must match FEATURES order in train.py v4
-    vec![
-        p as f32,                                        // entry_price
-        (p - 0.5).abs() as f32,                          // price_dist_from_half
-        if p < 0.5 { 1.0 - p as f32 } else { p as f32 }, // implied_edge
-        (1.0 / p.max(0.01) - 1.0) as f32,                // payoff_ratio
-        is_no,
-        is_favourite,
-        is_no_underdog,
-        is_no_favourite,
-        is_yes_underdog,
-        is_yes_favourite,
-        if category == "SPORTS" { 1.0 } else { 0.0 }, // cat_sports
-        if category == "CRYPTO" { 1.0 } else { 0.0 }, // cat_crypto
-        if category == "POLITICS" { 1.0 } else { 0.0 }, // cat_politics
-        hour,
-        dow,
-        size_vs_median as f32,
-        roll_wr_20 as f32,
-        roll_pf_20 as f32,
-        roll_wr_50 as f32,
-        roll_pf_50 as f32,
-        roll_avg_pnl_20 as f32,
-        roll_streak as f32,
-        lifetime_wr as f32,
-        lifetime_pf as f32,
-        total_trades as f32,
-        market_count as f32,
-    ]
+    let mut m = AHashMap::new();
+    m.insert("entry_price".to_string(), p as f32);
+    m.insert("price_dist_from_half".to_string(), (p - 0.5).abs() as f32);
+    m.insert(
+        "implied_edge".to_string(),
+        if p < 0.5 { 1.0 - p as f32 } else { p as f32 },
+    );
+    m.insert("payoff_ratio".to_string(), (1.0 / p.max(0.01) - 1.0) as f32);
+    m.insert("is_no".to_string(), is_no);
+    m.insert("is_favourite".to_string(), is_favourite);
+    m.insert(
+        "is_no_underdog".to_string(),
+        if is_no > 0.5 && p < 0.5 { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "is_no_favourite".to_string(),
+        if is_no > 0.5 && p >= 0.5 { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "is_yes_underdog".to_string(),
+        if is_no < 0.5 && p < 0.5 { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "is_yes_favourite".to_string(),
+        if is_no < 0.5 && p >= 0.5 { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "cat_sports".to_string(),
+        if category == "SPORTS" { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "cat_crypto".to_string(),
+        if category == "CRYPTO" { 1.0 } else { 0.0 },
+    );
+    m.insert(
+        "cat_politics".to_string(),
+        if category == "POLITICS" { 1.0 } else { 0.0 },
+    );
+    m.insert("hour".to_string(), hour);
+    m.insert("dow".to_string(), dow);
+    m.insert("size_vs_median".to_string(), size_vs_median as f32);
+    m.insert("roll_wr_20".to_string(), roll_wr_20 as f32);
+    m.insert("roll_pf_20".to_string(), roll_pf_20 as f32);
+    m.insert("roll_wr_50".to_string(), roll_wr_50 as f32);
+    m.insert("roll_pf_50".to_string(), roll_pf_50 as f32);
+    m.insert("roll_avg_pnl_20".to_string(), roll_avg_pnl_20 as f32);
+    m.insert("roll_streak".to_string(), roll_streak as f32);
+    m.insert("lifetime_wr".to_string(), lifetime_wr as f32);
+    m.insert("lifetime_pf".to_string(), lifetime_pf as f32);
+    m.insert("trade_num".to_string(), total_trades as f32);
+    m.insert("market_trader_count".to_string(), market_count as f32);
+    // v2-specific
+    m.insert("is_5min".to_string(), 0.0); // we filter these out
+    // v3-specific (defaults when not available)
+    m.insert("is_binary_market".to_string(), 1.0);
+    m.insert(
+        "neg_risk".to_string(),
+        if signal.neg_risk { 1.0 } else { 0.0 },
+    );
+    m.insert("time_to_resolution".to_string(), 24.0); // default 24h
+    m.insert("price_momentum".to_string(), 0.0);
+    m.insert("trader_category_wr".to_string(), lifetime_wr as f32);
+    m
+}
+
+fn select_features(all: &AHashMap<String, f32>, feature_list: &[String]) -> Vec<f32> {
+    feature_list
+        .iter()
+        .map(|f| *all.get(f).unwrap_or(&0.0))
+        .collect()
 }
 
 fn compute_rolling_stats(

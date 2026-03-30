@@ -303,10 +303,11 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         .unwrap_or("");
 
     let mut scorer_guard = ctx.scorer.lock().await;
-    let ml_result = if scorer_guard.is_enabled() {
-        Some(scorer_guard.score(&signal, category, outcome_name))
+    let (ml_result, ml_scores_json) = if scorer_guard.is_enabled() {
+        let (result, json) = scorer_guard.score_all_json(&signal, category, outcome_name);
+        (Some(result), json)
     } else {
-        None
+        (None, String::new())
     };
     drop(scorer_guard);
 
@@ -316,28 +317,9 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         _ => false,
     };
 
-    let (trade_size, model_version) = if use_ml {
-        match &ml_result {
-            Some(result) if result.pass && result.kelly_size >= ctx.config.min_bet_usd => {
-                (result.kelly_size, "ml_kelly".to_owned())
-            }
-            Some(result) => {
-                debug!(
-                    trader = %signal.trader,
-                    kelly = format!("{:.2}", result.kelly_size),
-                    pass = result.pass,
-                    "ML path: scorer rejected"
-                );
-                return;
-            }
-            None => {
-                debug!(trader = %signal.trader, "ML path but no model loaded");
-                return;
-            }
-        }
-    } else {
-        (ctx.config.copy_size_usd, "control".to_owned())
-    };
+    // Always bet $1. Score every trade with ML, record the score for analysis.
+    let trade_size = ctx.config.copy_size_usd;
+    let model_version = "control".to_owned();
 
     if mode == "ab" {
         info!(
@@ -405,6 +387,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         .as_ref()
         .map(|m| m.outcome.clone())
         .unwrap_or_default();
+    let scores_json = ml_scores_json;
 
     tokio::spawn(async move {
         let t0 = std::time::Instant::now();
@@ -442,6 +425,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
                 latency_ms: Some(latency_ms),
                 market_slug: cached_slug.clone(),
                 outcome: cached_outcome.clone(),
+                ml_scores_json: scores_json.clone(),
             };
             match db.insert_fill(&record).await {
                 Ok(id) => {

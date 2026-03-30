@@ -20,6 +20,7 @@ pub struct FillRecord {
     pub latency_ms: Option<i32>,
     pub market_slug: String,
     pub outcome: String,
+    pub ml_scores_json: String,
 }
 
 pub struct TraderRollingStats {
@@ -71,13 +72,13 @@ impl FillDb {
                 trader_size, trader_price, our_size,
                 order_id, fill_price, fill_size, execution_status,
                 model_version, win_score, cal_prob, kelly_size,
-                market_slug, outcome, neg_risk, latency_ms
+                market_slug, outcome, neg_risk, latency_ms, ml_scores
             ) VALUES (
                 '{trader}', '{cid}', '{tid}', '{side}',
                 {size}, {price}, {our_size},
                 '{oid}', {fpx}, {fsz}, '{status}',
                 '{mv}', {ws}, {cp}, {ks},
-                '{slug}', '{outcome}', {neg_risk}, {lat}
+                '{slug}', '{outcome}', {neg_risk}, {lat}, {ml_json}
             )
             RETURNING id",
             neg_risk = fill.signal.neg_risk,
@@ -99,6 +100,11 @@ impl FillDb {
             slug = esc(&fill.market_slug),
             outcome = esc(&fill.outcome),
             lat = opt_int(fill.latency_ms),
+            ml_json = if fill.ml_scores_json.is_empty() {
+                "NULL".to_string()
+            } else {
+                format!("'{}'", esc(&fill.ml_scores_json))
+            },
         );
 
         let rows = client.simple_query(&sql).await.map_err(|e| {
