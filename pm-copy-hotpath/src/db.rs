@@ -124,7 +124,7 @@ impl FillDb {
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
                     order_id, created_at, COALESCE(model_version, '') as mv
              FROM pm_rust_trades
-             WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY'",
+             WHERE execution_status IN ('filled', 'pending') AND resolved = false AND side = 'BUY'",
                 &[],
             )
             .await
@@ -350,6 +350,37 @@ impl FillDb {
             total_trades,
             median_size,
         })
+    }
+
+    pub async fn load_pending_orders(
+        &self,
+    ) -> Result<Vec<(i64, String, String, String, f64)>, HotPathError> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let rows = client
+            .query(
+                "SELECT id, order_id, condition_id, token_id, fill_price::float8
+                 FROM pm_rust_trades
+                 WHERE execution_status = 'pending' AND resolved = false",
+                &[],
+            )
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                (
+                    r.get::<_, i64>(0),
+                    r.get::<_, String>(1),
+                    r.get::<_, String>(2),
+                    r.get::<_, String>(3),
+                    r.get::<_, f64>(4),
+                )
+            })
+            .collect())
     }
 
     pub fn pool(&self) -> &Pool {

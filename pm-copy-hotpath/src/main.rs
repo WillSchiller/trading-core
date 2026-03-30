@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use pm_copy_hotpath::{
-    config, db, order_builder, positions, resolver, risk, rtds_listener, scorer, trader_db,
+    config, db, fill_checker, order_builder, positions, resolver, risk, rtds_listener, scorer,
+    trader_db,
 };
 use tokio::sync::{Mutex, broadcast};
 use tracing_subscriber::EnvFilter;
@@ -77,6 +78,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             resolver::run_resolver(cfg, pos, rsk, database, executor, resolver_shutdown).await;
         });
         tracing::info!("resolver task started");
+    }
+
+    // Fill checker — polls pending GTC orders, updates status
+    if let (Some(fdb), Some(executor)) = (&fill_db, &exec) {
+        let checker_shutdown = shutdown_tx.subscribe();
+        let database = Arc::clone(fdb);
+        let ex = Arc::clone(executor);
+        let pos = Arc::clone(&position_tracker);
+        tokio::spawn(async move {
+            fill_checker::run_fill_checker(database, ex, pos, checker_shutdown).await;
+        });
+        tracing::info!("fill checker task started");
     }
 
     // RTDS feed task

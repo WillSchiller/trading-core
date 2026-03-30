@@ -1,6 +1,7 @@
 pub mod clob_client;
 pub mod config;
 pub mod db;
+pub mod fill_checker;
 pub mod order_builder;
 pub mod positions;
 pub mod resolver;

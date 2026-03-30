@@ -223,6 +223,24 @@ impl OrderExecutor {
         Ok(None)
     }
 
+    pub async fn get_order(
+        &self,
+        order_id: &str,
+    ) -> Result<polymarket_client_sdk::clob::types::response::OpenOrderResponse, HotPathError> {
+        self.client
+            .order(order_id)
+            .await
+            .map_err(HotPathError::from)
+    }
+
+    pub async fn cancel_order(&self, order_id: &str) -> Result<(), HotPathError> {
+        self.client
+            .cancel_order(order_id)
+            .await
+            .map_err(HotPathError::from)?;
+        Ok(())
+    }
+
     pub async fn execute_sell(
         &self,
         signal: &TradeSignal,
