@@ -215,7 +215,10 @@ impl FillDb {
             "UPDATE pm_rust_trades SET resolved = true, resolution_price = {}, real_pnl = {}, resolved_at = NOW() WHERE id = {}",
             resolution_price, real_pnl, live_trade_id
         );
-        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
+        client
+            .simple_query(&sql)
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -236,7 +239,10 @@ impl FillDb {
             "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = {}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{}' WHERE id = {}",
             exit_price, real_pnl, esc_oid, live_trade_id
         );
-        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
+        client
+            .simple_query(&sql)
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -250,8 +256,14 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        let sql = format!("UPDATE pm_rust_trades SET pnl = {} WHERE id = {}", current_price, live_trade_id);
-        client.simple_query(&sql).await.map_err(|e| HotPathError::Db(e.to_string()))?;
+        let sql = format!(
+            "UPDATE pm_rust_trades SET pnl = {} WHERE id = {}",
+            current_price, live_trade_id
+        );
+        client
+            .simple_query(&sql)
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
 
@@ -267,13 +279,22 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        let fp = fill_price.map(|v| format!("{v}")).unwrap_or("fill_price".to_owned());
-        let fs = fill_size.map(|v| format!("{v}")).unwrap_or("fill_size".to_owned());
+        let fp = fill_price
+            .map(|v| format!("{v}"))
+            .unwrap_or("fill_price".to_owned());
+        let fs = fill_size
+            .map(|v| format!("{v}"))
+            .unwrap_or("fill_size".to_owned());
         let sql = format!(
             "UPDATE pm_rust_trades SET execution_status = '{}', fill_price = {}, fill_size = {} WHERE id = {}",
-            status.replace('\'', "''"), fp, fs, live_trade_id
+            status.replace('\'', "''"),
+            fp,
+            fs,
+            live_trade_id
         );
-        client.simple_query(&sql).await
+        client
+            .simple_query(&sql)
+            .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         Ok(())
     }
