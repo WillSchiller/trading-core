@@ -18,6 +18,8 @@ pub struct FillRecord {
     pub cal_prob: Option<f64>,
     pub kelly_size: Option<f64>,
     pub latency_ms: Option<i32>,
+    pub market_slug: String,
+    pub outcome: String,
 }
 
 pub struct TraderRollingStats {
@@ -69,13 +71,13 @@ impl FillDb {
                 trader_size, trader_price, our_size,
                 order_id, fill_price, fill_size, execution_status,
                 model_version, win_score, cal_prob, kelly_size,
-                market_slug, neg_risk, latency_ms
+                market_slug, outcome, neg_risk, latency_ms
             ) VALUES (
                 '{trader}', '{cid}', '{tid}', '{side}',
                 {size}, {price}, {our_size},
                 '{oid}', {fpx}, {fsz}, '{status}',
                 '{mv}', {ws}, {cp}, {ks},
-                '', {neg_risk}, {lat}
+                '{slug}', '{outcome}', {neg_risk}, {lat}
             )
             RETURNING id",
             neg_risk = fill.signal.neg_risk,
@@ -94,6 +96,8 @@ impl FillDb {
             ws = opt_num(fill.win_score),
             cp = opt_num(fill.cal_prob),
             ks = opt_num(fill.kelly_size),
+            slug = esc(&fill.market_slug),
+            outcome = esc(&fill.outcome),
             lat = opt_int(fill.latency_ms),
         );
 

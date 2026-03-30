@@ -191,7 +191,7 @@
       "title": "Recent Trades",
       "gridPos": {"x": 0, "y": 29, "w": 24, "h": 10},
       "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT created_at, model_version, execution_status, latency_ms, fill_price, fill_size, real_pnl, resolved FROM pm_rust_trades ORDER BY created_at DESC LIMIT 50",
+        "rawSql": "SELECT created_at, model_version, execution_status, market_slug, outcome, latency_ms, fill_price, fill_size, real_pnl, resolved FROM pm_rust_trades ORDER BY created_at DESC LIMIT 50",
         "format": "table"
       }],
       "fieldConfig": {

@@ -397,6 +397,14 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let ml_scores = ml_result;
     let mv = model_version.clone();
     let is_ml = use_ml;
+    let cached_slug = market_meta
+        .as_ref()
+        .map(|m| m.slug.clone())
+        .unwrap_or_default();
+    let cached_outcome = market_meta
+        .as_ref()
+        .map(|m| m.outcome.clone())
+        .unwrap_or_default();
 
     tokio::spawn(async move {
         let t0 = std::time::Instant::now();
@@ -432,6 +440,8 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
                 cal_prob: ml_scores.as_ref().map(|r| r.cal_prob),
                 kelly_size: ml_scores.as_ref().map(|r| r.kelly_size),
                 latency_ms: Some(latency_ms),
+                market_slug: cached_slug.clone(),
+                outcome: cached_outcome.clone(),
             };
             match db.insert_fill(&record).await {
                 Ok(id) => {
