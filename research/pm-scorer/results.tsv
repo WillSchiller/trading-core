@@ -1,0 +1,6 @@
+commit	kelly_pnl	test_auc	kelly_wr	status	description
+baseline_random	2346.58	0.8630	64.8	keep	baseline with random 30% fill rate
+baseline_adverse	-112.51	0.8630	35.3	keep	TRUE baseline: 16 features, depth=6, no sample weights
+recency_only	-103.08	0.8632	55.2	revert	recency weighting [0.5,1.0]
+recency_19feat	-72.27	0.8642	56.5	keep	+roll_wr_50, roll_pf_50, roll_avg_pnl_20 + recency
+exp19_reg	7.80	0.8638	52.7	keep	depth=5, min_child=50, gamma=0.5, reg_lambda=3.0

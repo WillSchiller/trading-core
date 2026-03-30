@@ -127,6 +127,18 @@ export interface HeatScalingConfig {
   dispersionPenalty: number;
 }
 
+export type VelocityDirection = 'up' | 'down' | 'any';
+
+export interface EntryQualityConfig {
+  enabled: boolean;
+  minResidualBps?: number;
+  minZscoreVelocity?: number;
+  velocityLookbackTicks?: number;
+  longVelocityDirection?: VelocityDirection;
+  shortVelocityDirection?: VelocityDirection;
+  cooldownMs?: number;
+}
+
 export interface OrphanCleanupConfig {
   maxStaleMs: number;
 }
@@ -151,6 +163,7 @@ export interface PCAConfig {
   orphanCleanup?: OrphanCleanupConfig;
   blockedHoursUtc?: number[];
   heatScaling?: HeatScalingConfig;
+  entryQuality?: EntryQualityConfig;
 }
 
 const DEFAULT_CONFIG: PCAConfig = {
@@ -209,6 +222,15 @@ const DEFAULT_CONFIG: PCAConfig = {
       activationPnlBps: 25,
       trailStopBps: 20,
     },
+  },
+  entryQuality: {
+    enabled: false,
+    minResidualBps: 8,
+    minZscoreVelocity: 0.2,
+    velocityLookbackTicks: 1,
+    longVelocityDirection: 'up',
+    shortVelocityDirection: 'up',
+    cooldownMs: 300000,
   },
 };
 
@@ -277,8 +299,10 @@ export class PCAStatArbMonitor extends EventEmitter {
   private returnHistory: Map<string, number[]> = new Map();
   private factorModel: FactorModel | null = null;
   private residualHistory: Map<string, number[]> = new Map();
+  private zScoreHistory: Map<string, number[]> = new Map();
   private activeSignals: Map<string, PCASignalEvent> = new Map();
   private activePositions: Map<string, ActivePosition> = new Map();
+  private lastExitByAsset: Map<string, number> = new Map();
   private benchmarkPositions: Map<string, ActivePosition> = new Map();
   private shadowPositions: Map<string, ShadowPosition[]> = new Map();
   private static readonly SHADOW_MAX_HOLD_MS = 12 * 60 * 60 * 1000;
@@ -308,6 +332,7 @@ export class PCAStatArbMonitor extends EventEmitter {
       this.priceHistory.set(asset, []);
       this.returnHistory.set(asset, []);
       this.residualHistory.set(asset, []);
+      this.zScoreHistory.set(asset, []);
     }
   }
 
@@ -579,6 +604,7 @@ export class PCAStatArbMonitor extends EventEmitter {
         };
 
         this.emit('exit', exitEvent);
+        this.lastExitByAsset.set(asset, now);
         if (this.shouldShadow(exitReason, holdTimeMs)) {
           this.addShadowPosition(position, now, exitReason);
         }
@@ -930,6 +956,15 @@ export class PCAStatArbMonitor extends EventEmitter {
       }
 
       const residualZScore = this.computeResidualZScore(asset, residual);
+      const zScoreHistory = this.zScoreHistory.get(asset);
+      if (zScoreHistory) {
+        zScoreHistory.push(residualZScore);
+        const lookback = this.config.entryQuality?.velocityLookbackTicks ?? 1;
+        const maxPoints = Math.max(lookback + 2, 5);
+        while (zScoreHistory.length > maxPoints) {
+          zScoreHistory.shift();
+        }
+      }
 
       let signal: 'long' | 'short' | 'neutral' = 'neutral';
       if (residualZScore <= -this.config.entryZScore) {
@@ -976,13 +1011,15 @@ export class PCAStatArbMonitor extends EventEmitter {
       if (!existingPosition) {
         let volMult = 0;
         let direction: 'long' | 'short' | null = null;
+        const residualBps = Math.abs(signal.residual * 10000);
+        const zScoreVelocity = this.computeZScoreVelocity(signal.asset);
 
-        const longMult = this.shouldEnterLong(signal.residualZScore, signal.asset);
+        const longMult = this.shouldEnterLong(signal.residualZScore, signal.asset, residualBps, zScoreVelocity);
         if (longMult > 0) {
           volMult = longMult;
           direction = 'long';
         } else {
-          const shortMult = this.shouldEnterShort(signal.residualZScore, signal.asset);
+          const shortMult = this.shouldEnterShort(signal.residualZScore, signal.asset, residualBps, zScoreVelocity);
           if (shortMult > 0) {
             volMult = shortMult;
             direction = 'short';
@@ -1030,6 +1067,7 @@ export class PCAStatArbMonitor extends EventEmitter {
               direction,
               zScore: signal.residualZScore.toFixed(2),
               residualBps: (signal.residual * 10000).toFixed(1),
+              zScoreVelocity: zScoreVelocity.toFixed(2),
               pc1Bps: (signal.factorReturns[0] * 10000).toFixed(1),
               regimeState: this.regimeState,
               pc1Momentum: this.pc1Momentum.toFixed(4),
@@ -1113,6 +1151,7 @@ export class PCAStatArbMonitor extends EventEmitter {
           };
 
           this.emit('exit', exitEvent);
+          this.lastExitByAsset.set(signal.asset, now);
           if (this.shouldShadow(reason, holdTime)) {
             this.addShadowPosition(existingPosition, now, reason);
           }
@@ -1326,7 +1365,63 @@ export class PCAStatArbMonitor extends EventEmitter {
     return factor;
   }
 
-  private shouldEnterLong(zScore: number, asset: string): number {
+  private computeZScoreVelocity(asset: string): number {
+    const history = this.zScoreHistory.get(asset);
+    if (!history || history.length < 2) return 0;
+
+    const lookback = Math.max(1, this.config.entryQuality?.velocityLookbackTicks ?? 1);
+    const currentIdx = history.length - 1;
+    const prevIdx = Math.max(0, currentIdx - lookback);
+
+    return history[currentIdx] - history[prevIdx];
+  }
+
+  private passesEntryQuality(
+    direction: 'long' | 'short',
+    asset: string,
+    residualBps: number,
+    zScoreVelocity: number
+  ): boolean {
+    const eq = this.config.entryQuality;
+    if (!eq?.enabled) return true;
+
+    if (eq.minResidualBps !== undefined && residualBps < eq.minResidualBps) {
+      return false;
+    }
+
+    if (eq.minZscoreVelocity !== undefined) {
+      const velocityDirection: VelocityDirection =
+        direction === 'long'
+          ? (eq.longVelocityDirection ?? 'any')
+          : (eq.shortVelocityDirection ?? 'any');
+
+      const directedVelocity = velocityDirection === 'up'
+        ? zScoreVelocity
+        : velocityDirection === 'down'
+          ? -zScoreVelocity
+          : Math.abs(zScoreVelocity);
+
+      if (directedVelocity < eq.minZscoreVelocity) {
+        return false;
+      }
+    }
+
+    if (eq.cooldownMs !== undefined && eq.cooldownMs > 0) {
+      const lastExitTs = this.lastExitByAsset.get(asset);
+      if (lastExitTs && Date.now() - lastExitTs < eq.cooldownMs) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private shouldEnterLong(
+    zScore: number,
+    asset: string,
+    residualBps: number = Number.POSITIVE_INFINITY,
+    zScoreVelocity: number = 0
+  ): number {
     if (this.config.long.enabled === false) return 0;
 
     const longConfig = this.config.long;
@@ -1342,6 +1437,8 @@ export class PCAStatArbMonitor extends EventEmitter {
       const hourUtc = new Date().getUTCHours();
       if (this.config.blockedHoursUtc.includes(hourUtc)) return 0;
     }
+
+    if (!this.passesEntryQuality('long', asset, residualBps, zScoreVelocity)) return 0;
 
     if (longConfig.requireRegimeConfirmation && this.config.regimeGating.enabled) {
       if (this.regimeState === 'bearish') {
@@ -1367,7 +1464,12 @@ export class PCAStatArbMonitor extends EventEmitter {
     return 1;
   }
 
-  private shouldEnterShort(zScore: number, asset: string): number {
+  private shouldEnterShort(
+    zScore: number,
+    asset: string,
+    residualBps: number = Number.POSITIVE_INFINITY,
+    zScoreVelocity: number = 0
+  ): number {
     const shortConfig = this.config.short;
     const threshold = shortConfig.entryZScore ?? this.config.entryZScore;
     if (zScore < threshold) return 0;
@@ -1392,6 +1494,8 @@ export class PCAStatArbMonitor extends EventEmitter {
       const hourUtc = new Date().getUTCHours();
       if (this.config.blockedHoursUtc.includes(hourUtc)) return 0;
     }
+
+    if (!this.passesEntryQuality('short', asset, residualBps, zScoreVelocity)) return 0;
 
     const limits = this.config.exposureLimits;
     const counts = this.countPositionsByDirection();

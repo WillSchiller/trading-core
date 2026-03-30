@@ -375,6 +375,95 @@ describe('PCAStatArbMonitor', () => {
     });
   });
 
+  describe('Entry Quality Signals', () => {
+    it('blocks entries when residual magnitude is below threshold', () => {
+      const monitor = new PCAStatArbMonitor(createTestConfig({
+        entryQuality: {
+          enabled: true,
+          minResidualBps: 20,
+          minZscoreVelocity: 0.1,
+          longVelocityDirection: 'up',
+          shortVelocityDirection: 'up',
+          cooldownMs: 0,
+        },
+      }));
+
+      Object.assign(monitor, {
+        regimeState: 'neutral' as RegimeState,
+        activePositions: new Map(),
+        factorModel: { assetBetas: new Map([['ETH', [0.5, 0.2]]]) },
+        returnHistory: new Map([['ETH', Array(10).fill(0.01)]]),
+        smoothedPC1Loadings: new Map([['ETH', 0.5]]),
+      });
+
+      const shouldEnterShort = (monitor as unknown as {
+        shouldEnterShort: (zScore: number, asset: string, residualBps?: number, zScoreVelocity?: number) => number
+      }).shouldEnterShort.bind(monitor);
+
+      expect(shouldEnterShort(3.0, 'ETH', 10, 0.5)).toBe(0);
+      expect(shouldEnterShort(3.0, 'ETH', 25, 0.5)).toBe(1);
+    });
+
+    it('requires directional z-score velocity when configured', () => {
+      const monitor = new PCAStatArbMonitor(createTestConfig({
+        entryQuality: {
+          enabled: true,
+          minResidualBps: 5,
+          minZscoreVelocity: 0.2,
+          longVelocityDirection: 'up',
+          shortVelocityDirection: 'up',
+          cooldownMs: 0,
+        },
+      }));
+
+      Object.assign(monitor, {
+        regimeState: 'neutral' as RegimeState,
+        activePositions: new Map(),
+        factorModel: { assetBetas: new Map([['ETH', [0.5, 0.2]]]) },
+        returnHistory: new Map([['ETH', Array(10).fill(0.01)]]),
+        smoothedPC1Loadings: new Map([['ETH', 0.5]]),
+      });
+
+      const shouldEnterLong = (monitor as unknown as {
+        shouldEnterLong: (zScore: number, asset: string, residualBps?: number, zScoreVelocity?: number) => number
+      }).shouldEnterLong.bind(monitor);
+
+      expect(shouldEnterLong(-3.0, 'ETH', 20, -0.3)).toBe(0);
+      expect(shouldEnterLong(-3.0, 'ETH', 20, 0.3)).toBe(1);
+    });
+
+    it('applies per-asset cooldown after exit', () => {
+      const monitor = new PCAStatArbMonitor(createTestConfig({
+        entryQuality: {
+          enabled: true,
+          minResidualBps: 5,
+          minZscoreVelocity: 0.1,
+          longVelocityDirection: 'up',
+          shortVelocityDirection: 'up',
+          cooldownMs: 300000,
+        },
+      }));
+
+      Object.assign(monitor, {
+        regimeState: 'neutral' as RegimeState,
+        activePositions: new Map(),
+        factorModel: { assetBetas: new Map([['ETH', [0.5, 0.2]]]) },
+        returnHistory: new Map([['ETH', Array(10).fill(0.01)]]),
+        smoothedPC1Loadings: new Map([['ETH', 0.5]]),
+        lastExitByAsset: new Map([['ETH', Date.now() - 10000]]),
+      });
+
+      const shouldEnterShort = (monitor as unknown as {
+        shouldEnterShort: (zScore: number, asset: string, residualBps?: number, zScoreVelocity?: number) => number
+      }).shouldEnterShort.bind(monitor);
+
+      expect(shouldEnterShort(3.0, 'ETH', 20, 0.3)).toBe(0);
+
+      (monitor as unknown as { lastExitByAsset: Map<string, number> }).lastExitByAsset.set('ETH', Date.now() - 600000);
+      expect(shouldEnterShort(3.0, 'ETH', 20, 0.3)).toBe(1);
+    });
+  });
+
   describe('Exit Conditions', () => {
     const createPosition = (overrides: Partial<{
       direction: 'long' | 'short';

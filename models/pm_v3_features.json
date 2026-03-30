@@ -1,0 +1,23 @@
+[
+  "entry_price",
+  "payoff_ratio",
+  "cat_sports",
+  "cat_crypto",
+  "cat_politics",
+  "hour",
+  "dow",
+  "size_vs_median",
+  "roll_wr_20",
+  "roll_pf_20",
+  "roll_streak",
+  "lifetime_wr",
+  "lifetime_pf",
+  "trade_num",
+  "market_trader_count",
+  "is_no",
+  "is_binary_market",
+  "neg_risk",
+  "time_to_resolution",
+  "price_momentum",
+  "trader_category_wr"
+]

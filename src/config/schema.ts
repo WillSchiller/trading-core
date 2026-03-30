@@ -268,6 +268,16 @@ const heatScalingConfigSchema = z.object({
   dispersionPenalty: z.number().min(0).max(1).default(0.5),
 }).optional();
 
+const entryQualityConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  minResidualBps: z.number().positive().optional(),
+  minZscoreVelocity: z.number().positive().optional(),
+  velocityLookbackTicks: z.number().int().positive().optional(),
+  longVelocityDirection: z.enum(['up', 'down', 'any']).optional(),
+  shortVelocityDirection: z.enum(['up', 'down', 'any']).optional(),
+  cooldownMs: z.number().int().nonnegative().optional(),
+}).optional();
+
 export const pcaStatArbConfigSchema = z.object({
   enabled: z.boolean().default(true),
   assets: z.array(z.string()).default(['ETH', 'BTC', 'SOL', 'AVAX', 'MATIC', 'ARB']),
@@ -289,6 +299,7 @@ export const pcaStatArbConfigSchema = z.object({
   short: shortConfigSchema,
   orphanCleanup: orphanCleanupConfigSchema,
   heatScaling: heatScalingConfigSchema,
+  entryQuality: entryQualityConfigSchema,
 });
 
 export const killSwitchConfigSchema = z.object({

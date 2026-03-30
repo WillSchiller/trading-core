@@ -218,6 +218,16 @@ export interface PCAHeatScalingConfig {
   dispersionPenalty: number;
 }
 
+export interface PCAEntryQualityConfig {
+  enabled: boolean;
+  minResidualBps?: number;
+  minZscoreVelocity?: number;
+  velocityLookbackTicks?: number;
+  longVelocityDirection?: 'up' | 'down' | 'any';
+  shortVelocityDirection?: 'up' | 'down' | 'any';
+  cooldownMs?: number;
+}
+
 export interface PCAOrphanCleanupConfig {
   maxStaleMs: number;
 }
@@ -243,6 +253,7 @@ export interface PCAStatArbConfig {
   short: PCAShortConfig;
   orphanCleanup?: PCAOrphanCleanupConfig;
   heatScaling?: PCAHeatScalingConfig;
+  entryQuality?: PCAEntryQualityConfig;
 }
 
 export interface KillSwitchConfig {

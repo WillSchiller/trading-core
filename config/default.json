@@ -167,6 +167,15 @@
         "minPC1ReturnBps": 25,
         "maxFundingRate": 0
       },
+      "entryQuality": {
+        "enabled": true,
+        "minResidualBps": 10,
+        "minZscoreVelocity": 0.15,
+        "velocityLookbackTicks": 1,
+        "longVelocityDirection": "up",
+        "shortVelocityDirection": "up",
+        "cooldownMs": 300000
+      },
       "heatScaling": {
         "enabled": true,
         "decayPerPosition": 0.4,
