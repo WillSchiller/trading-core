@@ -46,68 +46,72 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
 
         let side = match fill.signal.side {
-            CopySide::Buy => "BUY".to_string(),
-            CopySide::Sell => "SELL".to_string(),
+            CopySide::Buy => "BUY",
+            CopySide::Sell => "SELL",
         };
-
         let fill_size_val = fill.size_usd / fill.fill_price.max(0.01);
         let ts = chrono::Utc::now().timestamp_millis();
-        // Debug: log all param types
-        tracing::debug!(
-            trader = %fill.signal.trader,
-            side = %side,
-            size = fill.signal.size,
-            price = fill.signal.price,
-            our_size = fill.size_usd,
-            fill_price = fill.fill_price,
-            fill_size = fill_size_val,
-            ts,
-            model = %fill.model_version,
-            win = ?fill.win_score,
-            cal = ?fill.cal_prob,
-            kelly = ?fill.kelly_size,
-            "insert_fill params"
-        );
+        let esc = |s: &str| s.replace('\'', "''");
+        let opt_num = |v: Option<f64>| match v {
+            Some(x) => format!("{x}"),
+            None => "NULL".to_string(),
+        };
 
-        let row = client.query_opt(
+        let sql = format!(
             "INSERT INTO pm_live_trades (
                 trader_address, condition_id, token_id, side,
                 size, price, our_size, our_entry_price,
                 order_id, fill_price, fill_size, execution_status, executed_at,
                 trader_timestamp, source, model_version,
                 win_score, cal_prob, kelly_size
-            ) VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9, $10::numeric, $11::numeric, $12, NOW(), $13, 'rust', $14, $15::numeric, $16::numeric, $17::numeric)
+            ) VALUES (
+                '{trader}', '{cid}', '{tid}', '{side}',
+                {size}, {price}, {our_size}, {entry},
+                '{oid}', {fpx}, {fsz}, '{status}', NOW(),
+                {ts}, 'rust', '{mv}',
+                {ws}, {cp}, {ks}
+            )
             ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
             RETURNING id",
-            &[
-                &fill.signal.trader,
-                &fill.signal.condition_id,
-                &fill.signal.token_id,
-                &side,
-                &fill.signal.size,
-                &fill.signal.price,
-                &fill.size_usd,
-                &fill.fill_price,
-                &fill.order_id,
-                &fill.fill_price,
-                &fill_size_val,
-                &fill.execution_status,
-                &ts,
-                &fill.model_version,
-                &fill.win_score,
-                &fill.cal_prob,
-                &fill.kelly_size,
-            ],
-        ).await.map_err(|e| HotPathError::Db(e.to_string()))?;
+            trader = esc(&fill.signal.trader),
+            cid = esc(&fill.signal.condition_id),
+            tid = esc(&fill.signal.token_id),
+            side = side,
+            size = fill.signal.size,
+            price = fill.signal.price,
+            our_size = fill.size_usd,
+            entry = fill.fill_price,
+            oid = esc(&fill.order_id),
+            fpx = fill.fill_price,
+            fsz = fill_size_val,
+            status = fill.execution_status,
+            ts = ts,
+            mv = esc(&fill.model_version),
+            ws = opt_num(fill.win_score),
+            cp = opt_num(fill.cal_prob),
+            ks = opt_num(fill.kelly_size),
+        );
 
-        let id = match row {
-            Some(r) => r.get::<_, i64>(0),
-            None => {
-                tracing::debug!(order_id = %fill.order_id, "duplicate trade, skipped");
-                return Ok(-1);
-            }
-        };
-        tracing::info!(id, order_id = %fill.order_id, source = "rust", status = fill.execution_status, "fill written to postgres");
+        let rows = client
+            .simple_query(&sql)
+            .await
+            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let id = rows
+            .iter()
+            .find_map(|msg| {
+                if let tokio_postgres::SimpleQueryMessage::Row(row) = msg {
+                    row.get(0).and_then(|v| v.parse::<i64>().ok())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(-1);
+
+        if id > 0 {
+            tracing::info!(id, order_id = %fill.order_id, source = "rust", status = fill.execution_status, "fill written to postgres");
+        } else {
+            tracing::debug!(order_id = %fill.order_id, "duplicate trade or insert skipped");
+        }
         Ok(id)
     }
 
