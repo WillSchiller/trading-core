@@ -3,7 +3,11 @@ import { Decimal } from 'decimal.js';
 import { createChildLogger, type Logger } from '../utils/logger.js';
 import type { Chain, Opportunity } from '../types/index.js';
 import type { AppConfig, PairConfig } from '../config/types.js';
-import type { OpportunityEmitter } from '../detection/emitter.js';
+import type { EventEmitter } from 'node:events';
+
+interface OpportunityEmitter extends EventEmitter {
+  onOpportunityDetected(handler: (event: { opportunity: Opportunity }) => void | Promise<void>): void;
+}
 import type { QuoteCache } from '../state/quote-cache.js';
 import { UniswapQuoter, QuoterError, type QuoteParams } from './quoter.js';
 import { GasEstimator } from './gas.js';

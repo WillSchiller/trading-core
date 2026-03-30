@@ -1,18 +1,12 @@
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPublicClient, http, type Address } from 'viem';
-import { base, mainnet } from 'viem/chains';
 import { logger } from './utils/logger.js';
 import { getConfig } from './config/index.js';
 import { createPool, closePool, getPool } from './persistence/client.js';
 import { runMigrations } from './persistence/migrate.js';
 import { CollectorOrchestrator } from './collectors/orchestrator.js';
-import { OpportunityDetector } from './detection/index.js';
-import { RankSpaceDetector } from './detection/rank-space/index.js';
-import { ExecutionManager, SlippageCalibrator, type TokenConfig } from './execution/index.js';
 import { PCAStatArbMonitor, PCAPersistence, MarketContextService, VolumeTracker } from './research/index.js';
-import { PaperMarketMaker } from './execution/market-maker/index.js';
 import { FundingArbManager, SpreadMonitor } from './execution/funding-arb/index.js';
 import { PolymarketCopyTrader } from './polymarket/index.js';
 import { PMMManager } from './polymarket/market-maker/index.js';
@@ -20,7 +14,6 @@ import { PerpsExecutor, BinanceFuturesClient, HyperliquidClient } from './execut
 import type { PerpsExchangeClient } from './execution/perps/types.js';
 import type { Chain } from './types/index.js';
 import type { RpcEndpoint } from './chain/provider-pool.js';
-import type { PoolConfig } from './config/types.js';
 
 interface ChainRpcConfig {
   endpoints: RpcEndpoint[];
@@ -37,102 +30,13 @@ interface CexConnectorConfig {
   pairs: CexPairConfig[];
 }
 
-interface UniswapPoolConfig {
-  poolAddress: string;
-  canonical: string;
-  feeTier: number;
-  isPrimary: boolean;
-}
-
 interface DexConnectorConfig {
   enabled: boolean;
-  chains: Record<string, UniswapPoolConfig[]>;
+  chains: Record<string, unknown>;
 }
 import { checkNtpSync } from './utils/clock.js';
 import { initAlerts, sendAlert } from './utils/alerts.js';
 import { buildRpcEndpoints } from './chain/index.js';
-
-const BASE_TOKENS: Record<string, TokenConfig> = {
-  WETH: {
-    address: '0x4200000000000000000000000000000000000006' as Address,
-    decimals: 18,
-    symbol: 'WETH',
-  },
-  USDC: {
-    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address,
-    decimals: 6,
-    symbol: 'USDC',
-  },
-  USDbC: {
-    address: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA' as Address,
-    decimals: 6,
-    symbol: 'USDbC',
-  },
-  cbETH: {
-    address: '0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22' as Address,
-    decimals: 18,
-    symbol: 'cbETH',
-  },
-  weETH: {
-    address: '0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A' as Address,
-    decimals: 18,
-    symbol: 'weETH',
-  },
-  wstETH: {
-    address: '0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452' as Address,
-    decimals: 18,
-    symbol: 'wstETH',
-  },
-  rETH: {
-    address: '0xB6fe221Fe9EeF5aBa221c348bA20A1Bf5e73624c' as Address,
-    decimals: 18,
-    symbol: 'rETH',
-  },
-  cbBTC: {
-    address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf' as Address,
-    decimals: 8,
-    symbol: 'cbBTC',
-  },
-};
-
-const MAINNET_TOKENS: Record<string, TokenConfig> = {
-  WETH: {
-    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' as Address,
-    decimals: 18,
-    symbol: 'WETH',
-  },
-  USDC: {
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as Address,
-    decimals: 6,
-    symbol: 'USDC',
-  },
-  wstETH: {
-    address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0' as Address,
-    decimals: 18,
-    symbol: 'wstETH',
-  },
-  rETH: {
-    address: '0xae78736Cd615f374D3085123A210448E74Fc6393' as Address,
-    decimals: 18,
-    symbol: 'rETH',
-  },
-  cbETH: {
-    address: '0xBe9895146f7AF43049ca1c1AE358B0541Ea49704' as Address,
-    decimals: 18,
-    symbol: 'cbETH',
-  },
-};
-
-function buildTokenMap(chain: Chain): Map<string, TokenConfig> {
-  const tokenMap = new Map<string, TokenConfig>();
-  const tokens = chain === 'base' ? BASE_TOKENS : MAINNET_TOKENS;
-
-  for (const [symbol, config] of Object.entries(tokens)) {
-    tokenMap.set(symbol, config);
-  }
-
-  return tokenMap;
-}
 
 async function main() {
   logger.info('Starting dislocation-trader');
@@ -276,37 +180,6 @@ async function main() {
 
   const dexConfigs: Record<string, DexConnectorConfig> = {};
 
-  if (config.app.venues.dex.uniswap_v3.enabled) {
-    const uniswapChains: Record<string, UniswapPoolConfig[]> = {};
-
-    for (const pairConfig of config.pairs) {
-      if (pairConfig.enabled === false) continue;
-      const chain = pairConfig.chain;
-      const uniV3Venues = pairConfig.venues.uniswap_v3 as Record<string, PoolConfig[]> | undefined;
-
-      if (!uniV3Venues || !uniV3Venues[chain]) continue;
-
-      if (!uniswapChains[chain]) {
-        uniswapChains[chain] = [];
-      }
-
-      const chainPools = uniV3Venues[chain];
-      for (const poolConfig of chainPools) {
-        uniswapChains[chain].push({
-          poolAddress: poolConfig.pool,
-          canonical: `${pairConfig.base}/${pairConfig.quote}`,
-          feeTier: poolConfig.feeTier ?? 0,
-          isPrimary: poolConfig.primary === true,
-        });
-      }
-    }
-
-    dexConfigs.uniswap_v3 = {
-      enabled: true,
-      chains: uniswapChains,
-    };
-  }
-
   const orchestrator = new CollectorOrchestrator(
     {
       chains: chainConfigs,
@@ -336,176 +209,12 @@ async function main() {
   await orchestrator.start();
   logger.info('Collector orchestrator started');
 
-  interface VenueRow {
-    id: number;
-    name: string;
-  }
-  const venueIdMapQuery = await pool.query<VenueRow>('SELECT id, name FROM venues');
-  const venueIdMap = new Map<string, number>();
-  for (const row of venueIdMapQuery.rows) {
-    venueIdMap.set(row.name, row.id);
-  }
-
-  interface PairRow {
-    id: number;
-    canonical: string;
-  }
-  const pairIdMapQuery = await pool.query<PairRow>('SELECT id, canonical FROM pairs');
-  const pairIdMap = new Map<string, number>();
-  for (const row of pairIdMapQuery.rows) {
-    pairIdMap.set(row.canonical, row.id);
-  }
-
-  const detector = new OpportunityDetector({
-    quoteCache: orchestrator.getQuoteCache(),
-    appConfig: config.app,
-    pairsConfig: config.pairs,
-    venueIdMap,
-    pairIdMap,
-    onSpreadUpdate: (chain, _pair, spreadBps, thresholdBps) => {
-      const connector = orchestrator.getDexConnector(chain);
-      if (connector) {
-        connector.updateSpreadProximity(spreadBps, thresholdBps);
-      }
-    },
-  });
-
-  detector.start();
-  logger.info('Opportunity detector started');
-
-  const emitter = detector.getEmitter();
-
-  const rankSpaceDetector = new RankSpaceDetector({
-    quoteCache: orchestrator.getQuoteCache(),
-    appConfig: config.app,
-    pairsConfig: config.pairs,
-    venueIdMap,
-    pairIdMap,
-    emitter,
-  });
-
-  rankSpaceDetector.start();
-  logger.info('RankSpace detector started');
-
-  const executionManagers: Map<Chain, ExecutionManager> = new Map();
-  const slippageCalibrators: SlippageCalibrator[] = [];
-
-  if (config.env.enableExecution) {
-    for (const [chainName, chainConfig] of Object.entries(config.app.chains)) {
-      const envEnabled = chainName === 'mainnet' ? config.env.enableMainnet
-        : chainName === 'base' ? config.env.enableBase
-        : false;
-      const isEnabled = envEnabled !== undefined ? envEnabled : chainConfig.enabled;
-      if (!isEnabled) continue;
-
-      const chain = chainName as Chain;
-      const endpoints = buildRpcEndpoints(chain, config.env);
-      const primaryEndpoint = endpoints.sort((a, b) => a.priority - b.priority)[0];
-      const httpUrl = primaryEndpoint.httpUrl;
-
-      const viemChain = chain === 'base' ? base : mainnet;
-      const publicClient = createPublicClient({
-        chain: viemChain,
-        transport: http(httpUrl),
-      });
-
-      const tokenMap = buildTokenMap(chain);
-
-      const executionManager = new ExecutionManager({
-        chain,
-        publicClient: publicClient as any,
-        appConfig: config.app,
-        pairsConfig: config.pairs.filter((p) => p.enabled !== false && p.chain === chain),
-        quoterAddress: chainConfig.contracts.uniswapV3QuoterV2 as Address,
-        routerAddress: chainConfig.contracts.uniswapV3Router as Address,
-        httpUrl,
-        privateKey: config.env.executorPrivateKey,
-        paperMode: config.env.paperMode,
-        tokenMap,
-        pairIdMap,
-        quoteCache: orchestrator.getQuoteCache(),
-      });
-
-      executionManager.subscribeToOpportunities(emitter);
-      executionManager.start();
-      executionManagers.set(chain, executionManager);
-
-      logger.info(
-        {
-          chain,
-          paperMode: config.env.paperMode,
-          quoterAddress: chainConfig.contracts.uniswapV3QuoterV2,
-          routerAddress: chainConfig.contracts.uniswapV3Router,
-        },
-        'Execution manager started'
-      );
-
-      const calibratorPools = config.pairs
-        .filter((p) => p.enabled !== false && p.chain === chain)
-        .flatMap((pairConfig) => {
-          const uniV3Venues = pairConfig.venues.uniswap_v3 as Record<string, PoolConfig[]> | undefined;
-          if (!uniV3Venues || !uniV3Venues[chain]) return [];
-
-          const baseToken = tokenMap.get(pairConfig.base);
-          const quoteToken = tokenMap.get(pairConfig.quote);
-          if (!baseToken || !quoteToken) return [];
-
-          const baseAddr = baseToken.address.toLowerCase();
-          const quoteAddr = quoteToken.address.toLowerCase();
-          const baseIsToken0 = baseAddr < quoteAddr;
-
-          return uniV3Venues[chain].map((poolCfg: PoolConfig) => ({
-            address: poolCfg.pool as `0x${string}`,
-            feeTierBps: (poolCfg.feeTier ?? 0) / 100,
-            token0: (baseIsToken0 ? baseToken.address : quoteToken.address) as `0x${string}`,
-            token1: (baseIsToken0 ? quoteToken.address : baseToken.address) as `0x${string}`,
-            token0Decimals: baseIsToken0 ? baseToken.decimals : quoteToken.decimals,
-            token1Decimals: baseIsToken0 ? quoteToken.decimals : baseToken.decimals,
-            token0Symbol: baseIsToken0 ? pairConfig.base : pairConfig.quote,
-            token1Symbol: baseIsToken0 ? pairConfig.quote : pairConfig.base,
-          }));
-        });
-
-      if (calibratorPools.length > 0) {
-        const calibrator = new SlippageCalibrator(
-          {
-            chain,
-            quoterAddress: chainConfig.contracts.uniswapV3QuoterV2 as `0x${string}`,
-            pools: calibratorPools,
-            notionalSizes: [100, 500, 1000, 2000, 4000],
-            edgeBufferBps: 10,
-            gasUsd: 0.05,
-          },
-          publicClient as any
-        );
-        calibrator.startPeriodicCalibration(5 * 60 * 1000);
-        slippageCalibrators.push(calibrator);
-        logger.info({ chain, pools: calibratorPools.length }, 'Slippage calibrator started');
-      }
-    }
-  } else {
-    emitter.on('opportunity_detected', (opportunity) => {
-      const pairName = Array.from(pairIdMap.entries()).find(([, id]) => id === opportunity.pairId)?.[0];
-      logger.info(
-        {
-          pair: pairName,
-          spreadBps: opportunity.spreadBps,
-          direction: opportunity.direction,
-          chain: opportunity.chain,
-          anchorMid: opportunity.anchorMid,
-          dexMid: opportunity.dexMid,
-        },
-        'Opportunity detected (execution disabled)'
-      );
-    });
-  }
 
   // PCA Statistical Arbitrage Monitor (Hyperliquid prices only)
   let pcaMonitor: PCAStatArbMonitor | null = null;
   let pcaPersistence: PCAPersistence | null = null;
   let marketContext: MarketContextService | null = null;
   let volumeTracker: VolumeTracker | null = null;
-  let paperMM: PaperMarketMaker | null = null;
   let fundingArb: FundingArbManager | null = null;
   let spreadMonitor: SpreadMonitor | null = null;
   let polymarketTrader: PolymarketCopyTrader | null = null;
@@ -548,40 +257,6 @@ async function main() {
     // Start volume tracker for trade-level data collection
     volumeTracker = new VolumeTracker(pool, pcaConfig.assets);
     await volumeTracker.start();
-
-    // Start paper market maker if enabled
-    if (process.env.PAPER_MM_ENABLED === 'true') {
-      const mmAssets = (process.env.MM_ASSETS || 'kPEPE,ARB,POPCAT,MOODENG,SAGA,DYM,MEME,MANTA,IO').split(',');
-      // Side filter from env: "kPEPE:buy,DYM:sell,MOODENG:both"
-      const sideFilterMap: Record<string, 'both' | 'buy' | 'sell'> = {};
-      const sideFilterStr = process.env.MM_SIDE_FILTER || '';
-      if (sideFilterStr) {
-        for (const entry of sideFilterStr.split(',')) {
-          const [asset, side] = entry.split(':');
-          if (asset && (side === 'both' || side === 'buy' || side === 'sell')) {
-            sideFilterMap[asset] = side;
-          }
-        }
-      }
-
-      paperMM = new PaperMarketMaker({
-        assets: mmAssets,
-        assetSideFilter: Object.keys(sideFilterMap).length > 0 ? sideFilterMap : undefined,
-        positionSizeUsd: Number(process.env.MM_POSITION_SIZE_USD || '200'),
-        maxInventoryUsd: Number(process.env.MM_MAX_INVENTORY_USD || '500'),
-        requoteIntervalMs: 5000,
-        minSpreadBps: Number(process.env.MM_MIN_SPREAD_BPS || '3'),
-        skewBpsPerUnit: 1,
-        maxOpenOrders: 4,
-        paperMode: true,
-        gamma: Number(process.env.MM_GAMMA || '0.3'),
-        ofiThreshold: Number(process.env.MM_OFI_THRESHOLD || '0.85'),
-        vpinThreshold: Number(process.env.MM_VPIN_THRESHOLD || '0.7'),
-        volCutoffPct: Number(process.env.MM_VOL_CUTOFF_PCT || '95'),
-      }, pool);
-      await paperMM.start();
-      logger.info({ assets: mmAssets }, 'Paper market maker started');
-    }
 
     // Start funding rate arb scanner if enabled
     if (process.env.FUNDING_ARB_ENABLED === 'true') {
@@ -958,18 +633,10 @@ async function main() {
     clearInterval(heartbeatInterval);
     healthServer.close();
 
-    await detector.stop();
-    logger.info('Opportunity detector stopped');
-
-    rankSpaceDetector.stop();
-    logger.info('RankSpace detector stopped');
-
-    // Stop PCA first (stops emitting new signals/exits), then executor
     if (pmmManager) pmmManager.stop();
     if (polymarketTrader) polymarketTrader.stop();
     if (spreadMonitor) spreadMonitor.stop();
     if (fundingArb) fundingArb.stop();
-    if (paperMM) paperMM.stop();
     if (volumeTracker) volumeTracker.stop();
     if (marketContext) marketContext.stop();
     if (pcaMonitor) {
@@ -981,18 +648,6 @@ async function main() {
     for (const ex of allPerpsExecutors) {
       await ex.stop();
       logger.info({ runId: ex.getRunId(), mode: ex.getMode() }, 'Perps executor stopped');
-    }
-
-    for (const calibrator of slippageCalibrators) {
-      calibrator.stop();
-    }
-    if (slippageCalibrators.length > 0) {
-      logger.info('Slippage calibrators stopped');
-    }
-
-    for (const [chain, manager] of executionManagers) {
-      manager.stop();
-      logger.info({ chain }, 'Execution manager stopped');
     }
 
     await orchestrator.stop();
