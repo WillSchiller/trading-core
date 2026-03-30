@@ -50,7 +50,7 @@ impl FillDb {
             CopySide::Sell => "SELL",
         };
         let fill_size_val = fill.size_usd / fill.fill_price.max(0.01);
-        let ts = chrono::Utc::now().timestamp_millis();
+        let _ts = chrono::Utc::now().timestamp_millis();
         let esc = |s: &str| s.replace('\'', "''");
         let opt_num = |v: Option<f64>| match v {
             Some(x) => format!("{x}"),
@@ -212,8 +212,7 @@ impl FillDb {
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         let sql = format!(
-            "UPDATE pm_rust_trades SET resolved = true, resolution_price = {}, real_pnl = {}, resolved_at = NOW() WHERE id = {}",
-            resolution_price, real_pnl, live_trade_id
+            "UPDATE pm_rust_trades SET resolved = true, resolution_price = {resolution_price}, real_pnl = {real_pnl}, resolved_at = NOW() WHERE id = {live_trade_id}",
         );
         client
             .simple_query(&sql)
@@ -236,8 +235,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         let esc_oid = sell_order_id.replace('\'', "''");
         let sql = format!(
-            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = {}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{}' WHERE id = {}",
-            exit_price, real_pnl, esc_oid, live_trade_id
+            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {exit_price}, real_pnl = {real_pnl}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{esc_oid}' WHERE id = {live_trade_id}",
         );
         client
             .simple_query(&sql)
@@ -256,10 +254,8 @@ impl FillDb {
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
-        let sql = format!(
-            "UPDATE pm_rust_trades SET pnl = {} WHERE id = {}",
-            current_price, live_trade_id
-        );
+        let sql =
+            format!("UPDATE pm_rust_trades SET pnl = {current_price} WHERE id = {live_trade_id}");
         client
             .simple_query(&sql)
             .await
