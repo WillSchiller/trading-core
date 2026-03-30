@@ -1,0 +1,210 @@
+{
+  "id": null,
+  "uid": "pm-rust-trades",
+  "title": "PM Rust Trades",
+  "tags": ["polymarket"],
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "30s",
+  "time": {"from": "now-7d", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Key Stats",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Attempts",
+      "gridPos": {"x": 0, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT count(*) AS \"Total\" FROM pm_rust_trades",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Fill Rate (excl balance)",
+      "description": "filled / (filled + pending + no_fill + cancelled). Excludes balance_error — proxy for adverse selection.",
+      "gridPos": {"x": 4, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN count(*) = 0 THEN 0 ELSE round(100.0 * count(*) FILTER (WHERE execution_status = 'filled') / NULLIF(count(*) FILTER (WHERE execution_status NOT IN ('balance_error', 'price_band', 'below_min')), 0), 1) END AS \"Fill %\" FROM pm_rust_trades",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Win Rate",
+      "gridPos": {"x": 8, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT CASE WHEN count(*) = 0 THEN 0 ELSE round(100.0 * count(*) FILTER (WHERE real_pnl > 0) / count(*), 1) END AS \"Win %\" FROM pm_rust_trades WHERE resolved = true AND execution_status = 'filled'",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total PnL",
+      "gridPos": {"x": 12, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT coalesce(sum(real_pnl), 0) AS \"PnL\" FROM pm_rust_trades WHERE resolved = true",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 2, "color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Balance Errors",
+      "description": "Orders rejected for insufficient USDC",
+      "gridPos": {"x": 16, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT count(*) AS \"Bal Errors\" FROM pm_rust_trades WHERE execution_status = 'balance_error'",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Avg Latency",
+      "description": "Signal-to-order-response (ms)",
+      "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT round(avg(latency_ms)) AS \"ms\" FROM pm_rust_trades WHERE latency_ms IS NOT NULL",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ms", "color": {"mode": "fixed", "fixedColor": "text"}}},
+      "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none", "textMode": "value"}
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "A/B Comparison",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "A/B Comparison by Model",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT model_version, count(*) AS attempts, count(*) FILTER (WHERE execution_status IN ('filled', 'pending')) AS orders, round(100.0 * count(*) FILTER (WHERE execution_status = 'filled') / NULLIF(count(*) FILTER (WHERE execution_status NOT IN ('balance_error', 'price_band', 'below_min')), 0), 1) AS fill_rate_pct, round(100.0 * count(*) FILTER (WHERE resolved AND real_pnl > 0) / NULLIF(count(*) FILTER (WHERE resolved AND execution_status = 'filled'), 0), 1) AS win_rate_pct, round(coalesce(sum(real_pnl) FILTER (WHERE resolved), 0)::numeric, 2) AS total_pnl, round(coalesce(avg(real_pnl) FILTER (WHERE resolved AND execution_status = 'filled'), 0)::numeric, 2) AS avg_pnl, round(avg(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)) AS avg_latency_ms, count(*) FILTER (WHERE execution_status = 'balance_error') AS bal_errors FROM pm_rust_trades GROUP BY model_version ORDER BY model_version",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "total_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}]},
+          {"matcher": {"id": "byName", "options": "avg_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}]}
+        ]
+      },
+      "options": {"showHeader": true, "footer": {"show": false}}
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Time Series",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Cumulative PnL by Model",
+      "gridPos": {"x": 0, "y": 13, "w": 12, "h": 8},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT resolved_at AS time, model_version AS metric, sum(real_pnl) OVER (PARTITION BY model_version ORDER BY resolved_at) AS value FROM pm_rust_trades WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY resolved_at",
+        "format": "time_series"
+      }],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "pointSize": 5, "showPoints": "always"}}},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Latency Over Time",
+      "gridPos": {"x": 12, "y": 13, "w": 12, "h": 8},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT created_at AS time, latency_ms AS value, execution_status AS metric FROM pm_rust_trades WHERE latency_ms IS NOT NULL AND created_at BETWEEN $__timeFrom() AND $__timeTo() ORDER BY created_at",
+        "format": "time_series"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "points", "pointSize": 6, "fillOpacity": 0}}},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "Funnel",
+      "gridPos": {"x": 0, "y": 21, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 24,
+      "type": "table",
+      "title": "Outcome Breakdown",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 6},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT execution_status, count(*) AS count, round(100.0 * count(*) / NULLIF((SELECT count(*) FROM pm_rust_trades), 0), 1) AS pct FROM pm_rust_trades GROUP BY execution_status ORDER BY count DESC",
+        "format": "table"
+      }],
+      "options": {"showHeader": true, "footer": {"show": false}}
+    },
+    {
+      "id": 25,
+      "type": "barchart",
+      "title": "Attempts per Hour",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 6},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT date_trunc('hour', created_at) AS time, count(*) FILTER (WHERE execution_status IN ('filled', 'pending')) AS filled, count(*) FILTER (WHERE execution_status = 'no_fill') AS no_fill, count(*) FILTER (WHERE execution_status = 'balance_error') AS balance_error FROM pm_rust_trades WHERE created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY date_trunc('hour', created_at) ORDER BY time",
+        "format": "table"
+      }],
+      "fieldConfig": {"defaults": {}},
+      "options": {"xField": "time", "stacking": "normal", "barWidth": 0.8}
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Recent Trades",
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "type": "table",
+      "title": "Recent Trades",
+      "gridPos": {"x": 0, "y": 29, "w": 24, "h": 10},
+      "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
+        "rawSql": "SELECT created_at, model_version, execution_status, latency_ms, fill_price, fill_size, real_pnl, resolved FROM pm_rust_trades ORDER BY created_at DESC LIMIT 50",
+        "format": "table"
+      }],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "real_pnl"}, "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 2}]},
+          {"matcher": {"id": "byName", "options": "fill_price"}, "properties": [{"id": "decimals", "value": 4}]},
+          {"matcher": {"id": "byName", "options": "fill_size"}, "properties": [{"id": "decimals", "value": 2}]},
+          {"matcher": {"id": "byName", "options": "created_at"}, "properties": [{"id": "custom.width", "value": 180}]},
+          {"matcher": {"id": "byName", "options": "latency_ms"}, "properties": [{"id": "unit", "value": "ms"}]}
+        ]
+      },
+      "options": {"showHeader": true, "footer": {"show": false}, "sortBy": [{"displayName": "created_at", "desc": true}]}
+    }
+  ]
+}

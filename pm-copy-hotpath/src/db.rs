@@ -17,6 +17,7 @@ pub struct FillRecord {
     pub win_score: Option<f64>,
     pub cal_prob: Option<f64>,
     pub kelly_size: Option<f64>,
+    pub latency_ms: Option<i32>,
 }
 
 pub struct TraderRollingStats {
@@ -57,19 +58,24 @@ impl FillDb {
             None => "NULL".to_string(),
         };
 
+        let opt_int = |v: Option<i32>| match v {
+            Some(x) => format!("{x}"),
+            None => "NULL".to_string(),
+        };
+
         let sql = format!(
             "INSERT INTO pm_rust_trades (
                 trader_address, condition_id, token_id, side,
                 trader_size, trader_price, our_size,
                 order_id, fill_price, fill_size, execution_status,
                 model_version, win_score, cal_prob, kelly_size,
-                market_slug, neg_risk
+                market_slug, neg_risk, latency_ms
             ) VALUES (
                 '{trader}', '{cid}', '{tid}', '{side}',
                 {size}, {price}, {our_size},
                 '{oid}', {fpx}, {fsz}, '{status}',
                 '{mv}', {ws}, {cp}, {ks},
-                '', {neg_risk}
+                '', {neg_risk}, {lat}
             )
             RETURNING id",
             neg_risk = fill.signal.neg_risk,
@@ -88,6 +94,7 @@ impl FillDb {
             ws = opt_num(fill.win_score),
             cp = opt_num(fill.cal_prob),
             ks = opt_num(fill.kelly_size),
+            lat = opt_int(fill.latency_ms),
         );
 
         let rows = client.simple_query(&sql).await.map_err(|e| {

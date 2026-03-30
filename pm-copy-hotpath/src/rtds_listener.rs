@@ -13,7 +13,7 @@ use tracing::{debug, info, trace, warn};
 use crate::clob_client;
 use crate::config::AppConfig;
 use crate::db::{FillDb, FillRecord};
-use crate::order_builder::OrderExecutor;
+use crate::order_builder::{OrderExecutor, OrderOutcome};
 use crate::positions::PositionTracker;
 use crate::risk::RiskManager;
 use crate::scorer::Scorer;
@@ -306,50 +306,70 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let mv = model_version.clone();
 
     tokio::spawn(async move {
-        match exec
+        let t0 = std::time::Instant::now();
+        let outcome = exec
             .execute_copy(&sig, trade_size, min_entry, max_entry)
-            .await
-        {
-            Ok(Some(result)) => {
-                let fill_size = trade_size / result.fill_price.max(0.01);
-                if let Some(db) = &fdb {
-                    let record = FillRecord {
-                        signal: sig.clone(),
-                        order_id: result.order_id.clone(),
-                        execution_status: result.status,
-                        size_usd: trade_size,
-                        fill_price: result.fill_price,
-                        model_version: mv.clone(),
-                        win_score: ml_scores.as_ref().map(|r| r.win_score),
-                        cal_prob: ml_scores.as_ref().map(|r| r.cal_prob),
-                        kelly_size: ml_scores.as_ref().map(|r| r.kelly_size),
-                    };
-                    match db.insert_fill(&record).await {
-                        Ok(id) => {
-                            let position = Position {
-                                live_trade_id: id,
-                                condition_id: sig.condition_id.clone(),
-                                token_id: sig.token_id.clone(),
-                                fill_price: result.fill_price,
-                                fill_size,
-                                order_id: result.order_id,
-                                neg_risk: sig.neg_risk,
-                                filled_at: chrono::Utc::now(),
-                                model_version: mv,
-                            };
-                            pos.lock().await.track_buy(position);
-                        }
-                        Err(e) => warn!(error = %e, "fill DB write failed"),
-                    }
-                }
-            }
-            Ok(None) => {
-                rsk.lock().await.release_pending(trade_size);
-            }
+            .await;
+        let latency_ms = t0.elapsed().as_millis() as i32;
+
+        let (status, order_id, fill_price) = match &outcome {
+            Ok(OrderOutcome::FakFilled(r)) => (r.status, r.order_id.clone(), r.fill_price),
+            Ok(OrderOutcome::GtcPosted(r)) => (r.status, r.order_id.clone(), r.fill_price),
+            Ok(OrderOutcome::BalanceError) => ("balance_error", String::new(), sig.price),
+            Ok(OrderOutcome::BookEmpty) => ("no_fill", String::new(), sig.price),
+            Ok(OrderOutcome::PriceBand) => ("price_band", String::new(), sig.price),
+            Ok(OrderOutcome::BelowMinimum) => ("below_min", String::new(), sig.price),
+            Ok(OrderOutcome::DryRun) => return,
             Err(e) => {
                 warn!(error = %e, "order failed");
                 rsk.lock().await.release_pending(trade_size);
+                return;
             }
+        };
+
+        if let Some(db) = &fdb {
+            let record = FillRecord {
+                signal: sig.clone(),
+                order_id: order_id.clone(),
+                execution_status: status,
+                size_usd: trade_size,
+                fill_price,
+                model_version: mv.clone(),
+                win_score: ml_scores.as_ref().map(|r| r.win_score),
+                cal_prob: ml_scores.as_ref().map(|r| r.cal_prob),
+                kelly_size: ml_scores.as_ref().map(|r| r.kelly_size),
+                latency_ms: Some(latency_ms),
+            };
+            match db.insert_fill(&record).await {
+                Ok(id) => {
+                    if matches!(
+                        outcome,
+                        Ok(OrderOutcome::FakFilled(_) | OrderOutcome::GtcPosted(_))
+                    ) {
+                        let fill_size = trade_size / fill_price.max(0.01);
+                        let position = Position {
+                            live_trade_id: id,
+                            condition_id: sig.condition_id.clone(),
+                            token_id: sig.token_id.clone(),
+                            fill_price,
+                            fill_size,
+                            order_id,
+                            neg_risk: sig.neg_risk,
+                            filled_at: chrono::Utc::now(),
+                            model_version: mv,
+                        };
+                        pos.lock().await.track_buy(position);
+                    }
+                }
+                Err(e) => warn!(error = %e, "fill DB write failed"),
+            }
+        }
+
+        if !matches!(
+            outcome,
+            Ok(OrderOutcome::FakFilled(_) | OrderOutcome::GtcPosted(_))
+        ) {
+            rsk.lock().await.release_pending(trade_size);
         }
     });
 }

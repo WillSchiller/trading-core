@@ -26,6 +26,17 @@ pub struct OrderResult {
     pub fill_price: f64,
 }
 
+#[derive(Debug, Clone)]
+pub enum OrderOutcome {
+    FakFilled(OrderResult),
+    GtcPosted(OrderResult),
+    BalanceError,
+    PriceBand,
+    BookEmpty,
+    BelowMinimum,
+    DryRun,
+}
+
 type AuthClient = polymarket_client_sdk::clob::Client<
     polymarket_client_sdk::auth::state::Authenticated<polymarket_client_sdk::auth::Normal>,
 >;
@@ -88,7 +99,7 @@ impl OrderExecutor {
         size_usd: f64,
         min_entry: f64,
         max_entry: f64,
-    ) -> Result<Option<OrderResult>, HotPathError> {
+    ) -> Result<OrderOutcome, HotPathError> {
         match signal.side {
             CopySide::Buy => {
                 self.execute_copy_buy(signal, size_usd, min_entry, max_entry)
@@ -96,7 +107,7 @@ impl OrderExecutor {
             }
             CopySide::Sell => {
                 tracing::debug!("SELL signal ignored — handled by Node position tracker");
-                Ok(None)
+                Ok(OrderOutcome::DryRun)
             }
         }
     }
@@ -107,10 +118,10 @@ impl OrderExecutor {
         size_usd: f64,
         min_entry: f64,
         max_entry: f64,
-    ) -> Result<Option<OrderResult>, HotPathError> {
+    ) -> Result<OrderOutcome, HotPathError> {
         if size_usd < 1.0 {
             warn!(size_usd, "below $1 minimum");
-            return Ok(None);
+            return Ok(OrderOutcome::BelowMinimum);
         }
 
         if signal.price < min_entry || signal.price > max_entry {
@@ -118,7 +129,7 @@ impl OrderExecutor {
                 price = signal.price,
                 min_entry, max_entry, "entry price band"
             );
-            return Ok(None);
+            return Ok(OrderOutcome::PriceBand);
         }
 
         let token_id =
@@ -138,7 +149,7 @@ impl OrderExecutor {
                 size_usd,
                 "dry_run: BUY FAK then maybe GTC"
             );
-            return Ok(None);
+            return Ok(OrderOutcome::DryRun);
         }
 
         let usdc = Decimal::from_f64_retain(size_usd)
@@ -164,7 +175,7 @@ impl OrderExecutor {
         match self.client.post_order(signed).await {
             Ok(posted) if posted.success => {
                 tracing::info!(order_id = %posted.order_id, "BUY FAK posted");
-                return Ok(Some(OrderResult {
+                return Ok(OrderOutcome::FakFilled(OrderResult {
                     order_id: posted.order_id,
                     status: "filled",
                     fill_price: rounded.to_string().parse().unwrap_or(signal.price),
@@ -178,7 +189,7 @@ impl OrderExecutor {
                 let err_str = e.to_string();
                 if err_str.contains("not enough balance") {
                     tracing::debug!("FAK rejected: no balance — skipping GTC");
-                    return Ok(None);
+                    return Ok(OrderOutcome::BalanceError);
                 }
                 tracing::debug!(error = %e, "FAK error, falling through to GTC");
             }
@@ -207,20 +218,28 @@ impl OrderExecutor {
             .sign(self.signer.as_ref(), limit)
             .await
             .map_err(HotPathError::from)?;
-        let posted = self.client.post_order(signed).await?;
-
-        if posted.success {
-            tracing::info!(order_id = %posted.order_id, %gtc_price, "BUY GTC fallback posted");
-            return Ok(Some(OrderResult {
-                order_id: posted.order_id,
-                status: "pending",
-                fill_price: gtc_price.to_string().parse().unwrap_or(signal.price),
-            }));
-        } else {
-            warn!(?posted, "BUY GTC fallback rejected");
+        match self.client.post_order(signed).await {
+            Ok(posted) if posted.success => {
+                tracing::info!(order_id = %posted.order_id, %gtc_price, "BUY GTC fallback posted");
+                return Ok(OrderOutcome::GtcPosted(OrderResult {
+                    order_id: posted.order_id,
+                    status: "pending",
+                    fill_price: gtc_price.to_string().parse().unwrap_or(signal.price),
+                }));
+            }
+            Ok(posted) => {
+                warn!(?posted, "BUY GTC fallback rejected");
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("not enough balance") {
+                    return Ok(OrderOutcome::BalanceError);
+                }
+                warn!(error = %e, "GTC error");
+            }
         }
 
-        Ok(None)
+        Ok(OrderOutcome::BookEmpty)
     }
 
     pub async fn get_order(
