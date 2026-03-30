@@ -62,3 +62,7 @@ infra/tfplan
 *.key
 populate-secrets.sh.bak
 terraform-outputs.txt
+db_backup.sql.gz
+terraform.tfstate
+__pycache__/
+.claude/worktrees/
