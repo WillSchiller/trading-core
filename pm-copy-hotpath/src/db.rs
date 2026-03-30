@@ -50,17 +50,7 @@ impl FillDb {
             CopySide::Sell => "SELL",
         };
 
-        let s = |v: f64| format!("{v}");
-        let s_opt = |v: Option<f64>| v.map(|x| format!("{x}"));
-
-        let size = s(fill.signal.size);
-        let price = s(fill.signal.price);
-        let our_size = s(fill.size_usd);
-        let entry_price = s(fill.fill_price);
-        let fill_size_val = s(fill.size_usd / fill.fill_price.max(0.01));
-        let win_score = s_opt(fill.win_score);
-        let cal_prob = s_opt(fill.cal_prob);
-        let kelly_size = s_opt(fill.kelly_size);
+        let fill_size_val = fill.size_usd / fill.fill_price.max(0.01);
         let ts = chrono::Utc::now().timestamp_millis();
 
         let row = client.query_opt(
@@ -70,7 +60,7 @@ impl FillDb {
                 order_id, fill_price, fill_size, execution_status, executed_at,
                 trader_timestamp, source, model_version,
                 win_score, cal_prob, kelly_size
-            ) VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9, $10::numeric, $11::numeric, $12, NOW(), $13, 'rust', $14, $15::numeric, $16::numeric, $17::numeric)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, 'rust', $14, $15, $16, $17)
             ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
             RETURNING id",
             &[
@@ -78,19 +68,19 @@ impl FillDb {
                 &fill.signal.condition_id,
                 &fill.signal.token_id,
                 &side,
-                &size,
-                &price,
-                &our_size,
-                &entry_price,
+                &fill.signal.size,
+                &fill.signal.price,
+                &fill.size_usd,
+                &fill.fill_price,
                 &fill.order_id,
-                &entry_price,
+                &fill.fill_price,
                 &fill_size_val,
                 &fill.execution_status,
                 &ts,
                 &fill.model_version,
-                &win_score,
-                &cal_prob,
-                &kelly_size,
+                &fill.win_score,
+                &fill.cal_prob,
+                &fill.kelly_size,
             ],
         ).await.map_err(|e| HotPathError::Db(e.to_string()))?;
 
@@ -198,7 +188,6 @@ impl FillDb {
         resolution_price: f64,
         real_pnl: f64,
     ) -> Result<(), HotPathError> {
-        let s = |v: f64| format!("{v}");
         let client = self
             .pool
             .get()
@@ -207,9 +196,9 @@ impl FillDb {
         client
             .execute(
                 "UPDATE pm_live_trades
-             SET resolved = true, resolution_price = $2::numeric, real_pnl = $3::numeric, resolved_at = NOW()
+             SET resolved = true, resolution_price = $2, real_pnl = $3, resolved_at = NOW()
              WHERE id = $1",
-                &[&live_trade_id, &s(resolution_price), &s(real_pnl)],
+                &[&live_trade_id, &resolution_price, &real_pnl],
             )
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
@@ -223,7 +212,6 @@ impl FillDb {
         real_pnl: f64,
         sell_order_id: &str,
     ) -> Result<(), HotPathError> {
-        let s = |v: f64| format!("{v}");
         let client = self
             .pool
             .get()
@@ -232,10 +220,10 @@ impl FillDb {
         client
             .execute(
                 "UPDATE pm_live_trades
-             SET execution_status = 'sold', resolution_price = $2::numeric, real_pnl = $3::numeric,
+             SET execution_status = 'sold', resolution_price = $2, real_pnl = $3,
                  resolved = true, resolved_at = NOW(), order_id = order_id || ',' || $4
              WHERE id = $1",
-                &[&live_trade_id, &s(exit_price), &s(real_pnl), &sell_order_id],
+                &[&live_trade_id, &exit_price, &real_pnl, &sell_order_id],
             )
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
@@ -247,7 +235,6 @@ impl FillDb {
         live_trade_id: i64,
         current_price: f64,
     ) -> Result<(), HotPathError> {
-        let s = |v: f64| format!("{v}");
         let client = self
             .pool
             .get()
@@ -255,8 +242,8 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades SET current_price = $2::numeric WHERE id = $1",
-                &[&live_trade_id, &s(current_price)],
+                "UPDATE pm_live_trades SET current_price = $2 WHERE id = $1",
+                &[&live_trade_id, &current_price],
             )
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
