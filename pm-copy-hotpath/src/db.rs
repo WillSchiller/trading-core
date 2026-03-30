@@ -58,21 +58,21 @@ impl FillDb {
         };
 
         let sql = format!(
-            "INSERT INTO pm_live_trades (
+            "INSERT INTO pm_rust_trades (
                 trader_address, condition_id, token_id, side,
-                size, price, our_size, our_entry_price,
-                order_id, fill_price, fill_size, execution_status, executed_at,
-                trader_timestamp, source, model_version,
-                win_score, cal_prob, kelly_size
+                trader_size, trader_price, our_size,
+                order_id, fill_price, fill_size, execution_status,
+                model_version, win_score, cal_prob, kelly_size,
+                market_slug, neg_risk
             ) VALUES (
                 '{trader}', '{cid}', '{tid}', '{side}',
-                {size}, {price}, {our_size}, {entry},
-                '{oid}', {fpx}, {fsz}, '{status}', NOW(),
-                {ts}, 'rust', '{mv}',
-                {ws}, {cp}, {ks}
+                {size}, {price}, {our_size},
+                '{oid}', {fpx}, {fsz}, '{status}',
+                '{mv}', {ws}, {cp}, {ks},
+                '', {neg_risk}
             )
-            ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
             RETURNING id",
+            neg_risk = fill.signal.neg_risk,
             trader = esc(&fill.signal.trader),
             cid = esc(&fill.signal.condition_id),
             tid = esc(&fill.signal.token_id),
@@ -80,12 +80,10 @@ impl FillDb {
             size = fill.signal.size,
             price = fill.signal.price,
             our_size = fill.size_usd,
-            entry = fill.fill_price,
             oid = esc(&fill.order_id),
             fpx = fill.fill_price,
             fsz = fill_size_val,
             status = fill.execution_status,
-            ts = ts,
             mv = esc(&fill.model_version),
             ws = opt_num(fill.win_score),
             cp = opt_num(fill.cal_prob),
@@ -125,7 +123,7 @@ impl FillDb {
             .query(
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
                     order_id, executed_at, COALESCE(model_version, '') as mv
-             FROM pm_live_trades
+             FROM pm_rust_trades
              WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'",
                 &[],
             )
@@ -166,7 +164,7 @@ impl FillDb {
         let row = client
             .query_one(
                 "SELECT COALESCE(SUM(real_pnl), 0)::float8
-             FROM pm_live_trades
+             FROM pm_rust_trades
              WHERE resolved = true AND execution_status IN ('filled', 'sold')
                AND resolved_at >= CURRENT_DATE AND source = 'rust'",
                 &[],
@@ -185,7 +183,7 @@ impl FillDb {
         let rows = client
             .query(
                 "SELECT condition_id, COUNT(*)::int
-             FROM pm_live_trades
+             FROM pm_rust_trades
              WHERE execution_status = 'filled' AND resolved = false AND side = 'BUY' AND source = 'rust'
              GROUP BY condition_id",
                 &[],
@@ -215,7 +213,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades
+                "UPDATE pm_rust_trades
              SET resolved = true, resolution_price = $2, real_pnl = $3, resolved_at = NOW()
              WHERE id = $1",
                 &[&live_trade_id, &resolution_price, &real_pnl],
@@ -239,7 +237,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades
+                "UPDATE pm_rust_trades
              SET execution_status = 'sold', resolution_price = $2, real_pnl = $3,
                  resolved = true, resolved_at = NOW(), order_id = order_id || ',' || $4
              WHERE id = $1",
@@ -262,7 +260,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades SET current_price = $2 WHERE id = $1",
+                "UPDATE pm_rust_trades SET current_price = $2 WHERE id = $1",
                 &[&live_trade_id, &current_price],
             )
             .await
@@ -284,7 +282,7 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         client
             .execute(
-                "UPDATE pm_live_trades
+                "UPDATE pm_rust_trades
              SET execution_status = $2,
                  fill_price = COALESCE($3, fill_price),
                  fill_size = COALESCE($4, fill_size)
