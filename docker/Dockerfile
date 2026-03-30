@@ -64,6 +64,7 @@ COPY --chown=trader:trader models ./models
 
 USER root
 COPY --from=rust-hotpath --chmod=755 /build/target/release/pm-copy-hotpath /usr/local/bin/pm-copy-hotpath
+COPY --chown=trader:trader pm-copy-hotpath/pm-hotpath.toml /app/pm-hotpath/pm-hotpath.toml
 USER trader
 
 EXPOSE 8080

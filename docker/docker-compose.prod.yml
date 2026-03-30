@@ -137,8 +137,8 @@ services:
       retries: 3
       start_period: 60s
 
-  # Rust RTDS → CLOB hot path. Enable with COMPOSE_PROFILES=pm-hotpath (see deploy.sh / .env).
-  # Use PM_NODE_COPY_TRADER=false on `app` when this profile is active.
+  # Rust RTDS → CLOB hot path. Config baked into image (pm-hotpath.toml).
+  # Env vars here are secrets only. Use PM_NODE_COPY_TRADER=false on `app`.
   pm-hotpath:
     profiles:
       - pm-hotpath
@@ -153,7 +153,7 @@ services:
       PM_HOTPATH_DATABASE_URL: postgresql://${POSTGRES_USER:-trader}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dislocation_trader}
       ORT_DYLIB_PATH: /app/node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime.so.1
     volumes:
-      - ../pm-hotpath:/app/pm-hotpath:ro
+      - ../pm-hotpath/traders.json:/app/pm-hotpath/traders.json:ro
     networks:
       - app-network
     logging:

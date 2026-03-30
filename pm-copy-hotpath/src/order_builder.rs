@@ -187,9 +187,9 @@ impl OrderExecutor {
         let gtc_raw = (rounded + dec!(0.05)).min(dec!(0.99));
         let gtc_price = (gtc_raw / tick).round_dp(0) * tick;
 
-        let size_shares = (Decimal::from_f64_retain(size_usd).unwrap() / gtc_price)
-            .round_dp(2)
-            .max(dec!(5));
+        // CLOB minimum is ~5 shares; use whichever is larger: $size_usd worth or 5 shares
+        let natural_shares = Decimal::from_f64_retain(size_usd).unwrap() / gtc_price;
+        let size_shares = natural_shares.max(dec!(5)).round_dp(2);
 
         let limit = self
             .client

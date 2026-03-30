@@ -1,0 +1,46 @@
+# pm-copy-hotpath configuration
+# This file IS the config. Env vars are only for secrets.
+# Secrets from env: POLYMARKET_PRIVATE_KEY, PM_HOTPATH_DATABASE_URL
+
+# --- Feed ---
+feed_mode = "rtds_activity"
+rtds_ws_url = "wss://ws-live-data.polymarket.com"
+clob_ws_base_url = "wss://ws-subscriptions-clob.polymarket.com"
+clob_http_url = "https://clob.polymarket.com"
+gamma_http_url = "https://gamma-api.polymarket.com"
+
+# --- Copy trading ---
+score_threshold = 0.0
+copy_size_usd = 1.0
+min_entry_price = 0.15
+max_entry_price = 0.85
+traders_json_path = "traders.json"
+dry_run = false
+signature_type = 2            # 0=EOA, 1=Proxy, 2=GnosisSafe
+
+# --- Execution mode ---
+# "control" = flat $copy_size_usd per trade
+# "ml"      = Kelly sizing from ONNX model
+# "ab"      = 50/50 split by market hash
+execution_mode = "ab"
+
+# --- ML scoring ---
+onnx_model_path = "/app/models/pm_scorer_kelly_proper.onnx"
+calibration_path = "/app/models/pm_kelly_calibration.json"
+kelly_half_multiplier = 0.5
+min_bet_usd = 1.0
+max_kelly_fraction = 0.125
+bankroll_usd = 60.0
+
+# --- Risk limits ---
+max_position_usd = 25.0
+max_total_exposure_usd = 250.0
+daily_loss_limit_usd = 30.0
+max_markets_open = 999
+max_trades_per_market = 3
+market_dedup_seconds = 600
+
+# --- Resolution ---
+resolution_poll_seconds = 60
+auto_sell_threshold = 0.995
+stale_gtc_cancel_minutes = 30
