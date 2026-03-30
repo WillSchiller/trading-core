@@ -482,6 +482,7 @@ describe('Grafana Dashboard Validation', () => {
         'pmm_active_markets',
         'pmm_fills',
         'v_pm_shadow_performance',
+        'pm_rust_trades',
       ];
 
       for (const [file, dashboard] of dashboards) {

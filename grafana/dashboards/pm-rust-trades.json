@@ -2,7 +2,7 @@
   "id": null,
   "uid": "pm-rust-trades",
   "title": "PM Rust Trades",
-  "tags": ["polymarket"],
+  "tags": ["dislocation-trader", "polymarket"],
   "timezone": "utc",
   "schemaVersion": 38,
   "version": 2,
@@ -86,7 +86,7 @@
       "description": "Signal-to-order-response (ms)",
       "gridPos": {"x": 20, "y": 1, "w": 4, "h": 4},
       "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT round(avg(latency_ms)) AS \"ms\" FROM pm_rust_trades WHERE latency_ms IS NOT NULL",
+        "rawSql": "SELECT round(avg(latency_ms)) AS \"ms\" FROM pm_rust_trades WHERE latency_ms IS NOT NULL AND created_at >= $__timeFrom()",
         "format": "table"
       }],
       "fieldConfig": {"defaults": {"unit": "ms", "color": {"mode": "fixed", "fixedColor": "text"}}},
@@ -130,7 +130,7 @@
       "title": "Cumulative PnL by Model",
       "gridPos": {"x": 0, "y": 13, "w": 12, "h": 8},
       "targets": [{"refId": "A", "datasource": {"type": "postgres", "uid": "postgresql"},
-        "rawSql": "SELECT resolved_at AS time, model_version AS metric, sum(real_pnl) OVER (PARTITION BY model_version ORDER BY resolved_at) AS value FROM pm_rust_trades WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY resolved_at",
+        "rawSql": "SELECT resolved_at AS time, model_version AS metric, sum(real_pnl) OVER (PARTITION BY model_version ORDER BY resolved_at) AS value FROM pm_rust_trades WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY time",
         "format": "time_series"
       }],
       "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "pointSize": 5, "showPoints": "always"}}},
