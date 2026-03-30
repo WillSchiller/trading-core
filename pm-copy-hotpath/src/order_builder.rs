@@ -99,10 +99,11 @@ impl OrderExecutor {
         size_usd: f64,
         min_entry: f64,
         max_entry: f64,
+        skip_price_band: bool,
     ) -> Result<OrderOutcome, HotPathError> {
         match signal.side {
             CopySide::Buy => {
-                self.execute_copy_buy(signal, size_usd, min_entry, max_entry)
+                self.execute_copy_buy(signal, size_usd, min_entry, max_entry, skip_price_band)
                     .await
             }
             CopySide::Sell => {
@@ -118,13 +119,14 @@ impl OrderExecutor {
         size_usd: f64,
         min_entry: f64,
         max_entry: f64,
+        skip_price_band: bool,
     ) -> Result<OrderOutcome, HotPathError> {
         if size_usd < 1.0 {
             warn!(size_usd, "below $1 minimum");
             return Ok(OrderOutcome::BelowMinimum);
         }
 
-        if signal.price < min_entry || signal.price > max_entry {
+        if !skip_price_band && (signal.price < min_entry || signal.price > max_entry) {
             warn!(
                 price = signal.price,
                 min_entry, max_entry, "entry price band"

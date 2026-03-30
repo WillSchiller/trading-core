@@ -304,11 +304,12 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let max_entry = ctx.config.max_entry_price;
     let ml_scores = ml_result;
     let mv = model_version.clone();
+    let is_ml = use_ml;
 
     tokio::spawn(async move {
         let t0 = std::time::Instant::now();
         let outcome = exec
-            .execute_copy(&sig, trade_size, min_entry, max_entry)
+            .execute_copy(&sig, trade_size, min_entry, max_entry, is_ml)
             .await;
         let latency_ms = t0.elapsed().as_millis() as i32;
 
