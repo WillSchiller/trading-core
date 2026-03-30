@@ -92,10 +92,10 @@ impl FillDb {
             ks = opt_num(fill.kelly_size),
         );
 
-        let rows = client
-            .simple_query(&sql)
-            .await
-            .map_err(|e| HotPathError::Db(e.to_string()))?;
+        let rows = client.simple_query(&sql).await.map_err(|e| {
+            tracing::error!(error = %e, sql = %sql, "insert_fill SQL failed");
+            HotPathError::Db(e.to_string())
+        })?;
         let id = rows
             .iter()
             .find_map(|msg| {
