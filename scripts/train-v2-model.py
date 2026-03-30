@@ -13,7 +13,9 @@ import json
 DATA_PATH = '/tmp/pm_shadow_export.csv'
 
 print('Loading data...')
-df = pd.read_csv(DATA_PATH)
+df = pd.read_csv(DATA_PATH, low_memory=False)
+df['trader_size'] = pd.to_numeric(df['trader_size'], errors='coerce').fillna(1.0)
+df['our_size'] = pd.to_numeric(df['our_size'], errors='coerce').fillna(1.0)
 df['win'] = (df['pnl'] > 0).astype(int)
 df['hold_hours'] = (df['resolve_ts'] - df['buy_ts']) / (1000 * 60 * 60)
 df = df[df['hold_hours'] > 0].copy()
@@ -21,6 +23,14 @@ df = df[df['hold_hours'] > 0].copy()
 # Filter out 5-min markets
 df = df[~df['market_slug'].str.contains('updown-5m', na=False)].copy()
 print(f'After removing 5-min: {len(df)} trades')
+
+# Derive category from market_slug if missing
+if 'category' not in df.columns:
+    slug = df['market_slug'].fillna('').str.lower()
+    df['category'] = 'OTHER'
+    df.loc[slug.str.contains(r'bitcoin|btc|eth|sol|xrp|crypto|doge|hype|token|defi'), 'category'] = 'CRYPTO'
+    df.loc[slug.str.contains(r'nba|nfl|mlb|nhl|premier|bundesliga|serie-a|lol|fifa|bayern|win-on|game\d|foxy|esport'), 'category'] = 'SPORTS'
+    df.loc[slug.str.contains(r'trump|biden|elect|president|congress|politi|senate|governor'), 'category'] = 'POLITICS'
 
 # Original features
 df['cat_sports'] = (df['category'] == 'SPORTS').astype(int)

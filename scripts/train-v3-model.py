@@ -27,7 +27,9 @@ CAL_CUTOFF = pd.Timestamp('2026-03-01', tz='UTC')
 BINARY_OUTCOMES = {'yes', 'no', 'up', 'down', 'over', 'under', 'draw'}
 
 print('Loading data...')
-df = pd.read_csv(DATA_PATH)
+df = pd.read_csv(DATA_PATH, low_memory=False)
+df['trader_size'] = pd.to_numeric(df['trader_size'], errors='coerce').fillna(1.0)
+df['our_size'] = pd.to_numeric(df['our_size'], errors='coerce').fillna(1.0)
 df['buy_dt'] = pd.to_datetime(df['buy_ts'], unit='ms', utc=True)
 df['resolve_dt'] = pd.to_datetime(df['resolve_ts'], unit='ms', utc=True)
 df['win'] = (df['pnl'] > 0).astype(int)
@@ -38,6 +40,15 @@ df = df[df['hold_hours'] > 0].copy()
 n_before = len(df)
 df = df[~df['market_slug'].str.contains('updown-5m', na=False)].copy()
 print(f'Filtered updown-5m: {n_before} -> {len(df)} ({n_before - len(df)} removed)')
+
+# Derive category from market_slug if not in CSV
+if 'category' not in df.columns:
+    slug = df['market_slug'].fillna('').str.lower()
+    df['category'] = 'OTHER'
+    df.loc[slug.str.contains(r'bitcoin|btc|eth|sol|xrp|crypto|doge|hype|token|defi'), 'category'] = 'CRYPTO'
+    df.loc[slug.str.contains(r'nba|nfl|mlb|nhl|premier|bundesliga|serie-a|lol|fifa|bayern|win-on|game\d|foxy|esport'), 'category'] = 'SPORTS'
+    df.loc[slug.str.contains(r'trump|biden|elect|president|congress|politi|senate|governor'), 'category'] = 'POLITICS'
+    print(f'Derived categories: {df["category"].value_counts().to_dict()}')
 
 # Basic features
 df['payoff_ratio'] = (1.0 / df['entry_price'].clip(lower=0.01)) - 1
@@ -356,10 +367,10 @@ def kelly_sim(test_df, probs, bankroll, fill_rate=0.30, slip_bps=50, compound=Tr
 test_df_sim = df[test_mask].copy()
 test_df_sim['prob'] = cal_test
 
-print(f'\n=== KELLY SIMULATION (fill=30%, slip=50bps, compound=True) ===')
+print(f'\n=== KELLY SIMULATION (fill=100%, slip=0bps, compound=True) ===')
 print(f'  {"Bankroll":>10} {"Trades":>7} {"WR%":>6} {"PnL":>10} {"Final":>10} {"$/day":>8} {"APY%":>8} {"MaxDD":>8}')
 for bankroll in [120, 1000, 5000]:
-    r = kelly_sim(test_df_sim, cal_test, bankroll, fill_rate=0.30, slip_bps=50, compound=True)
+    r = kelly_sim(test_df_sim, cal_test, bankroll, fill_rate=1.0, slip_bps=0, compound=True)
     print(f'  ${bankroll:>9} {r["trades"]:>7} {r["wr"]:>5.1f}% ${r["pnl"]:>9.2f} ${r["final"]:>9.2f} ${r["daily"]:>7.2f} {r["apy"]:>7.0f}% ${r["max_dd"]:>7.2f}')
 
 # Export ONNX

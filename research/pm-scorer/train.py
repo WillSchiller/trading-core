@@ -9,26 +9,40 @@ import xgboost as xgb
 from prepare import load_data, temporal_split, evaluate
 
 # === FEATURE ENGINEERING ===
-# Modify this section to add/remove/transform features
 
 def compute_features(df):
     """Compute all features. Must use only past data (no look-ahead)."""
     df = df.copy()
 
-    # Category dummies
+    if 'category' not in df.columns:
+        slug = df['market_slug'].fillna('').str.lower()
+        crypto_kw = r'bitcoin|btc|eth|sol|xrp|crypto|doge|hype|token|defi'
+        sports_kw = r'nba|nfl|mlb|nhl|premier|bundesliga|serie-a|lol|fifa|bayern|win-on|game\d|foxy|esport'
+        df['category'] = 'OTHER'
+        df.loc[slug.str.contains(crypto_kw), 'category'] = 'CRYPTO'
+        df.loc[slug.str.contains(sports_kw), 'category'] = 'SPORTS'
+        df.loc[slug.str.contains(r'trump|biden|elect|president|congress|politi|senate|governor'), 'category'] = 'POLITICS'
     df['cat_sports'] = (df['category'] == 'SPORTS').astype(int)
     df['cat_crypto'] = (df['category'] == 'CRYPTO').astype(int)
     df['cat_politics'] = (df['category'] == 'POLITICS').astype(int)
 
-    # Price features
     df['price_dist_from_half'] = abs(df['entry_price'] - 0.5)
     df['implied_edge'] = np.where(df['entry_price'] < 0.5, 1 - df['entry_price'], df['entry_price'])
+    df['payoff_ratio'] = (1.0 / df['entry_price'].clip(0.01, 0.99)) - 1
 
-    # Time features
+    # Outcome type features
+    df['is_no'] = df['outcome'].str.lower().isin(['no', 'under', 'draw']).astype(int)
+    df['is_favourite'] = (df['entry_price'] >= 0.5).astype(int)
+    df['is_no_underdog'] = ((df['is_no'] == 1) & (df['entry_price'] < 0.5)).astype(int)
+    df['is_no_favourite'] = ((df['is_no'] == 1) & (df['entry_price'] >= 0.5)).astype(int)
+    df['is_yes_underdog'] = ((df['is_no'] == 0) & (df['entry_price'] < 0.5)).astype(int)
+    df['is_yes_favourite'] = ((df['is_no'] == 0) & (df['entry_price'] >= 0.5)).astype(int)
+
     df['hour'] = pd.to_datetime(df['buy_ts'], unit='ms').dt.hour
     df['dow'] = pd.to_datetime(df['buy_ts'], unit='ms').dt.dayofweek
 
-    # Trader conviction — expanding median (causal, no look-ahead)
+
+    # Trader conviction — expanding median (causal)
     df['size_vs_median'] = 1.0
     for addr in df['trader_address'].unique():
         mask = df['trader_address'] == addr
@@ -36,12 +50,10 @@ def compute_features(df):
         expanding_median = sizes.expanding().median().shift(1).fillna(sizes.iloc[0])
         df.loc[mask, 'size_vs_median'] = sizes / expanding_median.clip(lower=0.01)
 
-    # Rolling trader stats (causal — only uses past trades)
     df = df.sort_values(['trader_address', 'buy_ts'])
     df = df.groupby('trader_address', group_keys=False).apply(rolling_trader_stats)
     df = df.dropna(subset=['roll_wr_20'])
 
-    # Market trader count — expanding (causal)
     df['market_trader_count'] = 1
     market_counts = {}
     for idx in df.index:
@@ -120,12 +132,18 @@ def rolling_trader_stats(group):
 
 
 # === FEATURE LIST ===
-# The features the model will use. Modify to add/remove.
 
 FEATURES = [
     'entry_price',
     'price_dist_from_half',
     'implied_edge',
+    'payoff_ratio',
+    'is_no',
+    'is_favourite',
+    'is_no_underdog',
+    'is_no_favourite',
+    'is_yes_underdog',
+    'is_yes_favourite',
     'cat_sports',
     'cat_crypto',
     'cat_politics',
@@ -146,21 +164,18 @@ FEATURES = [
 
 
 # === MODEL CONFIG ===
-# Modify hyperparameters here.
 
 MODEL_PARAMS = dict(
-    n_estimators=500,
-    max_depth=5,
-    learning_rate=0.05,
+    n_estimators=800,
+    max_depth=6,
+    learning_rate=0.03,
     subsample=0.8,
     colsample_bytree=0.8,
-    min_child_weight=50,
-    gamma=0.5,
-    reg_lambda=3.0,
-    booster='dart',
-    rate_drop=0.1,
+    min_child_weight=120,
+    gamma=2.0,
+    reg_lambda=8.0,
     eval_metric='logloss',
-    early_stopping_rounds=30,
+    early_stopping_rounds=50,
     random_state=42,
 )
 

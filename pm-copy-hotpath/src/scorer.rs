@@ -112,7 +112,12 @@ impl Scorer {
         }
     }
 
-    pub fn score(&mut self, signal: &TradeSignal, trader_category: &str) -> ScoreResult {
+    pub fn score(
+        &mut self,
+        signal: &TradeSignal,
+        trader_category: &str,
+        outcome_name: &str,
+    ) -> ScoreResult {
         let session = match &mut self.session {
             Some(s) => s,
             None => {
@@ -126,10 +131,17 @@ impl Scorer {
         };
 
         let stats = self.trader_stats.get(&signal.trader);
-        let features = build_features(signal, trader_category, stats, &mut self.market_counts);
+        let features = build_features(
+            signal,
+            trader_category,
+            outcome_name,
+            stats,
+            &mut self.market_counts,
+        );
+        let n_features = features.len();
 
-        let input =
-            ort::value::Tensor::from_array(([1usize, 16], features)).expect("ort tensor creation");
+        let input = ort::value::Tensor::from_array(([1usize, n_features], features))
+            .expect("ort tensor creation");
 
         let outputs = match session.run(ort::inputs![input]) {
             Ok(o) => o,
@@ -209,10 +221,11 @@ use chrono::{Datelike, Timelike};
 fn build_features(
     signal: &TradeSignal,
     category: &str,
+    outcome_name: &str,
     stats: Option<&TraderRollingStats>,
     market_counts: &mut AHashMap<String, usize>,
 ) -> Vec<f32> {
-    let entry_price = signal.price;
+    let p = signal.price;
     let mc = market_counts
         .entry(signal.condition_id.clone())
         .or_insert(0);
@@ -222,6 +235,9 @@ fn build_features(
     let (
         roll_wr_20,
         roll_pf_20,
+        roll_wr_50,
+        roll_pf_50,
+        roll_avg_pnl_20,
         roll_streak,
         lifetime_wr,
         lifetime_pf,
@@ -229,29 +245,46 @@ fn build_features(
         size_vs_median,
     ) = match stats {
         Some(s) => compute_rolling_stats(s, signal.size),
-        None => (0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 1.0),
+        None => (0.5, 1.0, 0.5, 1.0, 0.0, 0.0, 0.5, 1.0, 0.0, 1.0),
     };
 
     let now = chrono::Utc::now();
     let hour = now.hour() as f32;
     let dow = now.weekday().num_days_from_sunday() as f32;
 
+    let is_no = {
+        let o = outcome_name.to_lowercase();
+        (o == "no" || o == "under" || o == "draw" || o == "down") as u8 as f32
+    };
+    let is_favourite = if p >= 0.5 { 1.0f32 } else { 0.0 };
+    let is_no_underdog = if is_no > 0.5 && p < 0.5 { 1.0 } else { 0.0 };
+    let is_no_favourite = if is_no > 0.5 && p >= 0.5 { 1.0 } else { 0.0 };
+    let is_yes_underdog = if is_no < 0.5 && p < 0.5 { 1.0 } else { 0.0 };
+    let is_yes_favourite = if is_no < 0.5 && p >= 0.5 { 1.0 } else { 0.0 };
+
+    // Must match FEATURES order in train.py v4
     vec![
-        entry_price as f32,
-        (entry_price - 0.5).abs() as f32,
-        if entry_price < 0.5 {
-            1.0 - entry_price as f32
-        } else {
-            entry_price as f32
-        },
-        if category == "SPORTS" { 1.0 } else { 0.0 },
-        if category == "CRYPTO" { 1.0 } else { 0.0 },
-        if category == "POLITICS" { 1.0 } else { 0.0 },
+        p as f32,                                        // entry_price
+        (p - 0.5).abs() as f32,                          // price_dist_from_half
+        if p < 0.5 { 1.0 - p as f32 } else { p as f32 }, // implied_edge
+        (1.0 / p.max(0.01) - 1.0) as f32,                // payoff_ratio
+        is_no,
+        is_favourite,
+        is_no_underdog,
+        is_no_favourite,
+        is_yes_underdog,
+        is_yes_favourite,
+        if category == "SPORTS" { 1.0 } else { 0.0 }, // cat_sports
+        if category == "CRYPTO" { 1.0 } else { 0.0 }, // cat_crypto
+        if category == "POLITICS" { 1.0 } else { 0.0 }, // cat_politics
         hour,
         dow,
         size_vs_median as f32,
         roll_wr_20 as f32,
         roll_pf_20 as f32,
+        roll_wr_50 as f32,
+        roll_pf_50 as f32,
+        roll_avg_pnl_20 as f32,
         roll_streak as f32,
         lifetime_wr as f32,
         lifetime_pf as f32,
@@ -263,43 +296,47 @@ fn build_features(
 fn compute_rolling_stats(
     stats: &TraderRollingStats,
     trade_size: f64,
-) -> (f64, f64, f64, f64, f64, f64, f64) {
+) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) {
     let pnls = &stats.pnls;
     let n = pnls.len();
 
     let mut roll_wr_20 = 0.5;
     let mut roll_pf_20 = 1.0;
+    let mut roll_wr_50 = 0.5;
+    let mut roll_pf_50 = 1.0;
+    let mut roll_avg_pnl_20 = 0.0;
     let mut roll_streak = 0.0;
     let mut lifetime_wr = 0.5;
     let mut lifetime_pf = 1.0;
 
-    if n >= 20 {
-        let recent = &pnls[n - 20..];
-        let wins = recent.iter().filter(|&&p| p > 0.0).count();
-        roll_wr_20 = wins as f64 / 20.0;
-        let gw: f64 = recent.iter().filter(|&&p| p > 0.0).sum();
-        let gl: f64 = recent.iter().filter(|&&p| p < 0.0).map(|p| p.abs()).sum();
-        roll_pf_20 = if gl > 0.0 {
-            gw / gl
+    fn pf(pnls: &[f64]) -> f64 {
+        let gw: f64 = pnls.iter().filter(|&&p| p > 0.0).sum();
+        let gl: f64 = pnls.iter().filter(|&&p| p < 0.0).map(|p| p.abs()).sum();
+        if gl > 0.0 {
+            (gw / gl).min(10.0)
         } else if gw > 0.0 {
-            99.0
+            10.0
         } else {
             0.0
-        };
+        }
+    }
+
+    if n >= 20 {
+        let recent = &pnls[n - 20..];
+        roll_wr_20 = recent.iter().filter(|&&p| p > 0.0).count() as f64 / 20.0;
+        roll_pf_20 = pf(recent);
+        roll_avg_pnl_20 = recent.iter().sum::<f64>() / 20.0;
+    }
+
+    if n >= 50 {
+        let recent = &pnls[n - 50..];
+        roll_wr_50 = recent.iter().filter(|&&p| p > 0.0).count() as f64 / 50.0;
+        roll_pf_50 = pf(recent);
     }
 
     if n > 0 {
-        let wins = pnls.iter().filter(|&&p| p > 0.0).count();
-        lifetime_wr = wins as f64 / n as f64;
-        let gw: f64 = pnls.iter().filter(|&&p| p > 0.0).sum();
-        let gl: f64 = pnls.iter().filter(|&&p| p < 0.0).map(|p| p.abs()).sum();
-        lifetime_pf = if gl > 0.0 {
-            gw / gl
-        } else if gw > 0.0 {
-            99.0
-        } else {
-            0.0
-        };
+        lifetime_wr = pnls.iter().filter(|&&p| p > 0.0).count() as f64 / n as f64;
+        lifetime_pf = pf(pnls);
 
         let last_win = *pnls.last().unwrap() > 0.0;
         let mut streak = 0i32;
@@ -326,6 +363,9 @@ fn compute_rolling_stats(
     (
         roll_wr_20,
         roll_pf_20,
+        roll_wr_50,
+        roll_pf_50,
+        roll_avg_pnl_20,
         roll_streak,
         lifetime_wr,
         lifetime_pf,

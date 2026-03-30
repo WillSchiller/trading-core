@@ -28,6 +28,7 @@ pub struct FeedCtx {
     pub positions: Arc<Mutex<PositionTracker>>,
     pub risk: Arc<Mutex<RiskManager>>,
     pub scorer: Arc<Mutex<Scorer>>,
+    pub market_cache: MarketCache,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +52,19 @@ struct ActivityTrade {
     timestamp: Option<Value>,
     #[serde(default)]
     neg_risk: Option<bool>,
+    #[serde(default)]
+    outcome: Option<String>,
+    #[serde(default, alias = "slug")]
+    market_slug: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct MarketMeta {
+    pub outcome: String,
+    pub slug: String,
+}
+
+pub type MarketCache = Arc<Mutex<ahash::AHashMap<String, MarketMeta>>>;
 
 fn json_to_f64(v: &Value) -> Option<f64> {
     match v {
@@ -116,6 +129,7 @@ async fn run_rtds(ctx: FeedCtx, mut shutdown: broadcast::Receiver<()>) -> Result
                 }
 
                 for item in payload_items(&msg.payload) {
+                    cache_market_meta(&item, &ctx.market_cache).await;
                     if let Some(sig) = parse_activity_item(&item, &mut seen, MAX_SEEN) {
                         process_signal(sig, &ctx).await;
                     }
@@ -123,6 +137,69 @@ async fn run_rtds(ctx: FeedCtx, mut shutdown: broadcast::Receiver<()>) -> Result
             }
         }
     }
+}
+
+fn derive_category(slug: &str) -> &'static str {
+    let s = slug.to_lowercase();
+    if s.contains("bitcoin")
+        || s.contains("btc")
+        || s.contains("eth")
+        || s.contains("sol")
+        || s.contains("xrp")
+        || s.contains("crypto")
+        || s.contains("doge")
+        || s.contains("hype")
+        || s.contains("token")
+        || s.contains("defi")
+    {
+        "CRYPTO"
+    } else if s.contains("nba")
+        || s.contains("nfl")
+        || s.contains("mlb")
+        || s.contains("nhl")
+        || s.contains("premier")
+        || s.contains("bundesliga")
+        || s.contains("serie-a")
+        || s.contains("lol")
+        || s.contains("fifa")
+        || s.contains("bayern")
+        || s.contains("win-on")
+        || s.contains("foxy")
+        || s.contains("esport")
+    {
+        "SPORTS"
+    } else if s.contains("trump")
+        || s.contains("biden")
+        || s.contains("elect")
+        || s.contains("president")
+        || s.contains("congress")
+        || s.contains("politi")
+        || s.contains("senate")
+        || s.contains("governor")
+    {
+        "POLITICS"
+    } else {
+        "OTHER"
+    }
+}
+
+async fn cache_market_meta(item: &Value, cache: &MarketCache) {
+    let t: ActivityTrade = match serde_json::from_value(item.clone()) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+    if t.condition_id.is_empty() {
+        return;
+    }
+    let outcome = t.outcome.unwrap_or_default();
+    let slug = t.market_slug.unwrap_or_default();
+    if outcome.is_empty() && slug.is_empty() {
+        return;
+    }
+    let mut map: tokio::sync::MutexGuard<'_, ahash::AHashMap<String, MarketMeta>> =
+        cache.lock().await;
+    map.entry(t.condition_id)
+        .or_insert(MarketMeta { outcome, slug });
 }
 
 fn parse_activity_item(
@@ -210,9 +287,24 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
 
     let mode = ctx.config.execution_mode.as_str();
 
+    let market_meta: Option<MarketMeta> = ctx
+        .market_cache
+        .lock()
+        .await
+        .get(&signal.condition_id)
+        .cloned();
+    let category = market_meta
+        .as_ref()
+        .map(|m| derive_category(&m.slug))
+        .unwrap_or("OTHER");
+    let outcome_name = market_meta
+        .as_ref()
+        .map(|m| m.outcome.as_str())
+        .unwrap_or("");
+
     let mut scorer_guard = ctx.scorer.lock().await;
     let ml_result = if scorer_guard.is_enabled() {
-        Some(scorer_guard.score(&signal, "SPORTS"))
+        Some(scorer_guard.score(&signal, category, outcome_name))
     } else {
         None
     };

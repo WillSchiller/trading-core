@@ -26,7 +26,7 @@ Secondary metrics (also reported):
 
 The Kelly simulation uses:
 - $120 bankroll, compounding
-- 30% fill rate, 50bps slippage
+- 100% fill rate, 0 slippage (Rust FAK handles fill; model picks winners)
 - Half-Kelly sizing from calibrated probabilities
 - 5-minute markets excluded
 
@@ -67,6 +67,14 @@ The Kelly simulation uses:
 - `implied_edge`, `price_dist_from_half`, `payoff_ratio`, `is_favourite` are all redundant with `entry_price` — XGBoost learns the same splits.
 - Calibration with isotonic regression works well (2-3% error).
 - v3 model (clean temporal split): AUC 0.84, 34% WR but profitable from asymmetric payoffs.
+
+## Latest baseline (v2, Mar 30, 2.9M shadow trades)
+
+- v1 (16 features): 222% CAGR at $120, 69.9% WR, 499 trades, AUC 0.87
+- v2 (24 features, +outcome/payoff): 112% CAGR at $120, 73.3% WR, 247 trades, AUC 0.87
+- v1 takes more trades and makes more money. v2 is pickier but higher WR.
+- Key v2 features: payoff_ratio (25%), entry_price (15%), implied_edge (11%), roll_streak (10%), is_yes_underdog (8%)
+- is_yes_underdog / is_yes_favourite are high-importance — outcome type matters
 
 ## Missing features to try
 

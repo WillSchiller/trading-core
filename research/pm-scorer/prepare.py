@@ -13,18 +13,26 @@ from sklearn.isotonic import IsotonicRegression
 
 DATA_PATH = '/tmp/pm_shadow_export.csv'
 BANKROLL = 120
-FILL_RATE_WIN = 0.088    # adversarial: winners fill less
-FILL_RATE_LOSE = 0.204   # adversarial: losers fill more
-SLIP_BPS = 50
+FILL_RATE_WIN = 1.0      # assume all fills (no adversarial)
+FILL_RATE_LOSE = 1.0     # assume all fills (no adversarial)
+SLIP_BPS = 0
 COMPOUND = True
 
 
 def load_data():
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH, low_memory=False)
+    df['trader_size'] = pd.to_numeric(df.get('trader_size', 1.0), errors='coerce').fillna(1.0)
+    df['our_size'] = pd.to_numeric(df.get('our_size', 1.0), errors='coerce').fillna(1.0)
     df['win'] = (df['pnl'] > 0).astype(int)
     df['hold_hours'] = (df['resolve_ts'] - df['buy_ts']) / (1000 * 60 * 60)
     df = df[df['hold_hours'] > 0].copy()
     df = df[~df['market_slug'].str.contains('updown-5m', na=False)].copy()
+    if 'category' not in df.columns:
+        slug = df['market_slug'].fillna('').str.lower()
+        df['category'] = 'OTHER'
+        df.loc[slug.str.contains(r'bitcoin|btc|eth|sol|xrp|crypto|doge|hype|token|defi'), 'category'] = 'CRYPTO'
+        df.loc[slug.str.contains(r'nba|nfl|mlb|nhl|premier|bundesliga|serie-a|lol|fifa|bayern|win-on|game\d|foxy|esport'), 'category'] = 'SPORTS'
+        df.loc[slug.str.contains(r'trump|biden|elect|president|congress|politi|senate|governor'), 'category'] = 'POLITICS'
     df = df.sort_values('buy_ts').reset_index(drop=True)
     return df
 

@@ -1,6 +1,15 @@
 commit	kelly_pnl	test_auc	kelly_wr	status	description
-baseline_random	2346.58	0.8630	64.8	keep	baseline with random 30% fill rate
-baseline_adverse	-112.51	0.8630	35.3	keep	TRUE baseline: 16 features, depth=6, no sample weights
-recency_only	-103.08	0.8632	55.2	revert	recency weighting [0.5,1.0]
-recency_19feat	-72.27	0.8642	56.5	keep	+roll_wr_50, roll_pf_50, roll_avg_pnl_20 + recency
-exp19_reg	7.80	0.8638	52.7	keep	depth=5, min_child=50, gamma=0.5, reg_lambda=3.0
+v2_baseline	48.97	0.8625	64.9	baseline	v2 features (26), dart, depth=5, 100% fill, 0 slip
+exp1_prune	26.94	0.8624	64.7	revert	removed 7 low-importance features (19 features)
+exp2_gbtree	107.67	0.8687	69.3	keep	gbtree, depth=6, lr=0.03, 800 trees, early_stop=50
+exp3_negrisk	42.89	0.8682	69.7	revert	+neg_risk feature (27 features)
+exp4_lowreg	-56.69	0.8687	65.1	revert	min_child=30, gamma=0.3, lambda=1.5 (overfit)
+exp5_highreg	166.52	0.8687	66.8	keep	min_child=80, gamma=1.0, lambda=5.0 (220 trades)
+exp6_veryhighreg	605.56	0.8684	69.1	keep	min_child=120, gamma=2.0, lambda=8.0 (249 trades) **BEST**
+exp7_extreme_reg	167.82	0.8677	68.4	revert	min_child=200, gamma=3.0, lambda=12.0 (too conservative)
+exp8_depth4	81.58	0.8665	65.2	revert	depth=4 with exp6 reg (too shallow)
+exp9_no_weights	71.41	0.8684	66.0	revert	removed recency sample weights
+exp10_strong_recency	593.86	0.8685	72.1	revert	recency 0.3+0.7*t (slightly worse than 0.5+0.5)
+exp11_colsample_bylevel	120.32	0.8687	68.6	revert	+colsample_bylevel=0.7
+exp12_l1_alpha	561.48	0.8686	71.4	revert	+reg_alpha=1.0 L1 regularization
+exp13_sub07	381.50	0.8689	71.0	revert	subsample=0.7, colsample=0.7

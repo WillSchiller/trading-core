@@ -93,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // RTDS feed task
+    let market_cache: rtds_listener::MarketCache = Arc::new(Mutex::new(ahash::AHashMap::new()));
     let feed_ctx = rtds_listener::FeedCtx {
         config: app_config.clone(),
         trader_db: Arc::clone(&trader_scores),
@@ -101,6 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         positions: Arc::clone(&position_tracker),
         risk: Arc::clone(&risk_mgr),
         scorer: Arc::clone(&ml_scorer),
+        market_cache,
     };
     let feed_task = tokio::spawn(async move {
         if let Err(e) = rtds_listener::run_feed(feed_ctx, shutdown_rx).await {
