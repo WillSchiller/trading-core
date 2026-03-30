@@ -46,12 +46,28 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
 
         let side = match fill.signal.side {
-            CopySide::Buy => "BUY",
-            CopySide::Sell => "SELL",
+            CopySide::Buy => "BUY".to_string(),
+            CopySide::Sell => "SELL".to_string(),
         };
 
         let fill_size_val = fill.size_usd / fill.fill_price.max(0.01);
         let ts = chrono::Utc::now().timestamp_millis();
+        // Debug: log all param types
+        tracing::debug!(
+            trader = %fill.signal.trader,
+            side = %side,
+            size = fill.signal.size,
+            price = fill.signal.price,
+            our_size = fill.size_usd,
+            fill_price = fill.fill_price,
+            fill_size = fill_size_val,
+            ts,
+            model = %fill.model_version,
+            win = ?fill.win_score,
+            cal = ?fill.cal_prob,
+            kelly = ?fill.kelly_size,
+            "insert_fill params"
+        );
 
         let row = client.query_opt(
             "INSERT INTO pm_live_trades (
@@ -60,7 +76,7 @@ impl FillDb {
                 order_id, fill_price, fill_size, execution_status, executed_at,
                 trader_timestamp, source, model_version,
                 win_score, cal_prob, kelly_size
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13, 'rust', $14, $15, $16, $17)
+            ) VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9, $10::numeric, $11::numeric, $12, NOW(), $13, 'rust', $14, $15::numeric, $16::numeric, $17::numeric)
             ON CONFLICT (trader_address, condition_id, token_id, side, trader_timestamp) DO NOTHING
             RETURNING id",
             &[
