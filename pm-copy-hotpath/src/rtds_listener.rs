@@ -336,10 +336,11 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         .as_ref()
         .map(|m| m.outcome.as_str())
         .unwrap_or("");
+    let slug = market_meta.as_ref().map(|m| m.slug.as_str()).unwrap_or("");
 
     let mut scorer_guard = ctx.scorer.lock().await;
     let (ml_result, ml_scores_json) = if scorer_guard.is_enabled() {
-        let (result, json) = scorer_guard.score_all_json(&signal, category, outcome_name);
+        let (result, json) = scorer_guard.score_all_json(&signal, category, outcome_name, slug);
         (Some(result), json)
     } else {
         (None, String::new())

@@ -200,6 +200,7 @@ impl Scorer {
         signal: &TradeSignal,
         category: &str,
         outcome_name: &str,
+        market_slug: &str,
     ) -> ScoreResult {
         if self.models.is_empty() {
             return ScoreResult {
@@ -215,6 +216,7 @@ impl Scorer {
             signal,
             category,
             outcome_name,
+            market_slug,
             stats,
             &mut self.market_counts,
         );
@@ -296,6 +298,7 @@ impl Scorer {
         signal: &TradeSignal,
         category: &str,
         outcome_name: &str,
+        market_slug: &str,
     ) -> (ScoreResult, String) {
         if self.models.is_empty() {
             return (
@@ -314,6 +317,7 @@ impl Scorer {
             signal,
             category,
             outcome_name,
+            market_slug,
             stats,
             &mut self.market_counts,
         );
@@ -415,6 +419,7 @@ fn build_all_features(
     signal: &TradeSignal,
     category: &str,
     outcome_name: &str,
+    market_slug: &str,
     stats: Option<&TraderRollingStats>,
     market_counts: &mut AHashMap<String, usize>,
 ) -> AHashMap<String, f32> {
@@ -508,10 +513,32 @@ fn build_all_features(
         "neg_risk".to_string(),
         if signal.neg_risk { 1.0 } else { 0.0 },
     );
-    m.insert("time_to_resolution".to_string(), 24.0); // default 24h
+    // Time to resolution: extract date from market slug
+    let time_to_res = extract_hours_from_slug(market_slug) as f32;
+    let time_to_res_log = (1.0 + time_to_res).ln();
+    let implied_edge = if p < 0.5 { 1.0 - p as f32 } else { p as f32 };
+
+    m.insert("time_to_resolution".to_string(), time_to_res);
+    m.insert("time_to_resolution_log".to_string(), time_to_res_log);
+    m.insert("price_x_time".to_string(), p as f32 * time_to_res_log);
+    m.insert("edge_x_time".to_string(), implied_edge * time_to_res_log);
     m.insert("price_momentum".to_string(), 0.0);
     m.insert("trader_category_wr".to_string(), lifetime_wr as f32);
     m
+}
+
+fn extract_hours_from_slug(slug: &str) -> f64 {
+    if let Ok(re) = regex::Regex::new(r"(\d{4}-\d{2}-\d{2})")
+        && let Some(caps) = re.captures(slug)
+        && let Ok(date) = chrono::NaiveDate::parse_from_str(&caps[1], "%Y-%m-%d")
+    {
+        let now = chrono::Utc::now().naive_utc().date();
+        let days = (date - now).num_days();
+        if days > 0 {
+            return days as f64 * 24.0;
+        }
+    }
+    24.0
 }
 
 fn select_features(all: &AHashMap<String, f32>, feature_list: &[String]) -> Vec<f32> {
