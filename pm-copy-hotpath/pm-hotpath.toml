@@ -44,3 +44,4 @@ market_dedup_seconds = 600
 resolution_poll_seconds = 60
 auto_sell_threshold = 0.995
 stale_gtc_cancel_minutes = 30
+our_wallet = "0x6a5cac3e4b85d546b24278fcbf98d26c33c8444c"

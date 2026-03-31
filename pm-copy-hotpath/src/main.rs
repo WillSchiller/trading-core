@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use pm_copy_hotpath::{
     config, db, fill_checker, order_builder, positions, resolver, risk, rtds_listener, scorer,
-    trader_db,
+    trade_sync, trader_db,
 };
 use tokio::sync::{Mutex, broadcast};
 use tracing_subscriber::EnvFilter;
@@ -90,6 +90,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             fill_checker::run_fill_checker(database, ex, pos, checker_shutdown).await;
         });
         tracing::info!("fill checker task started");
+    }
+
+    // Trade sync — polls data API to catch manual sells
+    if let Some(ref fdb) = fill_db {
+        let sync_shutdown = shutdown_tx.subscribe();
+        let cfg = app_config.clone();
+        let database = Arc::clone(fdb);
+        tokio::spawn(async move {
+            trade_sync::run_trade_sync(cfg, database, sync_shutdown).await;
+        });
+        tracing::info!("trade sync task started");
     }
 
     // RTDS feed task

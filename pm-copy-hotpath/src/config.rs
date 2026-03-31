@@ -77,6 +77,8 @@ pub struct AppConfig {
     pub auto_sell_threshold: f64,
     #[serde(default = "default_stale_gtc")]
     pub stale_gtc_cancel_minutes: u64,
+    #[serde(default)]
+    pub our_wallet: String,
 }
 
 fn default_rtds_url() -> String {

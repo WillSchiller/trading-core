@@ -8,5 +8,6 @@ pub mod resolver;
 pub mod risk;
 pub mod rtds_listener;
 pub mod scorer;
+pub mod trade_sync;
 pub mod trader_db;
 pub mod types;

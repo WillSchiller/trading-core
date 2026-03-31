@@ -6,7 +6,7 @@ rust-version = "1.88"
 description = "Low-latency Polymarket copy-trade hot path (RTDS + CLOB orders)"
 
 [dependencies]
-polymarket-client-sdk = { version = "0.4.4", features = ["clob", "rtds", "ws", "tracing"] }
+polymarket-client-sdk = { version = "0.4.4", features = ["clob", "rtds", "ws", "data", "tracing"] }
 tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

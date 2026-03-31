@@ -131,7 +131,11 @@ async fn run_rtds(ctx: FeedCtx, mut shutdown: broadcast::Receiver<()>) -> Result
                 for item in payload_items(&msg.payload) {
                     cache_market_meta(&item, &ctx.market_cache).await;
                     if let Some(sig) = parse_activity_item(&item, &mut seen, MAX_SEEN) {
-                        process_signal(sig, &ctx).await;
+                        if sig.side == CopySide::Sell && is_our_wallet(&sig.trader, &ctx.config) {
+                            detect_self_sell(&sig, &ctx).await;
+                        } else {
+                            process_signal(sig, &ctx).await;
+                        }
                     }
                 }
             }
@@ -248,6 +252,37 @@ fn parse_activity_item(
         neg_risk: t.neg_risk.unwrap_or(false),
         dedup_key,
     })
+}
+
+fn is_our_wallet(trader: &str, config: &AppConfig) -> bool {
+    !config.our_wallet.is_empty() && trader == config.our_wallet
+}
+
+async fn detect_self_sell(signal: &TradeSignal, ctx: &FeedCtx) {
+    let Some(db) = &ctx.fill_db else { return };
+    info!(
+        condition = %signal.condition_id,
+        price = signal.price,
+        size = signal.size,
+        "detected self-sell on RTDS"
+    );
+    let sql = format!(
+        "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = ({} - fill_price::float8) * fill_size::float8, resolved = true, resolved_at = NOW() WHERE condition_id = '{}' AND execution_status = 'filled' AND resolved = false",
+        signal.price,
+        signal.price,
+        signal.condition_id.replace('\'', "''"),
+    );
+    let client = match db.pool().get().await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(error = %e, "self-sell DB error");
+            return;
+        }
+    };
+    match client.simple_query(&sql).await {
+        Ok(_) => info!(condition = %signal.condition_id, "self-sell recorded in DB"),
+        Err(e) => warn!(error = %e, "self-sell update failed"),
+    }
 }
 
 async fn process_signal(signal: TradeSignal, ctx: &FeedCtx) {
