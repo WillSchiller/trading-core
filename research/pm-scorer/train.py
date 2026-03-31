@@ -41,6 +41,27 @@ def compute_features(df):
     df['hour'] = pd.to_datetime(df['buy_ts'], unit='ms').dt.hour
     df['dow'] = pd.to_datetime(df['buy_ts'], unit='ms').dt.dayofweek
 
+    # Time to resolution: hours from buy to actual resolution
+    df['hold_hours'] = (df['resolve_ts'] - df['buy_ts']) / (1000 * 60 * 60)
+    df['hold_hours_log'] = np.log1p(df['hold_hours'].clip(lower=0))
+
+    # Time to resolution from slug (extract date if present)
+    import re
+    def extract_hours_to_resolution(row):
+        m = re.search(r'(\d{4}-\d{2}-\d{2})', row['market_slug'])
+        if m:
+            try:
+                res_date = pd.Timestamp(m.group(1))
+                buy_date = pd.Timestamp(row['buy_ts'], unit='ms')
+                hours = (res_date - buy_date).total_seconds() / 3600
+                if hours > 0:
+                    return hours
+            except Exception:
+                pass
+        return row.get('hold_hours', 24.0)
+    df['time_to_resolution'] = df.apply(extract_hours_to_resolution, axis=1)
+    df['time_to_resolution_log'] = np.log1p(df['time_to_resolution'].clip(lower=0))
+
 
     # Trader conviction — expanding median (causal)
     df['size_vs_median'] = 1.0
@@ -160,6 +181,7 @@ FEATURES = [
     'lifetime_pf',
     'trade_num',
     'market_trader_count',
+    'time_to_resolution_log',
 ]
 
 

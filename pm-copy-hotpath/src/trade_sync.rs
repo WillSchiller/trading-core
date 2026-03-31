@@ -130,6 +130,18 @@ async fn reconcile(
         }
     }
 
+    // Update live prices on ALL open positions (not just synced)
+    for pos in &positions {
+        let condition_id = format!("{:#x}", pos.condition_id);
+        let cur_price: f64 = pos.cur_price.to_string().parse().unwrap_or(0.0);
+        let sql = format!(
+            "UPDATE pm_rust_trades SET pnl = {cur_price} WHERE condition_id = '{cid}' AND resolved = false AND execution_status = 'filled'",
+            cur_price = cur_price,
+            cid = esc(&condition_id),
+        );
+        let _ = pool.simple_query(&sql).await;
+    }
+
     if !pm_condition_ids.is_empty() {
         let in_list: String = pm_condition_ids
             .iter()

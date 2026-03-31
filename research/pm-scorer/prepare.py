@@ -38,17 +38,18 @@ def load_data():
 
 
 def temporal_split(df):
-    """Strict temporal split: 50% train, 20% cal, 15% val, 15% test.
-    All splits are by global time order — no leakage."""
-    n = len(df)
-    te = int(n * 0.50)
-    ce = int(n * 0.70)
-    ve = int(n * 0.85)
+    """Strict temporal split by date, not percentage.
+    Handles skewed data where recent months dominate."""
+    import pandas as pd
+    df['buy_dt'] = pd.to_datetime(df['buy_ts'], unit='ms', utc=True)
+    train_end = pd.Timestamp('2026-01-15', tz='UTC')
+    cal_end = pd.Timestamp('2026-02-01', tz='UTC')
+    val_end = pd.Timestamp('2026-02-15', tz='UTC')
     return {
-        'train': df.iloc[:te],
-        'cal': df.iloc[te:ce],
-        'val': df.iloc[ce:ve],
-        'test': df.iloc[ve:],
+        'train': df[df['buy_dt'] < train_end],
+        'cal': df[(df['buy_dt'] >= train_end) & (df['buy_dt'] < cal_end)],
+        'val': df[(df['buy_dt'] >= cal_end) & (df['buy_dt'] < val_end)],
+        'test': df[df['buy_dt'] >= val_end],
     }
 
 
