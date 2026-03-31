@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use polymarket_client_sdk::data::Client as DataClient;
 use polymarket_client_sdk::data::types::Side;
-use polymarket_client_sdk::data::types::request::{PositionsRequest, TradesRequest};
+use polymarket_client_sdk::data::types::request::{
+    ClosedPositionsRequest, PositionsRequest, TradesRequest,
+};
 use polymarket_client_sdk::types::Address;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
@@ -38,9 +40,9 @@ pub async fn run_trade_sync(
         }
     };
 
-    // Full bootstrap on startup
-    if let Err(e) = full_sync(&addr, &data_client, &db).await {
-        warn!(error = %e, "full sync failed");
+    // Full reconciliation on startup
+    if let Err(e) = reconcile(&addr, &data_client, &db).await {
+        warn!(error = %e, "initial reconciliation failed");
     }
 
     let interval = Duration::from_secs(300);
@@ -56,43 +58,93 @@ pub async fn run_trade_sync(
             _ = tokio::time::sleep(interval) => {}
         }
 
-        if let Err(e) = full_sync(&addr, &data_client, &db).await {
-            warn!(error = %e, "sync cycle error");
+        if let Err(e) = reconcile(&addr, &data_client, &db).await {
+            warn!(error = %e, "reconciliation error");
         }
     }
 }
 
-async fn full_sync(
+async fn reconcile(
     addr: &Address,
     client: &DataClient,
     db: &FillDb,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let pool_client = db.pool().get().await?;
+    let pool = db.pool().get().await?;
     let esc = |s: &str| s.replace('\'', "''");
 
-    // 1. Import all BUY trades
-    let buy_req = TradesRequest::builder().user(*addr).side(Side::Buy).build();
-    let buys = client.trades(&buy_req).await?;
-    let mut buys_inserted = 0;
+    // 1. Sync OPEN positions — one row per position (aggregated by PM)
+    let pos_req = PositionsRequest::builder().user(*addr).build();
+    let positions = client.positions(&pos_req).await?;
 
-    for trade in &buys {
-        let condition_id = format!("{:#x}", trade.condition_id);
-        let token_id = format!("{}", trade.asset);
-        let tx_hash = trade.transaction_hash.to_string();
-        let price: f64 = trade.price.to_string().parse().unwrap_or(0.0);
-        let size: f64 = trade.size.to_string().parse().unwrap_or(0.0);
+    // Delete all old synced open positions and re-insert fresh
+    pool.simple_query(
+        "DELETE FROM pm_rust_trades WHERE model_version = 'synced' AND resolved = false",
+    )
+    .await?;
 
-        // Dedup by transaction hash
-        let exists = pool_client
+    for pos in &positions {
+        let condition_id = format!("{:#x}", pos.condition_id);
+        let token_id = format!("{}", pos.asset);
+        let size: f64 = pos.size.to_string().parse().unwrap_or(0.0);
+        let avg_price: f64 = pos.avg_price.to_string().parse().unwrap_or(0.0);
+        let cur_price: f64 = pos.cur_price.to_string().parse().unwrap_or(0.0);
+        let cost = pos
+            .initial_value
+            .to_string()
+            .parse::<f64>()
+            .unwrap_or(avg_price * size);
+
+        let sql = format!(
+            "INSERT INTO pm_rust_trades (
+                trader_address, condition_id, token_id, side,
+                trader_size, trader_price, our_size,
+                order_id, fill_price, fill_size, execution_status,
+                model_version, market_slug, outcome, neg_risk, pnl
+            ) VALUES (
+                'self', '{cid}', '{tid}', 'BUY',
+                {size}, {avg_price}, {cost},
+                'synced-{cid_short}', {avg_price}, {size}, 'filled',
+                'synced', '{slug}', '{outcome}', {neg_risk}, {cur_price}
+            )",
+            cid = esc(&condition_id),
+            tid = esc(&token_id),
+            cid_short = &condition_id[..10.min(condition_id.len())],
+            size = size,
+            avg_price = avg_price,
+            cost = cost,
+            slug = esc(&pos.slug),
+            outcome = esc(&pos.outcome),
+            neg_risk = pos.negative_risk,
+            cur_price = cur_price,
+        );
+        if let Err(e) = pool.simple_query(&sql).await {
+            debug!(error = %e, title = %pos.title, "position insert failed");
+        }
+    }
+
+    // 2. Sync CLOSED positions — realized PnL
+    let closed_req = ClosedPositionsRequest::builder().user(*addr).build();
+    let closed = client.closed_positions(&closed_req).await?;
+
+    for pos in &closed {
+        let condition_id = format!("{:#x}", pos.condition_id);
+        let order_key = format!("closed-{}", &condition_id[..10.min(condition_id.len())]);
+
+        let exists = pool
             .query(
                 "SELECT 1 FROM pm_rust_trades WHERE order_id = $1 LIMIT 1",
-                &[&tx_hash],
+                &[&order_key],
             )
             .await?;
-
         if !exists.is_empty() {
             continue;
         }
+
+        let size: f64 = pos.total_bought.to_string().parse().unwrap_or(0.0);
+        let avg_price: f64 = pos.avg_price.to_string().parse().unwrap_or(0.0);
+        let payout: f64 = pos.realized_pnl.to_string().parse().unwrap_or(0.0);
+        let cost = avg_price * size;
+        let real_pnl = payout - cost;
 
         let sql = format!(
             "INSERT INTO pm_rust_trades (
@@ -100,33 +152,30 @@ async fn full_sync(
                 trader_size, trader_price, our_size,
                 order_id, fill_price, fill_size, execution_status,
                 model_version, market_slug, outcome, neg_risk,
-                created_at
+                resolved, real_pnl, resolved_at
             ) VALUES (
                 'self', '{cid}', '{tid}', 'BUY',
-                {size}, {price}, {cost},
-                '{tx}', {price}, {size}, 'filled',
+                {size}, {avg_price}, {cost},
+                '{order_key}', {avg_price}, {size}, 'sold',
                 'synced', '{slug}', '{outcome}', false,
-                to_timestamp({ts})
+                true, {real_pnl}, NOW()
             )",
             cid = esc(&condition_id),
-            tid = esc(&token_id),
+            tid = esc(&format!("{}", pos.asset)),
             size = size,
-            price = price,
-            cost = price * size,
-            tx = esc(&tx_hash),
-            slug = esc(&trade.slug),
-            outcome = esc(&trade.outcome),
-            ts = trade.timestamp,
+            avg_price = avg_price,
+            cost = cost,
+            order_key = esc(&order_key),
+            slug = esc(&pos.slug),
+            outcome = esc(&pos.outcome),
+            real_pnl = real_pnl,
         );
-
-        if let Err(e) = pool_client.simple_query(&sql).await {
-            debug!(error = %e, slug = %trade.slug, "buy insert failed");
-        } else {
-            buys_inserted += 1;
+        if let Err(e) = pool.simple_query(&sql).await {
+            debug!(error = %e, slug = %pos.slug, "closed position insert failed");
         }
     }
 
-    // 2. Import all SELL trades — match to buys by condition_id
+    // 3. Match sell trades to non-synced open positions
     let sell_req = TradesRequest::builder()
         .user(*addr)
         .side(Side::Sell)
@@ -138,80 +187,32 @@ async fn full_sync(
         let condition_id = format!("{:#x}", trade.condition_id);
         let price: f64 = trade.price.to_string().parse().unwrap_or(0.0);
 
-        let check = pool_client
+        let check = pool
             .query(
-                "SELECT id FROM pm_rust_trades WHERE condition_id = $1 AND execution_status = 'filled' AND resolved = false LIMIT 1",
+                "SELECT id FROM pm_rust_trades WHERE condition_id = $1 AND execution_status = 'filled' AND resolved = false AND model_version != 'synced' LIMIT 1",
                 &[&condition_id],
             )
             .await?;
 
-        if check.is_empty() {
-            continue;
-        }
-
-        let id: i64 = check[0].get(0);
-        let sql = format!(
-            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {price}, real_pnl = ({price} - fill_price::float8) * fill_size::float8, resolved = true, resolved_at = to_timestamp({ts}) WHERE id = {id} AND resolved = false",
-            price = price,
-            ts = trade.timestamp,
-            id = id,
-        );
-        if pool_client.simple_query(&sql).await.is_ok() {
-            sells_matched += 1;
-        }
-    }
-
-    // 3. Update current prices on open positions from positions API
-    let pos_req = PositionsRequest::builder().user(*addr).build();
-    let positions = client.positions(&pos_req).await?;
-
-    for pos in &positions {
-        let condition_id = format!("{:#x}", pos.condition_id);
-        let cur_price: f64 = pos.cur_price.to_string().parse().unwrap_or(0.0);
-
-        let sql = format!(
-            "UPDATE pm_rust_trades SET pnl = {cur_price} WHERE condition_id = '{cid}' AND resolved = false AND execution_status = 'filled'",
-            cur_price = cur_price,
-            cid = esc(&condition_id),
-        );
-        let _ = pool_client.simple_query(&sql).await;
-    }
-
-    // 4. Mark positions as resolved if they're not in the positions API anymore
-    //    (market resolved or fully sold)
-    let open_condition_ids: std::collections::HashSet<String> = positions
-        .iter()
-        .map(|p| format!("{:#x}", p.condition_id))
-        .collect();
-
-    let db_open = pool_client
-        .query(
-            "SELECT DISTINCT condition_id FROM pm_rust_trades WHERE resolved = false AND execution_status = 'filled' AND model_version = 'synced'",
-            &[],
-        )
-        .await?;
-
-    for row in &db_open {
-        let cid: String = row.get(0);
-        if !open_condition_ids.contains(&cid) {
-            // Position no longer exists on PM — mark resolved
-            // Don't set real_pnl since we don't know the resolution price
+        if let Some(row) = check.first() {
+            let id: i64 = row.get(0);
             let sql = format!(
-                "UPDATE pm_rust_trades SET resolved = true, resolved_at = NOW() WHERE condition_id = '{cid}' AND resolved = false AND execution_status = 'filled' AND model_version = 'synced'",
-                cid = esc(&cid),
+                "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {price}, real_pnl = ({price} - fill_price::float8) * fill_size::float8, resolved = true, resolved_at = to_timestamp({ts}) WHERE id = {id} AND resolved = false",
+                price = price,
+                ts = trade.timestamp,
+                id = id,
             );
-            let _ = pool_client.simple_query(&sql).await;
-            debug!(condition_id = %cid, "synced position no longer on PM — resolved");
+            if pool.simple_query(&sql).await.is_ok() {
+                sells_matched += 1;
+            }
         }
     }
 
     info!(
-        buys = buys.len(),
-        buys_inserted,
-        sells = sells.len(),
+        open = positions.len(),
+        closed = closed.len(),
         sells_matched,
-        open_positions = positions.len(),
-        "sync complete"
+        "reconciliation complete"
     );
 
     Ok(())
