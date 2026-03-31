@@ -25,8 +25,8 @@ signature_type = 2            # 0=EOA, 1=Proxy, 2=GnosisSafe
 execution_mode = "ml"
 
 # --- ML scoring ---
-onnx_model_path = "/app/models/pm_scorer_v5.onnx"
-calibration_path = "/app/models/pm_v5_calibration.json"
+onnx_model_path = "/app/models/pm_scorer_v6.onnx"
+calibration_path = "/app/models/pm_v6_calibration.json"
 kelly_half_multiplier = 0.5
 min_bet_usd = 1.0
 max_kelly_fraction = 0.125
