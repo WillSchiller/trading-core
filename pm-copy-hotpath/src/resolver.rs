@@ -67,7 +67,7 @@ pub async fn run_resolver(
 async fn poll_once(
     config: &AppConfig,
     positions: &Arc<Mutex<PositionTracker>>,
-    risk: &Arc<Mutex<RiskManager>>,
+    _risk: &Arc<Mutex<RiskManager>>,
     db: &Arc<FillDb>,
     exec: &Option<Arc<OrderExecutor>>,
     http: &reqwest::Client,
@@ -136,8 +136,7 @@ async fn poll_once(
             let removed = tracker.remove_condition(condition_id);
             drop(tracker);
 
-            let daily_pnl = db.get_daily_pnl().await.unwrap_or(0.0);
-            risk.lock().await.check_kill_switch(daily_pnl);
+            let _ = db.get_daily_pnl().await;
 
             debug!(
                 condition_id,
