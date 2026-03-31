@@ -3245,6 +3245,7 @@ dependencies = [
  "futures",
  "ort",
  "polymarket-client-sdk",
+ "regex",
  "reqwest 0.12.28",
  "rust_decimal",
  "rust_decimal_macros",
