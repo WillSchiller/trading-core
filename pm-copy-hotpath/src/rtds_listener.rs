@@ -355,7 +355,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
 
     let (trade_size, model_version) = match &ml_result {
         Some(result) if result.pass && result.kelly_size >= ctx.config.min_bet_usd => {
-            (result.kelly_size, "ml_kelly".to_owned())
+            (result.kelly_size, "v5_kelly".to_owned())
         }
         _ => {
             // ML rejected — skip trade, but still record the attempt
