@@ -117,7 +117,13 @@ async fn poll_once(
 
         if market.closed {
             for pos in &pos_list {
-                let resolution_price = get_token_price(market, &pos.token_id).unwrap_or(0.0);
+                let resolution_price = match get_token_price(market, &pos.token_id) {
+                    Some(p) => p,
+                    None => {
+                        warn!(id = pos.live_trade_id, token_id = %pos.token_id, "could not find resolution price — skipping");
+                        continue;
+                    }
+                };
                 let real_pnl = (resolution_price - pos.fill_price) * pos.fill_size;
                 if let Err(e) = db
                     .resolve_trade(pos.live_trade_id, resolution_price, real_pnl)

@@ -96,10 +96,9 @@ async fn sync_positions(
             .await?;
 
         if existing.is_empty() {
-            // Insert missing position
             let sql = format!(
-                "INSERT INTO pm_rust_trades (trader_address, condition_id, token_id, side, trader_size, trader_price, our_size, order_id, fill_price, fill_size, execution_status, model_version, market_slug, outcome, neg_risk)
-                 VALUES ('self', '{cid}', '{tid}', 'BUY', {size}, {avg_price}, {cost}, 'synced', {avg_price}, {size}, 'filled', 'synced', '{slug}', '{outcome}', {neg_risk})
+                "INSERT INTO pm_rust_trades (trader_address, condition_id, token_id, side, trader_size, trader_price, our_size, order_id, fill_price, fill_size, execution_status, model_version, market_slug, outcome, neg_risk, pnl)
+                 VALUES ('self', '{cid}', '{tid}', 'BUY', {size}, {avg_price}, {cost}, 'synced', {avg_price}, {size}, 'filled', 'synced', '{slug}', '{outcome}', {neg_risk}, {cur_price})
                  ON CONFLICT DO NOTHING",
                 cid = condition_id.replace('\'', "''"),
                 tid = token_id.replace('\'', "''"),
