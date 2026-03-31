@@ -22,7 +22,7 @@ signature_type = 2            # 0=EOA, 1=Proxy, 2=GnosisSafe
 # "control" = flat $copy_size_usd per trade
 # "ml"      = Kelly sizing from ONNX model
 # "ab"      = 50/50 split by market hash
-execution_mode = "ab"
+execution_mode = "ml"
 
 # --- ML scoring ---
 onnx_model_path = "/app/models/pm_scorer_v4.onnx"
