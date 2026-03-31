@@ -118,7 +118,15 @@ async fn poll_once(
         if market.closed {
             for pos in &pos_list {
                 let resolution_price = match get_token_price(market, &pos.token_id) {
-                    Some(p) => p,
+                    Some(p) if (0.0..=1.0).contains(&p) => p,
+                    Some(p) => {
+                        warn!(
+                            id = pos.live_trade_id,
+                            price = p,
+                            "resolution price out of [0,1] — skipping"
+                        );
+                        continue;
+                    }
                     None => {
                         warn!(id = pos.live_trade_id, token_id = %pos.token_id, "could not find resolution price — skipping");
                         continue;

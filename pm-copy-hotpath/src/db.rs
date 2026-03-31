@@ -80,6 +80,8 @@ impl FillDb {
                 '{mv}', {ws}, {cp}, {ks},
                 '{slug}', '{outcome}', {neg_risk}, {lat}, {ml_json}
             )
+            ON CONFLICT (order_id) WHERE order_id <> '' AND order_id IS NOT NULL
+            DO NOTHING
             RETURNING id",
             neg_risk = fill.signal.neg_risk,
             trader = esc(&fill.signal.trader),
@@ -139,7 +141,7 @@ impl FillDb {
         let rows = client
             .query(
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
-                    order_id, created_at, COALESCE(model_version, '') as mv
+                    order_id, created_at, COALESCE(model_version, '') as mv, neg_risk
              FROM pm_rust_trades
              WHERE execution_status IN ('filled', 'pending') AND resolved = false AND side = 'BUY' AND model_version != 'synced'",
                 &[],
@@ -157,6 +159,7 @@ impl FillDb {
             let order_id: Option<String> = row.get(5);
             let executed_at: Option<chrono::DateTime<chrono::Utc>> = row.get(6);
             let model_version: String = row.get(7);
+            let neg_risk: bool = row.get(8);
             positions.push(Position {
                 live_trade_id: id,
                 condition_id,
@@ -164,7 +167,7 @@ impl FillDb {
                 fill_price,
                 fill_size,
                 order_id: order_id.unwrap_or_default(),
-                neg_risk: false,
+                neg_risk,
                 filled_at: executed_at.unwrap_or_else(chrono::Utc::now),
                 model_version,
             });
@@ -223,18 +226,31 @@ impl FillDb {
         resolution_price: f64,
         real_pnl: f64,
     ) -> Result<(), HotPathError> {
+        if !(0.0..=1.0).contains(&resolution_price) {
+            return Err(HotPathError::Db(format!(
+                "resolution_price {resolution_price} out of [0,1] range for trade {live_trade_id}"
+            )));
+        }
         let client = self
             .pool
             .get()
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         let sql = format!(
-            "UPDATE pm_rust_trades SET resolved = true, resolution_price = {resolution_price}, real_pnl = {real_pnl}, resolved_at = NOW() WHERE id = {live_trade_id}",
+            "UPDATE pm_rust_trades SET resolved = true, resolution_price = {resolution_price}, real_pnl = {real_pnl}, resolved_at = NOW() WHERE id = {live_trade_id} AND model_version != 'synced' AND execution_status = 'filled' AND resolved = false",
         );
         client
             .simple_query(&sql)
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
+        self.log_event(
+            live_trade_id,
+            "resolved",
+            "resolver",
+            Some("filled"),
+            Some("resolved"),
+        )
+        .await;
         Ok(())
     }
 
@@ -252,12 +268,20 @@ impl FillDb {
             .map_err(|e| HotPathError::Db(e.to_string()))?;
         let esc_oid = sell_order_id.replace('\'', "''");
         let sql = format!(
-            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {exit_price}, real_pnl = {real_pnl}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{esc_oid}' WHERE id = {live_trade_id}",
+            "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {exit_price}, real_pnl = {real_pnl}, resolved = true, resolved_at = NOW(), order_id = order_id || ',' || '{esc_oid}' WHERE id = {live_trade_id} AND execution_status = 'filled' AND resolved = false",
         );
         client
             .simple_query(&sql)
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
+        self.log_event(
+            live_trade_id,
+            "sold",
+            "mark_sold",
+            Some("filled"),
+            Some("sold"),
+        )
+        .await;
         Ok(())
     }
 
@@ -287,6 +311,14 @@ impl FillDb {
         fill_price: Option<f64>,
         fill_size: Option<f64>,
     ) -> Result<(), HotPathError> {
+        let allowed_from = match status {
+            "filled" => "pending",
+            "cancelled" => "pending",
+            "sold" => "filled",
+            other => {
+                return Err(HotPathError::Db(format!("invalid target status: {other}")));
+            }
+        };
         let client = self
             .pool
             .get()
@@ -298,17 +330,22 @@ impl FillDb {
         let fs = fill_size
             .map(|v| format!("{v}"))
             .unwrap_or("fill_size".to_owned());
+        let esc_status = status.replace('\'', "''");
         let sql = format!(
-            "UPDATE pm_rust_trades SET execution_status = '{}', fill_price = {}, fill_size = {} WHERE id = {}",
-            status.replace('\'', "''"),
-            fp,
-            fs,
-            live_trade_id
+            "UPDATE pm_rust_trades SET execution_status = '{esc_status}', fill_price = {fp}, fill_size = {fs} WHERE id = {live_trade_id} AND execution_status = '{allowed_from}'",
         );
         client
             .simple_query(&sql)
             .await
             .map_err(|e| HotPathError::Db(e.to_string()))?;
+        self.log_event(
+            live_trade_id,
+            "status_change",
+            "fill_checker",
+            Some(allowed_from),
+            Some(status),
+        )
+        .await;
         Ok(())
     }
 
@@ -398,6 +435,31 @@ impl FillDb {
                 )
             })
             .collect())
+    }
+
+    pub async fn log_event(
+        &self,
+        trade_id: i64,
+        event_type: &str,
+        source: &str,
+        old_status: Option<&str>,
+        new_status: Option<&str>,
+    ) {
+        let client = match self.pool.get().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let old_s = old_status.unwrap_or("NULL");
+        let new_s = new_status.unwrap_or("NULL");
+        let esc = |s: &str| s.replace('\'', "''");
+        let sql = format!(
+            "INSERT INTO pm_trade_events (trade_id, event_type, old_status, new_status, source) VALUES ({trade_id}, '{et}', '{old}', '{new}', '{src}')",
+            et = esc(event_type),
+            old = esc(old_s),
+            new = esc(new_s),
+            src = esc(source),
+        );
+        let _ = client.simple_query(&sql).await;
     }
 
     pub fn pool(&self) -> &Pool {

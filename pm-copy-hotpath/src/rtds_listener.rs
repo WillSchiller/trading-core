@@ -267,7 +267,7 @@ async fn detect_self_sell(signal: &TradeSignal, ctx: &FeedCtx) {
         "detected self-sell on RTDS"
     );
     let sql = format!(
-        "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = ({} - fill_price::float8) * fill_size::float8, resolved = true, resolved_at = NOW() WHERE condition_id = '{}' AND execution_status = 'filled' AND resolved = false",
+        "UPDATE pm_rust_trades SET execution_status = 'sold', resolution_price = {}, real_pnl = ({} - fill_price::float8) * fill_size::float8, resolved = true, resolved_at = NOW() WHERE condition_id = '{}' AND execution_status = 'filled' AND resolved = false AND model_version != 'synced'",
         signal.price,
         signal.price,
         signal.condition_id.replace('\'', "''"),

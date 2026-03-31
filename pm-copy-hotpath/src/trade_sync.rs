@@ -76,11 +76,7 @@ async fn reconcile(
     let pos_req = PositionsRequest::builder().user(*addr).build();
     let positions = client.positions(&pos_req).await?;
 
-    // Delete all old synced open positions and re-insert fresh
-    pool.simple_query(
-        "DELETE FROM pm_rust_trades WHERE model_version = 'synced' AND resolved = false",
-    )
-    .await?;
+    let mut pm_condition_ids: Vec<String> = Vec::new();
 
     for pos in &positions {
         let condition_id = format!("{:#x}", pos.condition_id);
@@ -93,6 +89,9 @@ async fn reconcile(
             .to_string()
             .parse::<f64>()
             .unwrap_or(avg_price * size);
+        let order_key = format!("synced-{}", &condition_id[..10.min(condition_id.len())]);
+
+        pm_condition_ids.push(condition_id.clone());
 
         let sql = format!(
             "INSERT INTO pm_rust_trades (
@@ -103,12 +102,21 @@ async fn reconcile(
             ) VALUES (
                 'self', '{cid}', '{tid}', 'BUY',
                 {size}, {avg_price}, {cost},
-                'synced-{cid_short}', {avg_price}, {size}, 'filled',
+                '{order_key}', {avg_price}, {size}, 'filled',
                 'synced', '{slug}', '{outcome}', {neg_risk}, {cur_price}
-            )",
+            )
+            ON CONFLICT (order_id) WHERE order_id <> '' AND order_id IS NOT NULL
+            DO UPDATE SET
+                fill_size = EXCLUDED.fill_size,
+                fill_price = EXCLUDED.fill_price,
+                trader_size = EXCLUDED.trader_size,
+                our_size = EXCLUDED.our_size,
+                pnl = EXCLUDED.pnl,
+                market_slug = EXCLUDED.market_slug,
+                outcome = EXCLUDED.outcome",
             cid = esc(&condition_id),
             tid = esc(&token_id),
-            cid_short = &condition_id[..10.min(condition_id.len())],
+            order_key = esc(&order_key),
             size = size,
             avg_price = avg_price,
             cost = cost,
@@ -118,7 +126,22 @@ async fn reconcile(
             cur_price = cur_price,
         );
         if let Err(e) = pool.simple_query(&sql).await {
-            debug!(error = %e, title = %pos.title, "position insert failed");
+            debug!(error = %e, title = %pos.title, "position upsert failed");
+        }
+    }
+
+    if !pm_condition_ids.is_empty() {
+        let in_list: String = pm_condition_ids
+            .iter()
+            .map(|c| format!("'{}'", esc(c)))
+            .collect::<Vec<_>>()
+            .join(",");
+        let vanished_sql = format!(
+            "UPDATE pm_rust_trades SET resolved = true, resolved_at = NOW(), execution_status = 'sold'
+             WHERE model_version = 'synced' AND resolved = false AND condition_id NOT IN ({in_list})"
+        );
+        if let Err(e) = pool.simple_query(&vanished_sql).await {
+            warn!(error = %e, "vanished position cleanup failed");
         }
     }
 
