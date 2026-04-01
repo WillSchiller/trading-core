@@ -92,13 +92,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("fill checker task started");
     }
 
-    // Trade sync — polls data API to catch manual sells
+    // Trade sync — polls data API, auto-sells near-certain positions
     if let Some(ref fdb) = fill_db {
         let sync_shutdown = shutdown_tx.subscribe();
         let cfg = app_config.clone();
         let database = Arc::clone(fdb);
+        let sync_exec = exec.clone();
         tokio::spawn(async move {
-            trade_sync::run_trade_sync(cfg, database, sync_shutdown).await;
+            trade_sync::run_trade_sync(cfg, database, sync_exec, sync_shutdown).await;
         });
         tracing::info!("trade sync task started");
     }

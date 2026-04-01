@@ -13,10 +13,13 @@ use tracing::{debug, info, warn};
 
 use crate::config::AppConfig;
 use crate::db::FillDb;
+use crate::order_builder::OrderExecutor;
+use crate::types::{CopySide, TradeSignal};
 
 pub async fn run_trade_sync(
     config: AppConfig,
     db: Arc<FillDb>,
+    exec: Option<Arc<OrderExecutor>>,
     mut shutdown: broadcast::Receiver<()>,
 ) {
     if config.our_wallet.is_empty() {
@@ -41,7 +44,7 @@ pub async fn run_trade_sync(
     };
 
     // Full reconciliation on startup
-    if let Err(e) = reconcile(&addr, &data_client, &db).await {
+    if let Err(e) = reconcile(&addr, &data_client, &db, &exec).await {
         warn!(error = %e, "initial reconciliation failed");
     }
 
@@ -58,7 +61,7 @@ pub async fn run_trade_sync(
             _ = tokio::time::sleep(interval) => {}
         }
 
-        if let Err(e) = reconcile(&addr, &data_client, &db).await {
+        if let Err(e) = reconcile(&addr, &data_client, &db, &exec).await {
             warn!(error = %e, "reconciliation error");
         }
     }
@@ -68,6 +71,7 @@ async fn reconcile(
     addr: &Address,
     client: &DataClient,
     db: &FillDb,
+    exec: &Option<Arc<OrderExecutor>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pool = db.pool().get().await?;
     let esc = |s: &str| s.replace('\'', "''");
@@ -140,6 +144,45 @@ async fn reconcile(
             cid = esc(&condition_id),
         );
         let _ = pool.simple_query(&sql).await;
+    }
+
+    // Auto-sell positions at near-certainty
+    if let Some(executor) = exec {
+        for pos in &positions {
+            let cur_price: f64 = pos.cur_price.to_string().parse().unwrap_or(0.0);
+            if cur_price >= 0.995 {
+                let token_id = format!("{}", pos.asset);
+                let condition_id = format!("{:#x}", pos.condition_id);
+                let size: f64 = pos.size.to_string().parse().unwrap_or(0.0);
+                if size <= 0.0 {
+                    continue;
+                }
+
+                info!(
+                    title = %pos.title,
+                    price = cur_price,
+                    size,
+                    "auto-sell triggered from trade_sync"
+                );
+                let signal = TradeSignal {
+                    trader: String::new(),
+                    token_id: token_id.clone(),
+                    side: CopySide::Sell,
+                    price: cur_price,
+                    size,
+                    condition_id: condition_id.clone(),
+                    neg_risk: pos.negative_risk,
+                    dedup_key: format!("autosell_sync_{}", condition_id),
+                };
+                match executor.execute_sell(&signal, size).await {
+                    Ok(Some(result)) => {
+                        info!(title = %pos.title, fill_price = result.fill_price, "auto-sold via sync");
+                    }
+                    Ok(None) => debug!(title = %pos.title, "auto-sell: no fill"),
+                    Err(e) => warn!(title = %pos.title, error = %e, "auto-sell error"),
+                }
+            }
+        }
     }
 
     if !pm_condition_ids.is_empty() {
