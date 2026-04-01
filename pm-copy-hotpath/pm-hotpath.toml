@@ -34,7 +34,7 @@ bankroll_usd = 200.0
 
 # --- Risk limits ---
 max_position_usd = 25.0
-max_total_exposure_usd = 250.0
+max_total_exposure_usd = 999.0
 daily_loss_limit_usd = 30.0
 max_markets_open = 999
 max_trades_per_market = 3
