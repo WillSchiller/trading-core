@@ -116,6 +116,7 @@ async fn poll_once(
         };
 
         if market.closed {
+            let mut all_resolved = true;
             for pos in &pos_list {
                 let resolution_price = match get_token_price(market, &pos.token_id) {
                     Some(p) if (0.0..=1.0).contains(&p) => p,
@@ -125,10 +126,12 @@ async fn poll_once(
                             price = p,
                             "resolution price out of [0,1] — skipping"
                         );
+                        all_resolved = false;
                         continue;
                     }
                     None => {
                         warn!(id = pos.live_trade_id, token_id = %pos.token_id, "could not find resolution price — skipping");
+                        all_resolved = false;
                         continue;
                     }
                 };
@@ -138,6 +141,7 @@ async fn poll_once(
                     .await
                 {
                     warn!(id = pos.live_trade_id, error = %e, "resolve DB error");
+                    all_resolved = false;
                     continue;
                 }
                 info!(
@@ -147,16 +151,22 @@ async fn poll_once(
                     "position resolved"
                 );
             }
-            let removed = tracker.remove_condition(condition_id);
-            drop(tracker);
-
-            let _ = db.get_daily_pnl().await;
-
-            debug!(
-                condition_id,
-                count = removed.len(),
-                "removed resolved positions"
-            );
+            if all_resolved {
+                let removed = tracker.remove_condition(condition_id);
+                drop(tracker);
+                let _ = db.get_daily_pnl().await;
+                debug!(
+                    condition_id,
+                    count = removed.len(),
+                    "removed resolved positions"
+                );
+            } else {
+                drop(tracker);
+                warn!(
+                    condition_id,
+                    "kept condition in tracker — not all positions resolved"
+                );
+            }
         } else {
             for pos in &pos_list {
                 if let Some(price) = get_token_price(market, &pos.token_id) {

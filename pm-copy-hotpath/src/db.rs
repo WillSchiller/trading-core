@@ -143,7 +143,7 @@ impl FillDb {
                 "SELECT id, condition_id, token_id, fill_price::float8, fill_size::float8,
                     order_id, created_at, COALESCE(model_version, '') as mv, neg_risk
              FROM pm_rust_trades
-             WHERE execution_status IN ('filled', 'pending') AND resolved = false AND side = 'BUY' AND model_version != 'synced'",
+             WHERE execution_status IN ('filled', 'pending') AND resolved = false AND side = 'BUY'",
                 &[],
             )
             .await
