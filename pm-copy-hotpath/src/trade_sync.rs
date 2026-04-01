@@ -172,7 +172,7 @@ async fn reconcile(
                     size,
                     condition_id: condition_id.clone(),
                     neg_risk: pos.negative_risk,
-                    dedup_key: format!("autosell_sync_{}", condition_id),
+                    dedup_key: format!("autosell_sync_{condition_id}"),
                 };
                 match executor.execute_sell(&signal, size).await {
                     Ok(Some(result)) => {
