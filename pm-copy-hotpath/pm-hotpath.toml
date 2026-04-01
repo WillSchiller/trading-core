@@ -30,7 +30,7 @@ calibration_path = "/app/models/pm_v6_calibration.json"
 kelly_half_multiplier = 0.5
 min_bet_usd = 1.0
 max_kelly_fraction = 0.125
-bankroll_usd = 60.0
+bankroll_usd = 200.0
 
 # --- Risk limits ---
 max_position_usd = 25.0
