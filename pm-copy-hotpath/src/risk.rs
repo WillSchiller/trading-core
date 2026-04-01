@@ -13,9 +13,6 @@ struct MarketEntry {
 pub struct RiskManager {
     markets: AHashMap<String, MarketEntry>,
     pending_exposure: f64,
-    max_position_usd: f64,
-    max_total_exposure_usd: f64,
-    max_markets_open: usize,
     max_trades_per_market: usize,
     market_dedup_seconds: u64,
 }
@@ -25,9 +22,6 @@ impl RiskManager {
         Self {
             markets: AHashMap::new(),
             pending_exposure: 0.0,
-            max_position_usd: config.max_position_usd,
-            max_total_exposure_usd: config.max_total_exposure_usd,
-            max_markets_open: config.max_markets_open,
             max_trades_per_market: config.max_trades_per_market,
             market_dedup_seconds: config.market_dedup_seconds,
         }
@@ -36,12 +30,12 @@ impl RiskManager {
     #[allow(clippy::too_many_arguments)]
     pub fn can_trade(
         &mut self,
-        proposed_size_usd: f64,
+        _proposed_size_usd: f64,
         condition_id: &str,
-        total_exposure: f64,
-        open_markets: usize,
+        _total_exposure: f64,
+        _open_markets: usize,
         _daily_pnl: f64,
-        position_notional: f64,
+        _position_notional: f64,
         position_trade_count: usize,
     ) -> Result<(), String> {
         if let Some(entry) = self.markets.get(condition_id) {
@@ -59,32 +53,10 @@ impl RiskManager {
             }
         }
 
-        let effective_exposure = total_exposure + self.pending_exposure;
-        if effective_exposure + proposed_size_usd > self.max_total_exposure_usd {
-            return Err(format!(
-                "exposure {:.0} + {:.0} > limit {:.0}",
-                effective_exposure, proposed_size_usd, self.max_total_exposure_usd
-            ));
-        }
-
-        if position_notional + proposed_size_usd > self.max_position_usd {
-            return Err(format!(
-                "position {:.0} + {:.0} > limit {:.0}",
-                position_notional, proposed_size_usd, self.max_position_usd
-            ));
-        }
-
         if position_trade_count >= self.max_trades_per_market {
             return Err(format!(
                 "market has {} trades, max {}",
                 position_trade_count, self.max_trades_per_market
-            ));
-        }
-
-        if position_trade_count == 0 && open_markets >= self.max_markets_open {
-            return Err(format!(
-                "open markets {} at limit {}",
-                open_markets, self.max_markets_open
             ));
         }
 
