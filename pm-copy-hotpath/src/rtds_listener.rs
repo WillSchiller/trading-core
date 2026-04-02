@@ -473,8 +473,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         let latency_ms = t_order_start.elapsed().as_millis() as i32;
 
         let timing = format!(
-            r#"{{"cache_us":{},"score_lock_us":{},"score_us":{},"pos_lock_us":{},"risk_lock_us":{},"risk_us":{},"gates_us":{},"order_us":{}}}"#,
-            t_cache, t_score_lock, t_score, t_pos_lock, t_risk_lock, t_risk, t_gates, t_order_us
+            r#"{{"cache_us":{t_cache},"score_lock_us":{t_score_lock},"score_us":{t_score},"pos_lock_us":{t_pos_lock},"risk_lock_us":{t_risk_lock},"risk_us":{t_risk},"gates_us":{t_gates},"order_us":{t_order_us}}}"#
         );
         info!(
             t_cache_us = t_cache,
