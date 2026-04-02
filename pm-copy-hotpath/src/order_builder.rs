@@ -2,7 +2,7 @@
 //!
 //! **Warm path (startup):** `authenticate()` derives L2 credentials and reuses the shared `reqwest` client inside the SDK — that is the practical “pre-warm” (no static EIP-712 template: nonce / expiration change every order).
 //!
-//! **Hot path:** `market_order` / `limit_order` builders → `sign` → `post_order` (FAK then optional GTC on BUY, FAK on SELL).
+//! **Hot path:** `limit_order` builder → `sign` → `post_order` (GTC-only on BUY, FAK→GTC on SELL).
 
 use std::str::FromStr as _;
 use std::sync::Arc;
@@ -91,7 +91,7 @@ impl OrderExecutor {
         }))
     }
 
-    /// Same-side copy: **BUY** = USDC notional FAK (+ GTC fallback); **SELL** = share FAK at trader price (no GTC fallback in this minimal path).
+    /// Same-side copy: **BUY** = GTC at trader_price+5c; **SELL** = FAK→GTC at trader price.
     #[instrument(skip(self), fields(token = %signal.token_id, trader = %signal.trader, side = ?signal.side))]
     pub async fn execute_copy(
         &self,
@@ -154,53 +154,9 @@ impl OrderExecutor {
             return Ok(OrderOutcome::DryRun);
         }
 
-        let usdc = Decimal::from_f64_retain(size_usd)
-            .ok_or_else(|| HotPathError::Config("bad size_usd".to_owned()))?;
-        let amount = Amount::usdc(usdc).map_err(|e| HotPathError::Clob(e.to_string()))?;
-
-        let market = self
-            .client
-            .market_order()
-            .token_id(token_id)
-            .amount(amount)
-            .side(Side::Buy)
-            .price(rounded)
-            .order_type(OrderType::FAK)
-            .build()
-            .await?;
-
-        let signed = self
-            .client
-            .sign(self.signer.as_ref(), market)
-            .await
-            .map_err(HotPathError::from)?;
-        match self.client.post_order(signed).await {
-            Ok(posted) if posted.success => {
-                tracing::info!(order_id = %posted.order_id, "BUY FAK posted");
-                return Ok(OrderOutcome::FakFilled(OrderResult {
-                    order_id: posted.order_id,
-                    status: "filled",
-                    fill_price: rounded.to_string().parse().unwrap_or(signal.price),
-                }));
-            }
-            Ok(posted) => {
-                tracing::debug!("FAK not matched, falling through to GTC");
-                let _ = posted;
-            }
-            Err(e) => {
-                let err_str = e.to_string();
-                if err_str.contains("not enough balance") {
-                    tracing::debug!("FAK rejected: no balance — skipping GTC");
-                    return Ok(OrderOutcome::BalanceError);
-                }
-                tracing::debug!(error = %e, "FAK error, falling through to GTC");
-            }
-        }
-
         let gtc_raw = (rounded + dec!(0.05)).min(dec!(0.99));
         let gtc_price = (gtc_raw / tick).round_dp(0) * tick;
 
-        // CLOB minimum is ~5 shares; use whichever is larger: $size_usd worth or 5 shares
         let natural_shares = Decimal::from_f64_retain(size_usd).unwrap() / gtc_price;
         let size_shares = natural_shares.max(dec!(5)).round_dp(2);
 
@@ -222,7 +178,7 @@ impl OrderExecutor {
             .map_err(HotPathError::from)?;
         match self.client.post_order(signed).await {
             Ok(posted) if posted.success => {
-                tracing::info!(order_id = %posted.order_id, %gtc_price, "BUY GTC fallback posted");
+                tracing::info!(order_id = %posted.order_id, %gtc_price, "BUY GTC posted");
                 return Ok(OrderOutcome::GtcPosted(OrderResult {
                     order_id: posted.order_id,
                     status: "pending",
@@ -230,7 +186,7 @@ impl OrderExecutor {
                 }));
             }
             Ok(posted) => {
-                warn!(?posted, "BUY GTC fallback rejected");
+                warn!(?posted, "BUY GTC rejected");
             }
             Err(e) => {
                 let err_str = e.to_string();

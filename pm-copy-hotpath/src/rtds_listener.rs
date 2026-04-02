@@ -401,18 +401,13 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let position_trade_count = tracker.trade_count(&signal.condition_id);
     drop(tracker);
 
-    let daily_pnl = match &ctx.fill_db {
-        Some(fdb) => fdb.get_daily_pnl().await.unwrap_or(0.0),
-        None => 0.0,
-    };
-
     let mut risk_guard = ctx.risk.lock().await;
     if let Err(reason) = risk_guard.can_trade(
         trade_size,
         &signal.condition_id,
         total_exposure,
         open_markets,
-        daily_pnl,
+        0.0,
         position_notional,
         position_trade_count,
     ) {

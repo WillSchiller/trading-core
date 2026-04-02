@@ -300,7 +300,7 @@ impl Scorer {
         outcome_name: &str,
         market_slug: &str,
     ) -> (ScoreResult, String) {
-        if self.models.is_empty() {
+        if self.models.is_empty() || self.primary_model >= self.models.len() {
             return (
                 ScoreResult {
                     win_score: 1.0,
@@ -322,69 +322,86 @@ impl Scorer {
             &mut self.market_counts,
         );
 
-        let mut all_scores: std::collections::HashMap<String, ModelScore> =
-            std::collections::HashMap::new();
-        let mut primary_result = ScoreResult {
-            win_score: 0.5,
-            cal_prob: 0.5,
-            kelly_size: 0.0,
-            pass: false,
+        let model = &mut self.models[self.primary_model];
+        let features = select_features(&all_features, &model.features);
+        let n = features.len();
+        if n == 0 {
+            return (
+                ScoreResult {
+                    win_score: 0.5,
+                    cal_prob: 0.5,
+                    kelly_size: 0.0,
+                    pass: false,
+                },
+                "{}".to_string(),
+            );
+        }
+
+        let input = match ort::value::Tensor::from_array(([1usize, n], features)) {
+            Ok(t) => t,
+            Err(e) => {
+                warn!(model = %model.name, error = %e, "tensor creation failed");
+                return (
+                    ScoreResult {
+                        win_score: 0.5,
+                        cal_prob: 0.5,
+                        kelly_size: 0.0,
+                        pass: false,
+                    },
+                    "{}".to_string(),
+                );
+            }
+        };
+        let outputs = match model.session.run(ort::inputs![input]) {
+            Ok(o) => o,
+            Err(e) => {
+                warn!(model = %model.name, error = %e, "inference error");
+                return (
+                    ScoreResult {
+                        win_score: 0.5,
+                        cal_prob: 0.5,
+                        kelly_size: 0.0,
+                        pass: false,
+                    },
+                    "{}".to_string(),
+                );
+            }
         };
 
-        for (i, model) in self.models.iter_mut().enumerate() {
-            let features = select_features(&all_features, &model.features);
-            let n = features.len();
-            if n == 0 {
-                continue;
-            }
+        let raw_prob = extract_prob(&outputs);
+        let cal_prob = match &model.calibration {
+            Some(cal) => cal.interpolate(raw_prob),
+            None => raw_prob,
+        };
+        let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
+        let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
+            .max(0.0)
+            .min(self.max_kelly_frac)
+            * self.kelly_mult;
+        let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
+        let pass = kelly_size >= self.min_bet;
 
-            let input = match ort::value::Tensor::from_array(([1usize, n], features)) {
-                Ok(t) => t,
-                Err(e) => {
-                    warn!(model = %model.name, error = %e, "tensor creation failed");
-                    continue;
-                }
-            };
-            let outputs = match model.session.run(ort::inputs![input]) {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!(model = %model.name, error = %e, "inference error");
-                    continue;
-                }
-            };
-
-            let raw_prob = extract_prob(&outputs);
-            let cal_prob = match &model.calibration {
-                Some(cal) => cal.interpolate(raw_prob),
-                None => raw_prob,
-            };
-            let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
-            let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
-                .max(0.0)
-                .min(self.max_kelly_frac)
-                * self.kelly_mult;
-            let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
-            let pass = kelly_size >= self.min_bet;
-
-            let score = ModelScore {
+        let mut scores = std::collections::HashMap::new();
+        scores.insert(
+            model.name.clone(),
+            ModelScore {
                 raw_prob,
                 cal_prob,
                 kelly_size,
                 pass,
-            };
-            if i == self.primary_model {
-                primary_result = ScoreResult {
-                    win_score: raw_prob,
-                    cal_prob,
-                    kelly_size,
-                    pass,
-                };
-            }
-            all_scores.insert(model.name.clone(), score);
-        }
+            },
+        );
+        let json = serde_json::to_string(&scores).unwrap_or_else(|_| "{}".to_string());
 
-        let json = serde_json::to_string(&all_scores).unwrap_or_else(|_| "{}".to_string());
-        (primary_result, json)
+        (
+            ScoreResult {
+                win_score: raw_prob,
+                cal_prob,
+                kelly_size,
+                pass,
+            },
+            json,
+        )
     }
 
     pub fn update_trader_pnl(&mut self, trader: &str, pnl: f64) {
