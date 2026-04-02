@@ -68,7 +68,7 @@ impl OrderExecutor {
                 .with_chain_id(Some(POLYGON)),
         );
 
-        let clob_cfg = Config::builder().use_server_time(true).build();
+        let clob_cfg = Config::builder().use_server_time(false).build();
         let base = Client::new(&config.clob_http_url, clob_cfg)?;
 
         let sig_ty = match config.signature_type {
