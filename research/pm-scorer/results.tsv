@@ -13,3 +13,29 @@ exp10_strong_recency	593.86	0.8685	72.1	revert	recency 0.3+0.7*t (slightly worse
 exp11_colsample_bylevel	120.32	0.8687	68.6	revert	+colsample_bylevel=0.7
 exp12_l1_alpha	561.48	0.8686	71.4	revert	+reg_alpha=1.0 L1 regularization
 exp13_sub07	381.50	0.8689	71.0	revert	subsample=0.7, colsample=0.7
+--- DATE-BASED SPLIT (42-day test) autoresearch round ---
+E01_v4_baseline	629.13	0.8484	62.1	baseline	v4: 26 features, no time, temporal weights
+E02_v5_time_log	464.84	0.8481	61.9	revert	+time_to_resolution_log (hurts PnL, fewer trades)
+E03_time_raw	389.58	0.8481	60.0	revert	raw time_to_resolution (worse than log)
+E04_time_buckets	324.35	0.8479	63.7	revert	short/long buckets (worse)
+E05_payoff_per_hour	402.93	0.8477	62.1	revert	payoff_ratio / time (worse)
+E06_annualized_edge	1017.02	0.8485	61.9	candidate	edge/sqrt(hours/24) — +62% over v4
+E07_interactions	1085.34	0.8484	63.0	candidate	time_log + price*time + edge*time — +72% over v4
+E08_time_weighted_samples	439.41	0.8481	60.3	revert	time-weighted samples alone (no interaction features)
+E09_core_plus_payoff	141.74	0.8474	62.5	revert	reduced features + payoff/hr (too few features)
+E10_core_plus_annualized	48.47	0.8479	61.1	revert	reduced features + annualized (too few features)
+E11_heavy_reg_time	550.96	0.8482	61.3	revert	heavy reg + time_log (not enough lift)
+E12_all_time_features	604.79	0.8478	61.7	revert	all time features (too many, dilutes)
+E13_time_plus_temporal_wt	701.56	0.8474	59.7	note	payoff/hr+annualized with time-weighted samples
+E14_shallow_time	706.87	0.8479	64.2	note	shallow trees + payoff/hr
+E15_v4_heavy_reg	208.37	0.8479	58.8	revert	v4 + heavy reg (worse)
+E16_annualized_interactions	1257.03	0.8487	62.9	candidate	annualized_edge + both interactions — +100% over v4
+E17_interactions_shallow	1065.37	0.8479	63.0	note	E07 with shallower trees
+E18_interactions_tw	2836.09	0.8479	69.2	**BEST**	interactions + time-weighted samples — +351% over v4
+E19_kitchen_sink	778.09	0.8481	64.7	revert	all time features (too many features)
+E20_interactions_more_reg	919.22	0.8483	61.4	note	E07 + heavy reg
+E21_E18_seed17	1681.18	0.8482	66.9	robust	E18 seed=17 (still >2x v4)
+E22_E18_seed99	2445.30	0.8481	67.6	robust	E18 seed=99 (still >3x v4)
+E23_E18_more_reg	1506.37	0.8479	63.8	robust	E18 + heavy reg (still >2x v4)
+E24_E16_tw	1790.40	0.8480	65.6	robust	annualized+interactions, time-weighted (>2x v4)
+E25_E18_shallow	1598.92	0.8480	65.0	robust	E18 shallow trees (still >2x v4)

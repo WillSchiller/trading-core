@@ -92,6 +92,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("fill checker task started");
     }
 
+    // Connection warmer — keeps TLS connection to CLOB alive
+    if let Some(ref executor) = exec {
+        let ex = Arc::clone(executor);
+        let mut warm_shutdown = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = warm_shutdown.recv() => break,
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
+                }
+                let _ = ex.warm_connection().await;
+            }
+        });
+        tracing::info!("connection warmer started (30s interval)");
+    }
+
     // Trade sync — polls data API, auto-sells near-certain positions
     if let Some(ref fdb) = fill_db {
         let sync_shutdown = shutdown_tx.subscribe();

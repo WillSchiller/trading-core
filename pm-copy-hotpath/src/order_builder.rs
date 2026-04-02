@@ -200,6 +200,12 @@ impl OrderExecutor {
         Ok(OrderOutcome::BookEmpty)
     }
 
+    pub async fn warm_connection(&self) -> Result<(), HotPathError> {
+        let req = polymarket_client_sdk::clob::types::request::BalanceAllowanceRequest::default();
+        let _ = self.client.balance_allowance(req).await;
+        Ok(())
+    }
+
     pub async fn get_order(
         &self,
         order_id: &str,

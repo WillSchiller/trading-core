@@ -331,6 +331,36 @@ EXPERIMENTS = {
         'sample_weight': 'temporal',
         'note': 'E07 features with heavier regularization',
     },
+    'E21_E18_seed17': {
+        'features': BASE_FEATURES + ['time_to_resolution_log', 'price_x_time', 'edge_x_time'],
+        'params': {**BASE_PARAMS, 'random_state': 17},
+        'sample_weight': 'time_weighted',
+        'note': 'E18 with seed=17 (robustness check)',
+    },
+    'E22_E18_seed99': {
+        'features': BASE_FEATURES + ['time_to_resolution_log', 'price_x_time', 'edge_x_time'],
+        'params': {**BASE_PARAMS, 'random_state': 99},
+        'sample_weight': 'time_weighted',
+        'note': 'E18 with seed=99 (robustness check)',
+    },
+    'E23_E18_more_reg': {
+        'features': BASE_FEATURES + ['time_to_resolution_log', 'price_x_time', 'edge_x_time'],
+        'params': {**BASE_PARAMS, 'reg_lambda': 15.0, 'gamma': 4.0, 'min_child_weight': 200},
+        'sample_weight': 'time_weighted',
+        'note': 'E18 with heavier regularization',
+    },
+    'E24_E16_time_weight': {
+        'features': BASE_FEATURES + ['annualized_edge', 'price_x_time', 'edge_x_time'],
+        'params': BASE_PARAMS,
+        'sample_weight': 'time_weighted',
+        'note': 'E16 features (annualized+interactions) with time-weighted samples',
+    },
+    'E25_E18_shallow': {
+        'features': BASE_FEATURES + ['time_to_resolution_log', 'price_x_time', 'edge_x_time'],
+        'params': {**BASE_PARAMS, 'max_depth': 4, 'n_estimators': 1200, 'learning_rate': 0.02},
+        'sample_weight': 'time_weighted',
+        'note': 'E18 with shallower trees',
+    },
 }
 
 
