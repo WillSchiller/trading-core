@@ -21,6 +21,7 @@ pub struct FillRecord {
     pub market_slug: String,
     pub outcome: String,
     pub ml_scores_json: String,
+    pub timing_json: String,
 }
 
 pub struct TraderRollingStats {
@@ -66,19 +67,25 @@ impl FillDb {
             None => "NULL".to_string(),
         };
 
+        let timing = if fill.timing_json.is_empty() {
+            "NULL".to_string()
+        } else {
+            format!("'{}'", esc(&fill.timing_json))
+        };
+
         let sql = format!(
             "INSERT INTO pm_rust_trades (
                 trader_address, condition_id, token_id, side,
                 trader_size, trader_price, our_size,
                 order_id, fill_price, fill_size, execution_status,
                 model_version, win_score, cal_prob, kelly_size,
-                market_slug, outcome, neg_risk, latency_ms, ml_scores
+                market_slug, outcome, neg_risk, latency_ms, ml_scores, timing_json
             ) VALUES (
                 '{trader}', '{cid}', '{tid}', '{side}',
                 {size}, {price}, {our_size},
                 '{oid}', {fpx}, {fsz}, '{status}',
                 '{mv}', {ws}, {cp}, {ks},
-                '{slug}', '{outcome}', {neg_risk}, {lat}, {ml_json}
+                '{slug}', '{outcome}', {neg_risk}, {lat}, {ml_json}, {timing}
             )
             ON CONFLICT (order_id) WHERE order_id <> '' AND order_id IS NOT NULL
             DO NOTHING

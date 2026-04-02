@@ -315,6 +315,8 @@ fn market_is_ml(condition_id: &str) -> bool {
 }
 
 async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
+    let t0 = std::time::Instant::now();
+
     let Some(exec) = &ctx.exec else {
         debug!(trader = %signal.trader, "no CLOB client");
         return;
@@ -328,6 +330,8 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         .await
         .get(&signal.condition_id)
         .cloned();
+    let t_cache = t0.elapsed().as_micros() as u64;
+
     let category = market_meta
         .as_ref()
         .map(|m| derive_category(&m.slug))
@@ -339,12 +343,14 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let slug = market_meta.as_ref().map(|m| m.slug.as_str()).unwrap_or("");
 
     let mut scorer_guard = ctx.scorer.lock().await;
+    let t_score_lock = t0.elapsed().as_micros() as u64;
     let (ml_result, ml_scores_json) = if scorer_guard.is_enabled() {
         let (result, json) = scorer_guard.score_all_json(&signal, category, outcome_name, slug);
         (Some(result), json)
     } else {
         (None, String::new())
     };
+    let t_score = t0.elapsed().as_micros() as u64;
     drop(scorer_guard);
 
     let use_ml = match mode {
@@ -358,7 +364,6 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
             (result.kelly_size, "v6_kelly".to_owned())
         }
         _ => {
-            // ML rejected — skip trade, but still record the attempt
             if let Some(db) = &ctx.fill_db {
                 let record = FillRecord {
                     signal: signal.clone(),
@@ -380,6 +385,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
                         .map(|m| m.outcome.clone())
                         .unwrap_or_default(),
                     ml_scores_json: ml_scores_json.clone(),
+                    timing_json: String::new(),
                 };
                 let _ = db.insert_fill(&record).await;
             }
@@ -395,6 +401,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     );
 
     let tracker = ctx.positions.lock().await;
+    let t_pos_lock = t0.elapsed().as_micros() as u64;
     let total_exposure = tracker.total_exposure();
     let open_markets = tracker.open_market_count();
     let position_notional = tracker.notional(&signal.condition_id);
@@ -402,6 +409,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     drop(tracker);
 
     let mut risk_guard = ctx.risk.lock().await;
+    let t_risk_lock = t0.elapsed().as_micros() as u64;
     if let Err(reason) = risk_guard.can_trade(
         trade_size,
         &signal.condition_id,
@@ -415,7 +423,10 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         return;
     }
     risk_guard.record_order(&signal.condition_id, trade_size);
+    let t_risk = t0.elapsed().as_micros() as u64;
     drop(risk_guard);
+
+    let t_gates = t0.elapsed().as_micros() as u64;
 
     info!(
         trader = %signal.trader,
@@ -423,6 +434,13 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         size = format!("{:.2}", trade_size),
         path = &model_version,
         condition = %signal.condition_id,
+        t_cache_us = t_cache,
+        t_score_lock_us = t_score_lock,
+        t_score_us = t_score,
+        t_pos_lock_us = t_pos_lock,
+        t_risk_lock_us = t_risk_lock,
+        t_risk_us = t_risk,
+        t_gates_us = t_gates,
         "passed all gates — executing BUY"
     );
 
@@ -447,11 +465,25 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
     let scores_json = ml_scores_json;
 
     tokio::spawn(async move {
-        let t0 = std::time::Instant::now();
+        let t_order_start = std::time::Instant::now();
         let outcome = exec
             .execute_copy(&sig, trade_size, min_entry, max_entry, is_ml)
             .await;
-        let latency_ms = t0.elapsed().as_millis() as i32;
+        let t_order_us = t_order_start.elapsed().as_micros() as u64;
+        let latency_ms = t_order_start.elapsed().as_millis() as i32;
+
+        let timing = format!(
+            r#"{{"cache_us":{},"score_lock_us":{},"score_us":{},"pos_lock_us":{},"risk_lock_us":{},"risk_us":{},"gates_us":{},"order_us":{}}}"#,
+            t_cache, t_score_lock, t_score, t_pos_lock, t_risk_lock, t_risk, t_gates, t_order_us
+        );
+        info!(
+            t_cache_us = t_cache,
+            t_score_us = t_score - t_score_lock,
+            t_risk_us = t_risk - t_risk_lock,
+            t_order_us = t_order_us,
+            t_total_us = t_gates + t_order_us,
+            "pipeline timing"
+        );
 
         let (status, order_id, fill_price) = match &outcome {
             Ok(OrderOutcome::FakFilled(r)) => (r.status, r.order_id.clone(), r.fill_price),
@@ -483,6 +515,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
                 market_slug: cached_slug.clone(),
                 outcome: cached_outcome.clone(),
                 ml_scores_json: scores_json.clone(),
+                timing_json: timing.clone(),
             };
             match db.insert_fill(&record).await {
                 Ok(id) => {
