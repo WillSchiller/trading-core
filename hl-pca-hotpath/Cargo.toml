@@ -1,0 +1,22 @@
+[package]
+name = "hl-pca-hotpath"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+
+[dependencies]
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+figment = { version = "0.10", features = ["toml", "env"] }
+thiserror = "2.0"
+ahash = "0.8"
+nalgebra = "0.33"
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
+deadpool-postgres = "0.14"
+chrono = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3"
