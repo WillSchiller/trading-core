@@ -49,7 +49,6 @@ pub struct Scorer {
     models: Vec<ModelInstance>,
     trader_stats: AHashMap<String, TraderRollingStats>,
     market_counts: AHashMap<String, usize>,
-    kelly_mult: f64,
     max_kelly_frac: f64,
     bankroll: f64,
     min_bet: f64,
@@ -62,7 +61,6 @@ impl Scorer {
             models: Vec::new(),
             trader_stats: AHashMap::new(),
             market_counts: AHashMap::new(),
-            kelly_mult: config.kelly_half_multiplier,
             max_kelly_frac: config.max_kelly_fraction,
             bankroll: config.bankroll_usd,
             min_bet: config.min_bet_usd,
@@ -258,10 +256,8 @@ impl Scorer {
                 None => raw_prob,
             };
             let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
-            let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
-                .max(0.0)
-                .min(self.max_kelly_frac)
-                * self.kelly_mult;
+            let raw_f = (cal_prob - (1.0 - cal_prob) / payoff).clamp(0.0, 0.25);
+            let kelly_f = (raw_f.powi(3) / (0.25_f64.powi(2))).min(self.max_kelly_frac);
             let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
             let pass = kelly_size >= self.min_bet;
 
@@ -374,10 +370,8 @@ impl Scorer {
             None => raw_prob,
         };
         let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
-        let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff)
-            .max(0.0)
-            .min(self.max_kelly_frac)
-            * self.kelly_mult;
+        let raw_f = (cal_prob - (1.0 - cal_prob) / payoff).clamp(0.0, 0.25);
+        let kelly_f = (raw_f.powi(3) / (0.25_f64.powi(2))).min(self.max_kelly_frac);
         let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
         let pass = kelly_size >= self.min_bet;
 
