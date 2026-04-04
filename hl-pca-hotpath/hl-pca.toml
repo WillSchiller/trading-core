@@ -1,0 +1,23 @@
+paper_mode = true
+
+assets = ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "ATOM", "SNX", "INJ",
+          "DYDX", "AAVE", "LDO", "STX", "SUI", "WLD", "RENDER", "PENGU", "IP", "S",
+          "XRP", "kSHIB", "DOGE", "ADA", "DOT", "NEAR", "FIL", "APT", "SEI", "TIA",
+          "JUP", "ONDO", "PYTH", "WIF", "kBONK", "kPEPE", "FET", "TAO", "MANTA", "STRK"]
+
+allowlist = ["XRP", "SNX", "LINK", "ETH", "PENGU", "IP", "ATOM", "INJ", "BTC", "S",
+             "STX", "OP", "RENDER", "kSHIB", "AVAX", "WLD", "SUI", "LDO", "AAVE", "DYDX"]
+
+entry_z_score = 2.75
+stop_loss_bps = 150.0
+max_hold_ms = 3600000
+min_volatility_bps = 125.0
+min_pc1_return_bps = 25.0
+base_notional_usd = 200.0
+max_positions = 3
+leverage = 3
+tick_interval_ms = 60000
+pca_lookback_periods = 60
+pca_refresh_periods = 15
+num_factors = 2
+return_window_ms = 60000

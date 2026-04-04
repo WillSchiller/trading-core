@@ -1,4 +1,4 @@
-# --- Rust: Polymarket RTDS → CLOB hot path (no Node on this path) ---
+# --- Rust: Polymarket RTDS → CLOB hot path ---
 FROM rust:1.88-bookworm AS rust-hotpath
 
 WORKDIR /build
@@ -11,6 +11,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pm-copy-hotpath/Cargo.toml pm-copy-hotpath/Cargo.lock ./
 COPY pm-copy-hotpath/src ./src
 COPY pm-copy-hotpath/benches ./benches
+
+RUN cargo build --locked --release
+
+# --- Rust: Hyperliquid PCA stat-arb ---
+FROM rust:1.88-bookworm AS rust-pca
+
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    cmake \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY hl-pca-hotpath/Cargo.toml hl-pca-hotpath/Cargo.lock ./
+COPY hl-pca-hotpath/src ./src
 
 RUN cargo build --locked --release
 
@@ -65,6 +80,8 @@ COPY --chown=trader:trader models ./models
 USER root
 COPY --from=rust-hotpath --chmod=755 /build/target/release/pm-copy-hotpath /usr/local/bin/pm-copy-hotpath
 COPY --chown=trader:trader pm-copy-hotpath/pm-hotpath.toml /app/pm-hotpath/pm-hotpath.toml
+COPY --from=rust-pca --chmod=755 /build/target/release/hl-pca-hotpath /usr/local/bin/hl-pca-hotpath
+COPY --chown=trader:trader hl-pca-hotpath/hl-pca.toml /app/hl-pca/hl-pca.toml
 USER trader
 
 EXPOSE 8080
