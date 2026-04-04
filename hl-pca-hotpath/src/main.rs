@@ -33,6 +33,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
     info!("WS feed started");
 
+    // XYZ stock/commodity price poller
+    let xyz_prices = Arc::clone(&prices);
+    let xyz_history = Arc::clone(&history);
+    let xyz_config = config.clone();
+    let xyz_shutdown = shutdown_tx.subscribe();
+    tokio::spawn(async move {
+        ws_feed::run_xyz_poller(xyz_config, xyz_prices, xyz_history, xyz_shutdown).await;
+    });
+
     // Wait for initial prices
     info!("waiting for price data...");
     loop {

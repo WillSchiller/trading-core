@@ -7,6 +7,7 @@ use tokio::sync::{Mutex, broadcast};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, info, warn};
 
+use crate::config::AppConfig;
 use crate::types::HotPathError;
 
 pub type PriceMap = Arc<Mutex<HashMap<String, f64>>>;
@@ -116,4 +117,79 @@ async fn process_message(
     }
 
     Ok(())
+}
+
+pub async fn run_xyz_poller(
+    config: AppConfig,
+    prices: PriceMap,
+    history: PriceHistory,
+    mut shutdown: broadcast::Receiver<()>,
+) {
+    if config.xyz_assets.is_empty() {
+        return;
+    }
+    info!(assets = config.xyz_assets.len(), "xyz price poller started");
+    let client = reqwest::Client::new();
+    let mut interval = tokio::time::interval(Duration::from_secs(60));
+
+    loop {
+        tokio::select! {
+            biased;
+            _ = shutdown.recv() => return,
+            _ = interval.tick() => {}
+        }
+
+        let resp = match client
+            .post(&config.info_url)
+            .json(&serde_json::json!({"type": "metaAndAssetCtxs", "dex": "xyz"}))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(error = %e, "xyz poll failed");
+                continue;
+            }
+        };
+
+        let data: serde_json::Value = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => {
+                warn!(error = %e, "xyz parse failed");
+                continue;
+            }
+        };
+
+        let universe = data
+            .get(0)
+            .and_then(|m| m.get("universe"))
+            .and_then(|u| u.as_array());
+        let ctxs = data.get(1).and_then(|c| c.as_array());
+
+        if let (Some(universe), Some(ctxs)) = (universe, ctxs) {
+            let now = chrono::Utc::now().timestamp_millis();
+            let mut price_map = prices.lock().await;
+            let mut hist_map = history.lock().await;
+
+            for (i, asset) in universe.iter().enumerate() {
+                let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                let key = format!("xyz:{name}");
+                if !config.xyz_assets.contains(&key) {
+                    continue;
+                }
+                if let Some(ctx) = ctxs.get(i) {
+                    if let Some(mark_str) = ctx.get("markPx").and_then(|p| p.as_str()) {
+                        if let Ok(price) = mark_str.parse::<f64>() {
+                            price_map.insert(key.clone(), price);
+                            let hist = hist_map.entry(key).or_default();
+                            hist.push((price, now));
+                            if hist.len() > 86400 {
+                                hist.drain(..hist.len() - 86400);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

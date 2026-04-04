@@ -23,6 +23,8 @@ pub struct AppConfig {
     pub assets: Vec<String>,
     #[serde(default)]
     pub allowlist: Vec<String>,
+    #[serde(default)]
+    pub xyz_assets: Vec<String>,
 
     #[serde(default = "default_return_window")]
     pub return_window_ms: u64,

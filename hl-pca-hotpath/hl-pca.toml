@@ -8,6 +8,10 @@ assets = ["ETH", "BTC", "SOL", "AVAX", "ARB", "OP", "LINK", "ATOM", "SNX", "INJ"
 allowlist = ["XRP", "SNX", "LINK", "ETH", "PENGU", "IP", "ATOM", "INJ", "BTC", "S",
              "STX", "OP", "RENDER", "kSHIB", "AVAX", "WLD", "SUI", "LDO", "AAVE", "DYDX"]
 
+xyz_assets = ["xyz:TSLA", "xyz:NVDA", "xyz:GOLD", "xyz:AAPL", "xyz:MSFT", "xyz:GOOGL", "xyz:AMZN",
+              "xyz:META", "xyz:PLTR", "xyz:AMD", "xyz:SILVER", "xyz:CL", "xyz:COPPER", "xyz:NATGAS",
+              "xyz:SP500", "xyz:EUR", "xyz:JPY", "xyz:NFLX", "xyz:COIN", "xyz:BABA", "xyz:BRENTOIL"]
+
 entry_z_score = 2.75
 stop_loss_bps = 150.0
 max_hold_ms = 3600000
