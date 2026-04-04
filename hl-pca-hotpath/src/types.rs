@@ -61,6 +61,7 @@ pub struct ActivePosition {
     pub entered_at: chrono::DateTime<chrono::Utc>,
     pub peak_pnl_bps: f64,
     pub trough_pnl_bps: f64,
+    pub db_id: Option<i64>,
 }
 
 impl ActivePosition {

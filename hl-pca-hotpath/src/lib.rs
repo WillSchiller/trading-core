@@ -1,4 +1,5 @@
 pub mod config;
+pub mod db;
 pub mod pca_engine;
 pub mod regime;
 pub mod signal;

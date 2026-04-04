@@ -163,6 +163,7 @@ services:
     working_dir: /app/hl-pca
     environment:
       RUST_LOG: ${HL_PCA_LOG:-info,hl_pca_hotpath=debug}
+      HL_PCA_DATABASE_URL: postgresql://${POSTGRES_USER:-trader}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dislocation_trader}
     networks:
       - app-network
     logging:

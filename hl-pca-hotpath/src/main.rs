@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use hl_pca_hotpath::{config, pca_engine, regime, signal, ws_feed};
+use hl_pca_hotpath::{config, db, pca_engine, regime, signal, ws_feed};
 use tokio::sync::{Mutex, broadcast};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -43,6 +43,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
+
+    // Postgres
+    let signal_db = if config.database_url.is_empty() {
+        info!("no database_url — signals will NOT be persisted");
+        None
+    } else {
+        match db::SignalDb::connect(&config.database_url) {
+            Ok(d) => {
+                info!("postgres connected");
+                Some(d)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "DB connect failed");
+                None
+            }
+        }
+    };
 
     // PCA engine + signal loop
     let mut engine = pca_engine::PcaEngine::new(
@@ -97,10 +114,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let regime = regime_detector.update(pc1_ret);
 
         // Check exits first
-        let _exits = signal_mgr.check_exits(&signals, &current_prices);
+        let exits = signal_mgr.check_exits(&signals, &current_prices);
+        for (asset, reason, price, pos) in &exits {
+            if let (Some(db), Some(id)) = (&signal_db, pos.db_id) {
+                let pnl_bps = pos.pnl_bps(*price);
+                let pnl_usd = pnl_bps / 10000.0 * pos.size_usd;
+                let _ = db
+                    .resolve_signal(
+                        id,
+                        *price,
+                        pnl_bps,
+                        pnl_usd,
+                        pos.hold_ms(),
+                        *reason,
+                        pos.peak_pnl_bps,
+                        pos.trough_pnl_bps,
+                    )
+                    .await;
+            }
+        }
 
         // Check entries
-        let _entries = signal_mgr.check_entries(&signals, &current_prices, regime);
+        let entries = signal_mgr.check_entries(&signals, &current_prices, regime);
+        for (asset, price, size) in &entries {
+            if let Some(db) = &signal_db {
+                let sig = signals.get(asset).unwrap();
+                match db
+                    .insert_signal(
+                        asset,
+                        "short",
+                        sig.z_score,
+                        sig.residual,
+                        sig.pc1_return,
+                        sig.pc2_return,
+                        *price,
+                        *size,
+                        sig.ewma_vol_bps,
+                        regime,
+                        0.0,
+                    )
+                    .await
+                {
+                    Ok(id) => {
+                        signal_mgr.set_db_id(asset, id);
+                    }
+                    Err(e) => tracing::warn!(error = %e, "failed to persist signal"),
+                }
+            }
+        }
 
         if signal_mgr.active_count() > 0 {
             info!(

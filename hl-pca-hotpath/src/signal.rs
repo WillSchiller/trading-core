@@ -37,7 +37,7 @@ impl SignalManager {
         &mut self,
         signals: &AHashMap<String, AssetSignal>,
         prices: &AHashMap<String, f64>,
-    ) -> Vec<(String, ExitReason, f64)> {
+    ) -> Vec<(String, ExitReason, f64, ActivePosition)> {
         let mut exits = Vec::new();
 
         for (asset, pos) in &mut self.positions {
@@ -75,19 +75,22 @@ impl SignalManager {
             }
         }
 
-        for (asset, reason, price) in &exits {
-            let pos = self.positions.remove(asset).unwrap();
-            let pnl = pos.pnl_bps(*price);
+        let exit_keys: Vec<(String, ExitReason, f64)> = exits;
+        let mut result = Vec::new();
+        for (asset, reason, price) in exit_keys {
+            let pos = self.positions.remove(&asset).unwrap();
+            let pnl = pos.pnl_bps(price);
             info!(
-                asset,
+                asset = %asset,
                 reason = %reason,
                 pnl_bps = format!("{:.1}", pnl),
                 hold_ms = pos.hold_ms(),
                 "EXIT"
             );
+            result.push((asset, reason, price, pos));
         }
 
-        exits
+        result
     }
 
     pub fn check_entries(
@@ -136,6 +139,7 @@ impl SignalManager {
                 entered_at: chrono::Utc::now(),
                 peak_pnl_bps: 0.0,
                 trough_pnl_bps: 0.0,
+                db_id: None,
             };
 
             info!(
@@ -157,6 +161,12 @@ impl SignalManager {
         }
 
         entries
+    }
+
+    pub fn set_db_id(&mut self, asset: &str, id: i64) {
+        if let Some(pos) = self.positions.get_mut(asset) {
+            pos.db_id = Some(id);
+        }
     }
 
     pub fn active_count(&self) -> usize {
