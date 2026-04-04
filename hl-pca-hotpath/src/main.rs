@@ -118,6 +118,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             None => continue,
         };
 
+        // Log top z-scores every tick
+        let mut z_list: Vec<(&String, f64, f64)> = signals
+            .iter()
+            .map(|(a, s)| (a, s.z_score, s.ewma_vol_bps))
+            .collect();
+        z_list.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        if let Some((top_asset, top_z, top_vol)) = z_list.first() {
+            info!(
+                top_asset = %top_asset,
+                top_z = format!("{:.2}", top_z),
+                top_vol = format!("{:.0}", top_vol),
+                regime = %regime_detector.state(),
+                threshold = config.entry_z_score,
+                n_above_2 = z_list.iter().filter(|(_, z, _)| z.abs() > 2.0).count(),
+                "tick summary"
+            );
+        }
+
         // Update regime
         let pc1_ret = signals.values().next().map(|s| s.pc1_return).unwrap_or(0.0);
         let regime = regime_detector.update(pc1_ret);
