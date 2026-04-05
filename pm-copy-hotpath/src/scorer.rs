@@ -256,8 +256,7 @@ impl Scorer {
                 None => raw_prob,
             };
             let payoff = (1.0 / signal.price.max(0.01)) - 1.0;
-            let raw_f = (cal_prob - (1.0 - cal_prob) / payoff).clamp(0.0, 0.25);
-            let kelly_f = (raw_f.powi(3) / (0.25_f64.powi(2))).min(self.max_kelly_frac);
+            let kelly_f = (cal_prob - (1.0 - cal_prob) / payoff).clamp(0.0, 0.25) * 0.5;
             let kelly_size = (self.bankroll * kelly_f * 100.0).round() / 100.0;
             let pass = kelly_size >= self.min_bet;
 
