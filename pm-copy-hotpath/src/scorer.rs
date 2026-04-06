@@ -71,22 +71,16 @@ impl Scorer {
     pub fn start(&mut self, config: &AppConfig) -> Result<(), String> {
         let model_defs = [
             (
-                "v2",
-                "/app/models/pm_scorer_v2.onnx",
-                "/app/models/pm_v2_calibration.json",
-                "/app/models/pm_v2_features.json",
+                "v7_binary",
+                "/app/models/pm_scorer_v7_binary.onnx",
+                "/app/models/pm_v7_binary_calibration.json",
+                "/app/models/pm_v7_binary_features.json",
             ),
             (
-                "v3",
-                "/app/models/pm_scorer_v3.onnx",
-                "/app/models/pm_v3_calibration.json",
-                "/app/models/pm_v3_features.json",
-            ),
-            (
-                "v4",
-                "/app/models/pm_scorer_v4.onnx",
-                "/app/models/pm_v4_calibration.json",
-                "/app/models/pm_v4_features.json",
+                "v7_multi",
+                "/app/models/pm_scorer_v7_multi.onnx",
+                "/app/models/pm_v7_multi_calibration.json",
+                "/app/models/pm_v7_multi_features.json",
             ),
         ];
 
@@ -317,7 +311,14 @@ impl Scorer {
             &mut self.market_counts,
         );
 
-        let model = &mut self.models[self.primary_model];
+        let is_binary = matches!(outcome_name.to_lowercase().as_str(), "yes" | "no");
+        let target_name = if is_binary { "v7_binary" } else { "v7_multi" };
+        let model_idx = self
+            .models
+            .iter()
+            .position(|m| m.name == target_name)
+            .unwrap_or(self.primary_model);
+        let model = &mut self.models[model_idx];
         let features = select_features(&all_features, &model.features);
         let n = features.len();
         if n == 0 {
