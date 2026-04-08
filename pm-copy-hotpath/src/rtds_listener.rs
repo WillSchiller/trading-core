@@ -359,37 +359,42 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         _ => false,
     };
 
-    let (trade_size, model_version) = match &ml_result {
-        Some(result) if result.pass && result.kelly_size >= ctx.config.min_bet_usd => {
-            (result.kelly_size, "v6_kelly".to_owned())
-        }
-        _ => {
-            if let Some(db) = &ctx.fill_db {
-                let record = FillRecord {
-                    signal: signal.clone(),
-                    order_id: String::new(),
-                    execution_status: "ml_skip",
-                    size_usd: 0.0,
-                    fill_price: signal.price,
-                    model_version: "ml_skip".to_owned(),
-                    win_score: ml_result.as_ref().map(|r| r.win_score),
-                    cal_prob: ml_result.as_ref().map(|r| r.cal_prob),
-                    kelly_size: ml_result.as_ref().map(|r| r.kelly_size),
-                    latency_ms: None,
-                    market_slug: market_meta
-                        .as_ref()
-                        .map(|m| m.slug.clone())
-                        .unwrap_or_default(),
-                    outcome: market_meta
-                        .as_ref()
-                        .map(|m| m.outcome.clone())
-                        .unwrap_or_default(),
-                    ml_scores_json: ml_scores_json.clone(),
-                    timing_json: String::new(),
-                };
-                let _ = db.insert_fill(&record).await;
+    let (trade_size, model_version) = if !use_ml {
+        // Control mode: flat sizing, take every trade that passes filters
+        (ctx.config.copy_size_usd, "control".to_owned())
+    } else {
+        match &ml_result {
+            Some(result) if result.pass && result.kelly_size >= ctx.config.min_bet_usd => {
+                (result.kelly_size, "v6_kelly".to_owned())
             }
-            return;
+            _ => {
+                if let Some(db) = &ctx.fill_db {
+                    let record = FillRecord {
+                        signal: signal.clone(),
+                        order_id: String::new(),
+                        execution_status: "ml_skip",
+                        size_usd: 0.0,
+                        fill_price: signal.price,
+                        model_version: "ml_skip".to_owned(),
+                        win_score: ml_result.as_ref().map(|r| r.win_score),
+                        cal_prob: ml_result.as_ref().map(|r| r.cal_prob),
+                        kelly_size: ml_result.as_ref().map(|r| r.kelly_size),
+                        latency_ms: None,
+                        market_slug: market_meta
+                            .as_ref()
+                            .map(|m| m.slug.clone())
+                            .unwrap_or_default(),
+                        outcome: market_meta
+                            .as_ref()
+                            .map(|m| m.outcome.clone())
+                            .unwrap_or_default(),
+                        ml_scores_json: ml_scores_json.clone(),
+                        timing_json: String::new(),
+                    };
+                    let _ = db.insert_fill(&record).await;
+                }
+                return;
+            }
         }
     };
 
@@ -397,7 +402,7 @@ async fn process_buy(signal: TradeSignal, ctx: &FeedCtx) {
         trader = %signal.trader,
         size = format!("{:.2}", trade_size),
         path = &model_version,
-        "ML approved"
+        "sized"
     );
 
     let tracker = ctx.positions.lock().await;

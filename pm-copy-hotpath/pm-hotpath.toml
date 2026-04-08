@@ -11,7 +11,7 @@ gamma_http_url = "https://gamma-api.polymarket.com"
 
 # --- Copy trading ---
 score_threshold = 0.0
-copy_size_usd = 1.0
+copy_size_usd = 2.0
 min_entry_price = 0.15
 max_entry_price = 0.85
 traders_json_path = "traders.json"
@@ -19,10 +19,10 @@ dry_run = false
 signature_type = 2            # 0=EOA, 1=Proxy, 2=GnosisSafe
 
 # --- Execution mode ---
-# "control" = flat $copy_size_usd per trade
+# "control" = flat $copy_size_usd per trade (ML scores recorded but ignored for sizing)
 # "ml"      = Kelly sizing from ONNX model
 # "ab"      = 50/50 split by market hash
-execution_mode = "ml"
+execution_mode = "control"
 
 # --- ML scoring ---
 onnx_model_path = "/app/models/pm_scorer_v6.onnx"
