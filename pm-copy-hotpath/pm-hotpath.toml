@@ -15,7 +15,7 @@ copy_size_usd = 2.0
 min_entry_price = 0.15
 max_entry_price = 0.85
 traders_json_path = "traders.json"
-dry_run = false
+dry_run = true
 signature_type = 2            # 0=EOA, 1=Proxy, 2=GnosisSafe
 
 # --- Execution mode ---
