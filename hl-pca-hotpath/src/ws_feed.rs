@@ -17,6 +17,8 @@ pub async fn run_ws_feed(
     url: &str,
     prices: PriceMap,
     history: PriceHistory,
+    allowlist: Arc<std::collections::HashSet<String>>,
+    max_history_points: usize,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), HotPathError> {
     loop {
@@ -24,7 +26,7 @@ pub async fn run_ws_feed(
         tokio::select! {
             biased;
             _ = shutdown.recv() => return Ok(()),
-            result = connect_and_stream(url, &prices, &history, &mut sub_shutdown) => {
+            result = connect_and_stream(url, &prices, &history, &allowlist, max_history_points, &mut sub_shutdown) => {
                 match result {
                     Ok(()) => return Ok(()),
                     Err(e) => {
@@ -41,6 +43,8 @@ async fn connect_and_stream(
     url: &str,
     prices: &PriceMap,
     history: &PriceHistory,
+    allowlist: &std::collections::HashSet<String>,
+    max_history_points: usize,
     shutdown: &mut broadcast::Receiver<()>,
 ) -> Result<(), HotPathError> {
     let (ws, _) = connect_async(url)
@@ -71,7 +75,7 @@ async fn connect_and_stream(
                 let Some(msg) = msg else { return Err(HotPathError::Ws("stream ended".into())); };
                 let msg = msg.map_err(|e| HotPathError::Ws(e.to_string()))?;
                 if let Message::Text(text) = msg {
-                    if let Err(e) = process_message(&text, prices, history).await {
+                    if let Err(e) = process_message(&text, prices, history, allowlist, max_history_points).await {
                         debug!(error = %e, "message parse error");
                     }
                 }
@@ -84,6 +88,8 @@ async fn process_message(
     text: &str,
     prices: &PriceMap,
     history: &PriceHistory,
+    allowlist: &std::collections::HashSet<String>,
+    max_history_points: usize,
 ) -> Result<(), HotPathError> {
     let msg: serde_json::Value = serde_json::from_str(text)?;
 
@@ -103,14 +109,17 @@ async fn process_message(
     let mut hist_map = history.lock().await;
 
     for (asset, val) in mids {
+        // Only track assets we actually use
+        if !allowlist.contains(asset) {
+            continue;
+        }
         if let Some(price_str) = val.as_str() {
             if let Ok(price) = price_str.parse::<f64>() {
                 price_map.insert(asset.clone(), price);
                 let hist = hist_map.entry(asset.clone()).or_default();
                 hist.push((price, now));
-                // Keep last 24h of history
-                if hist.len() > 86400 {
-                    hist.drain(..hist.len() - 86400);
+                if hist.len() > max_history_points {
+                    hist.drain(..hist.len() - max_history_points);
                 }
             }
         }
@@ -183,8 +192,9 @@ pub async fn run_xyz_poller(
                             price_map.insert(key.clone(), price);
                             let hist = hist_map.entry(key).or_default();
                             hist.push((price, now));
-                            if hist.len() > 86400 {
-                                hist.drain(..hist.len() - 86400);
+                            // xyz is polled every 60s, keep 24h = 1440 points
+                            if hist.len() > 1440 {
+                                hist.drain(..hist.len() - 1440);
                             }
                         }
                     }

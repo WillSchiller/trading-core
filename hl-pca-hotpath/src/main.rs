@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments, clippy::collapsible_if, clippy::collapsible_match, clippy::manual_is_multiple_of, dead_code, unused_mut, unused_variables)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,13 +23,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let (shutdown_tx, _) = broadcast::channel::<()>(4);
 
+    // Build allowlist — only tracked assets get history stored
+    let mut allowlist_set: std::collections::HashSet<String> =
+        config.assets.iter().cloned().collect();
+    for a in &config.xyz_assets {
+        allowlist_set.insert(a.clone());
+    }
+    let allowlist = Arc::new(allowlist_set);
+    // Keep ~5 min of history per asset (HL sends ~10 updates/sec = 3000 points)
+    let max_history_points = 3000;
+
     // WS feed
     let ws_prices = Arc::clone(&prices);
     let ws_history = Arc::clone(&history);
     let ws_url = config.ws_url.clone();
     let ws_shutdown = shutdown_tx.subscribe();
+    let ws_allowlist = Arc::clone(&allowlist);
     tokio::spawn(async move {
-        if let Err(e) = ws_feed::run_ws_feed(&ws_url, ws_prices, ws_history, ws_shutdown).await {
+        if let Err(e) = ws_feed::run_ws_feed(
+            &ws_url,
+            ws_prices,
+            ws_history,
+            ws_allowlist,
+            max_history_points,
+            ws_shutdown,
+        )
+        .await
+        {
             tracing::error!(error = %e, "WS feed exited");
         }
     });
