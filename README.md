@@ -83,7 +83,7 @@ docs/                 Specs, deployment runbooks, dated worklog
 scripts/              Deploy, migrate, backfill, analysis
 ```
 
-`docs/WORKLOG.md` is the unedited development diary. `CLAUDE.md` configures the AI-assisted workflow used throughout.
+**`docs/POSTMORTEM.md` is the full six-month postmortem** — timeline, incident log, per-strategy verdicts, and lessons. `docs/WORKLOG.md` is the unedited development diary. `CLAUDE.md` configures the AI-assisted workflow used throughout.
 
 ## Running it
 
