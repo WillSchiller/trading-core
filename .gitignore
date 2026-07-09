@@ -37,6 +37,9 @@ npm-debug.log*
 # Test coverage
 coverage/
 
+# Research datasets (scripts and results are tracked, raw data is not)
+research/**/data/
+
 # Runtime data
 pids/
 *.pid

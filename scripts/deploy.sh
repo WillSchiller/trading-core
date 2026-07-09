@@ -29,7 +29,7 @@ export ECR_REPOSITORY_URL="${ECR_REPOSITORY_URL:-$ECR_REGISTRY/dislocation-trade
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
 echo "=== Getting Public IP ==="
-PUBLIC_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo "3.1.140.199")
+PUBLIC_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo "<server-ip>")
 echo "PUBLIC_IP: $PUBLIC_IP"
 
 echo "=== Fetching secrets from AWS Secrets Manager ==="
@@ -45,7 +45,6 @@ cat > .env << EOF
 ECR_REPOSITORY_URL=${ECR_REPOSITORY_URL}
 IMAGE_TAG=${IMAGE_TAG:-latest}
 PUBLIC_IP=${PUBLIC_IP}
-GRAFANA_ADMIN_PASSWORD=admin123
 ENABLE_BASE=false
 ENABLE_EXECUTION=false
 PM_HOTPATH_ENABLED=true

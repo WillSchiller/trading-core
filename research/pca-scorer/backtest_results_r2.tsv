@@ -1,0 +1,33 @@
+name	val_auc	test_auc	n_signals	wr	avg_pnl_bps	total_pnl_bps	notes
+01_regime_only	0.6133	0.611	136	72.1	49.2	6698.0	How much edge is just regime?
+18_target_5bps	0.6567	0.581	195	65.1	22.1	4307.0	Predict pnl>5 bps
+13_simultaneous_sigs	0.678	0.5762	241	63.9	21.7	5234.0	Count of signals at same timestamp
+21_kitchen_sink	0.6787	0.576	239	61.1	13.7	3282.0	All features, default hyperparams
+14_residual_relative	0.6418	0.5672	239	63.6	18.9	4523.0	Residual / asset residual std
+25_rolling_cv	0.5664	0.5664	0	65.0	0.0	4869.0	5-fold rolling CV, AUC std=0.025
+20b_reg_thresh10	0.6267	0.563	171	63.2	24.8	4239.0	Regression filter pred>10 bps
+20_regression	0.6267	0.563	199	63.8	21.7	4324.0	XGBRegressor on pnl_bps, filter pred>0
+19_target_10bps	0.6382	0.5627	144	67.4	19.8	2853.0	Predict pnl>10 bps
+12_time_since_last	0.6344	0.5624	240	60.8	12.9	3091.0	Hours since last signal on asset
+03c_regime_dummies	0.6688	0.5608	230	63.9	20.2	4655.0	Regime as separate dummies
+24_seed_123	0.657	0.5604	236	63.6	20.5	4830.0	Seed=123
+02_regime_dir_interact	0.5644	0.5603	362	63.5	22.8	8268.0	Regime x direction interactions
+22_ensemble_avg3	0.6727	0.56	217	62.2	18.2	3949.0	Average of 3 XGB models
+11_z_velocity	0.6493	0.5596	250	64.0	20.4	5107.0	Z-score change since last signal
+08_wr_lookback_10	0.6523	0.5591	235	63.0	19.4	4556.0	Asset rolling WR lookback=10
+21b_kitchen_reg	0.6616	0.5588	222	62.2	15.1	3355.0	All features + heavy regularization
+15_heavy_reg	0.6236	0.5582	157	68.2	37.5	5889.0	Very heavy regularization
+04_session_dummies	0.6736	0.5549	231	62.8	14.7	3389.0	Asia/Europe/US session dummies
+06_hour_x_regime	0.673	0.5543	246	62.6	16.6	4085.0	Hour x regime interaction
+16_shallow_more_trees	0.6526	0.5523	234	62.8	18.0	4222.0	Depth=3, 500 trees, lr=0.03
+23_stacking_meta	0.679	0.5519	253	62.5	18.8	4758.0	Stacked meta-learner (LR on 3 XGB probs)
+07_weekend_flag	0.6617	0.5516	240	61.7	18.7	4479.0	Weekend binary flag
+24_seed_999	0.6635	0.5508	234	62.8	18.2	4253.0	Seed=999
+17_low_lr_2000	0.6512	0.5505	233	61.8	21.8	5074.0	LR=0.01, 2000 trees, depth=3
+09_asset_vol_rank	0.6499	0.5501	236	63.6	16.5	3894.0	Asset vol percentile rank
+08_wr_lookback_50	0.6451	0.5474	238	60.9	12.3	2919.0	Asset rolling WR lookback=50
+08_wr_lookback_20	0.6582	0.5474	228	62.7	16.9	3844.0	Asset rolling WR lookback=20
+24_seed_42	0.6655	0.5473	247	59.9	14.7	3627.0	Seed=42
+03a_vol_regime	0.6664	0.5418	239	61.1	15.1	3606.0	Vol quintile as regime
+05_cyclical_hour	0.6445	0.5399	228	62.7	14.7	3346.0	Sin/cos hour encoding
+03b_trend_regime	0.6589	0.5398	230	62.2	17.6	4051.0	PC1 rolling trend as regime

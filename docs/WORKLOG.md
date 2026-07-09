@@ -849,8 +849,8 @@ Look for log messages:
    - If mainnet shows persistent 15+ bps: consider $2000+ size or gas gating
 
 **Dashboard to monitor:**
-- Paper Trading Summary: http://3.1.140.199:3000/d/trading-summary
-- Spreads & Opportunities: http://3.1.140.199:3000/d/spreads
+- Paper Trading Summary: http://<server-ip>:3000/d/trading-summary
+- Spreads & Opportunities: http://<server-ip>:3000/d/spreads
 
 ---
 
@@ -929,19 +929,19 @@ Populated the Telegram secrets in AWS Secrets Manager (ap-southeast-1):
 aws secretsmanager put-secret-value \
   --region ap-southeast-1 \
   --secret-id "dislocation-trader/telegram-bot-token" \
-  --secret-string "8186286649:AAGleC5eLP5Ql4o3teu4sVfDF3E2YIJAxnU"
+  --secret-string "<redacted-rotate-me>"
 
 aws secretsmanager put-secret-value \
   --region ap-southeast-1 \
   --secret-id "dislocation-trader/telegram-chat-id" \
-  --secret-string "960887040"
+  --secret-string "<redacted>"
 ```
 
 **To Apply Changes (restart required):**
 
 Option 1 - SSH to EC2 and restart:
 ```bash
-ssh -i ~/.ssh/blockhelix.pem ubuntu@3.1.140.199
+ssh -i ~/.ssh/blockhelix.pem ubuntu@<server-ip>
 cd /home/ubuntu/app
 ./scripts/fetch-secrets.sh export
 source .env.secrets

@@ -231,8 +231,8 @@
     - RankSpace detector operational (607+ opportunities detected)
     - Quote persistence and rollup timers running (1s, 10s, 1m intervals)
   - Secrets fetched from AWS Secrets Manager successfully (RPC, Postgres)
-  - Public IP: 3.1.140.199
-  - Grafana accessible at: http://3.1.140.199:3000 (default credentials: admin/admin)
+  - Public IP: <server-ip>
+  - Grafana accessible at: http://<server-ip>:3000 
 
   Deployment timeline:
   - Total deployment time: ~31 seconds

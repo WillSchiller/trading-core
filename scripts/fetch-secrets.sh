@@ -66,6 +66,7 @@ fetch_secret_optional "polymarket-api-secret" "POLYMARKET_API_SECRET"
 fetch_secret_optional "polymarket-passphrase" "POLYMARKET_PASSPHRASE"
 fetch_secret "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
 fetch_secret "telegram-chat-id" "TELEGRAM_CHAT_ID"
+fetch_secret "grafana-admin-password" "GRAFANA_ADMIN_PASSWORD"
 
 echo "Secrets fetched successfully"
 
@@ -89,6 +90,7 @@ POLYMARKET_API_SECRET=$POLYMARKET_API_SECRET
 POLYMARKET_PASSPHRASE=$POLYMARKET_PASSPHRASE
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
 ALERTS_ENABLED=true
 EOF
   chmod 600 /home/ubuntu/app/.env.secrets

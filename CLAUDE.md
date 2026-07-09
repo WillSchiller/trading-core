@@ -15,12 +15,12 @@
 
 SSH to EC2 and query Postgres directly:
 ```bash
-ssh -o StrictHostKeyChecking=no ubuntu@34.252.148.98 "docker exec dislocation-postgres psql -U trader -d dislocation_trader -c \"<SQL>\""
+ssh -o StrictHostKeyChecking=no ubuntu@<server-ip> "docker exec dislocation-postgres psql -U trader -d dislocation_trader -c \"<SQL>\""
 ```
 
 Container names: `dislocation-trader-app`, `dislocation-postgres`, `dislocation-grafana`
 
-Grafana: http://34.252.148.98:3000 (not reachable from local, use SSH or browser)
+Grafana: http://<server-ip>:3000 (not reachable from local, use SSH or browser)
 
 ## Documentation
 
