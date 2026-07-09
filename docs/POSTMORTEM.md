@@ -2,7 +2,7 @@
 
 Six months of building and operating a solo crypto trading system, reconstructed from 488 commits, the development worklog, kill-switch event tables, and the production database. Written July 2026.
 
-**Headline numbers:** six strategy investigations, three taken to live capital, net real-money PnL ≈ **–$506**, one durable research finding (measured adverse selection in copy-trading fills), 13.7M-trade dataset collected, zero blowups — every loss was bounded by a pre-committed limit.
+**Headline numbers:** six strategy investigations, three taken to live capital, exchange-verified all-in PnL ≈ **–$200** (Polymarket ≈ –$175 mark-to-market per the public trade tape; Hyperliquid –$29), one durable research finding (measured adverse selection in copy-trading fills), 13.7M-trade dataset collected, zero blowups — every loss was bounded by a pre-committed limit. Note: the system's own `real_pnl` accounting said –$506; reconciling against the exchange during this postmortem exposed that as ~2.5× overstated — see incident 11.
 
 ## Summary of investigations
 
@@ -12,7 +12,7 @@ Six months of building and operating a solo crypto trading system, reconstructed
 | 2 | PCA stat-arb, Hyperliquid perps | Feb 2 – Apr 8 | Yes | –$28.74 live over 284 trades; 11 configs, none profitable | Retired |
 | 3 | Funding arb (spot vs perp) | Mar 12 – 23 | Yes (tiny) | 309k scans, 8 positions, ≈ –$0.40; break-even hold times too long | Retired |
 | 4 | HL market-maker (paper) | Mar 23 – 30 | No | 1,510 paper fills; +4.1bps edge vs –2.7bps adverse selection = +1.5bps net, below fees | Retired |
-| 5 | Polymarket copy-trading | Mar 13 – Apr 8 | Yes | Node era: **–$617**. Rust rebuild: **+$135**/179 orders. Adverse-selection finding | Control mode |
+| 5 | Polymarket copy-trading | Mar 13 – Apr 8 | Yes | Whole campaign exchange-verified: **≈ –$175** ($269 in → $95 residual). Rust rebuild era positive per system accounting (+$135/179 orders). Adverse-selection finding | Control mode |
 | 6 | Polymarket market-maker | designed, never run | No | Superseded by control-mode decision | Shelved |
 
 ## Timeline
@@ -37,14 +37,14 @@ Three parallel experiments ran in March: funding arb (309k scans produced only 8
 
 The Node-based copy trader went live Mar 20 with ML-gated entries. Shadow/paper metrics looked strong. Real results did not match:
 
-| Fill outcome (node era) | n | Win rate | PnL |
+| Fill outcome (node era) | n | Win rate | Resolution-basis PnL |
 |---|-----|---------|-----|
 | Orders that did not fill | 91 | 80.2% | +$200 hypothetical |
-| Orders that filled | 94 | 36.2% | **–$680 real** |
+| Orders that filled | 94 | 36.2% | **–$680** |
 
-Paper +$646 became –$617 real. The mechanism is adverse selection: in a copy-trading race, your limit order fills when the market has already moved through it — i.e., disproportionately when the copied trade is stale or wrong. The winners you "would have had" are exactly the ones you never get.
+Hypothetical paper profit (+$646) became a real loss. The dollar figures above are the system's resolution-basis accounting; the exchange-verified drawdown for the whole campaign was ≈ –$175, because early exits recovered much of the booked loss (incident 11). The win-rate asymmetry is the durable result. The mechanism is adverse selection: in a copy-trading race, your limit order fills when the market has already moved through it — i.e., disproportionately when the copied trade is stale or wrong. The winners you "would have had" are exactly the ones you never get.
 
-The response was a ground-up Rust rebuild (`pm-copy-hotpath`, first trades Mar 29): in-process ONNX scoring, per-step latency instrumentation (p99 signal→order 189ms after connection-warming and round-trip elimination), tighter price bands, and progressively better models (v5 → v6 Kelly-sized → v7 split binary/multi, Apr 6). The v6 era was genuinely positive: **+$135.49 over 179 real orders (51.5% win rate)** — but ~$0.76/order against sports-market depth is not a business.
+The response was a ground-up Rust rebuild (`pm-copy-hotpath`, first trades Mar 29): in-process ONNX scoring, per-step latency instrumentation (p99 signal→order 189ms after connection-warming and round-trip elimination), tighter price bands, and progressively better models (v5 → v6 Kelly-sized → v7 split binary/multi, Apr 6). The v6 era was positive per system accounting: **+$135.49 over 179 real orders (51.5% win rate)** — but ~$0.76/order against sports-market depth is not a business.
 
 **Apr 8: full stop.** Live trading ended deliberately — flat $2 dry-run "control mode" to keep collecting unbiased data, gates lowered on the perps signal collector for the same purpose, a memory leak fixed on the way out. The last strategy commit is dated Apr 8; the server was stopped May 6.
 
@@ -60,10 +60,11 @@ The response was a ground-up Rust rebuild (`pm-copy-hotpath`, first trades Mar 2
 8. **Orphaned positions on maker timeout** — the executor cancelled the order record without checking whether Hyperliquid had partially filled it.
 9. **Upstream API dependency broke the resolver** (Apr 1) — Polymarket's Gamma API failure orphaned unresolved positions until an auto-sell path via the data API was built.
 10. **Ops debt discovered on revival** (Jul 9) — no database backups had ever existed (first EBS snapshot taken Jul 9); the Mar 23 migration left a blank duplicate instance running for a month with the elastic IP attached to the wrong box; the security group had drifted open.
+11. **Internal PnL accounting diverged ~2.5× from the exchange** (found Jul 9, writing this document) — the `real_pnl` column booked filled positions at resolution prices even when they had actually been sold early, compounding to a reported –$506 against an exchange-tape-verified ≈ –$200. Found only by reconstructing cash flows from the exchange's public activity feed (855 events: $2,600 bought, $1,445 sold, $886 redeemed, $0 cash remaining, $95 open). The deposits ledger was also incomplete ($101 recorded vs $269 implied). Rule reaffirmed the hard way: the exchange is the only source of truth.
 
 ## Costs
 
-- Real trading PnL: ≈ **–$506** (perps –$29, copy-trading node era –$617, rust era +$140, funding arb ≈ $0)
+- Real trading PnL, exchange-verified: ≈ **–$200** (Polymarket campaign ≈ –$175 mark-to-market: $269 deposited, $95 residual; Hyperliquid perps –$29; funding arb ≈ $0)
 - Infrastructure: ~$50/month (t3.medium, EBS, ECR)
 - The dataset and findings this bought: 13.7M observed Polymarket trades, 45-table instrumented history of every decision including skips, and a measured answer to *why naive copy-trading loses*.
 

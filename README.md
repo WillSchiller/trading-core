@@ -2,7 +2,7 @@
 
 A solo-built research and execution platform for crypto market microstructure strategies, run with real capital at deliberately small size. TypeScript monolith for venue connectivity and orchestration, Rust services on the latency-sensitive paths, Postgres + Grafana for state and observability, Terraform + GitHub Actions → ECR → SSM for deploys.
 
-**Honest headline: net real-money PnL across all strategies was ≈ –$500 over nine months.** Every strategy below was run as a falsifiable hypothesis against instrumented live or paper execution, and killed (or capped) when the data said so. The durable outputs are the infrastructure, a 13.7M-trade dataset, and a cleanly measured adverse-selection result that explains *why* the naive version of copy-trading cannot work.
+**Honest headline: exchange-verified all-in PnL was ≈ –$200 over nine months** (Polymarket: $269 deposited → $95 residual value per the public trade tape; Hyperliquid perps: –$29). Every strategy below was run as a falsifiable hypothesis against instrumented live or paper execution, and killed (or capped) when the data said so. The durable outputs are the infrastructure, a 13.7M-trade dataset, and a cleanly measured adverse-selection result that explains *why* the naive version of copy-trading cannot work.
 
 ## Architecture
 
@@ -54,12 +54,12 @@ Built: shadow-tracking pipeline (13.7M observed trades), trader-eligibility filt
 
 Result — the most instructive in the repo:
 
-| Fill outcome (first live era) | n | Win rate | PnL |
+| Fill outcome (first live era) | n | Win rate | Resolution-basis PnL |
 |---|---|---|---|
 | Orders that did **not** fill | 91 | **80.2%** | +$200 hypothetical |
-| Orders that **filled** | 94 | **36.2%** | **–$680 real** |
+| Orders that **filled** | 94 | **36.2%** | **–$680** |
 
-Paper PnL of +$646 became –$617 real. This is textbook **adverse selection**: fills concentrate precisely in the trades where the copied signal is stale or wrong — the same mechanism that governs JIT liquidity provision and quote-sniping in AMMs. The Rust rebuild with tighter price-band and ML gating brought the final live iteration to +$135 over 179 orders (51.5% win rate) — positive but small, with capacity capped by sports-market depth. Moved to a dry-run control mode; not worth scaling.
+Hypothetical paper profit became a real loss — the whole campaign's exchange-verified drawdown was ≈ –$175 (the system's own resolution-basis accounting recorded –$680; reconciling against the exchange tape during the postmortem showed early exits had recovered much of it — see lesson 5). The win-rate asymmetry is textbook **adverse selection**: fills concentrate precisely in the trades where the copied signal is stale or wrong — the same mechanism that governs JIT liquidity provision and quote-sniping in AMMs. The Rust rebuild with tighter price-band and ML gating brought the final live iteration to +$135 over 179 orders (51.5% win rate) — positive but small, with capacity capped by sports-market depth. Moved to a dry-run control mode; not worth scaling.
 
 ## Engineering highlights
 
@@ -102,3 +102,4 @@ Rust services build with `cargo build --release` in their respective directories
 2. **Fees and funding are the strategy.** Perps edges below ~10bps/trade don't survive Hyperliquid's cost structure at taker.
 3. **Kill switches must be pre-committed and automatic.** Every discretionary override in this repo's history was a mistake.
 4. **Instrument skips, not just trades.** The 9,699 ML-rejected signals were as informative as the 179 executed ones.
+5. **The exchange is the only source of truth for PnL.** This system's internal `real_pnl` accounting overstated losses ~3.5× (resolution-basis booking on positions that were actually exited early). The headline numbers here come from reconciling the exchange's public trade tape; the discrepancy itself is documented in the postmortem.
